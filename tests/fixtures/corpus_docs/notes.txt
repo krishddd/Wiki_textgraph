@@ -1,0 +1,4 @@
+Meeting notes 2026-08-01
+ACTION: pin all model weights and seeds.
+Café résumé — non-ASCII characters (é, ü, ½, 汉字) must round-trip through offsets.
+TODO: wire the determinism CI gate.

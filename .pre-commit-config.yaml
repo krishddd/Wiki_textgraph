@@ -1,0 +1,33 @@
+# Local pre-commit hooks, mirrored by .github/workflows/pre-commit.yml.
+# Install once with: uv run pre-commit install
+minimum_pre_commit_version: "3.8.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=25000"]  # research PDF/DOCX are large but committed intentionally
+      - id: detect-private-key  # basic secret scanning
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: schema-validate
+        name: validate schema/manifest fixtures against JSON Schema
+        entry: uv run python schema/validate.py
+        language: system
+        pass_filenames: false
+        files: ^(schema/|tests/fixtures/).*\.(json|ya?ml)$

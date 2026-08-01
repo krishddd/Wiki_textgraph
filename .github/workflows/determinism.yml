@@ -1,0 +1,38 @@
+name: determinism
+
+# The single most important CI gate (G1): the built graph.json must be
+# byte-identical across rebuilds. Runs on every PR that touches the pipeline.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: determinism-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  determinism:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Sync (core + dev)
+        run: uv sync --extra dev
+      - name: Determinism test (byte-identical graph.json)
+        run: uv run pytest tests/determinism -q
+      - name: Cross-process byte-identity check
+        shell: bash
+        run: |
+          uv run textgraph build tests/fixtures/corpus_docs -o /tmp/graph-a.json
+          uv run textgraph build tests/fixtures/corpus_docs -o /tmp/graph-b.json
+          if ! cmp -s /tmp/graph-a.json /tmp/graph-b.json; then
+            echo "::error::graph.json is not byte-identical across builds (G1 violated)"
+            exit 1
+          fi
+          echo "graph.json is byte-identical across builds."

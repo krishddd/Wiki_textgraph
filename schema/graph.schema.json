@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/krishddd/Wiki_textgraph/schema/graph.schema.json",
+  "title": "TextGraph graph.json",
+  "description": "Byte-stable knowledge-graph artifact. Arrays are sorted by a stable key; object keys are canonical-sorted at serialization time (G1).",
+  "type": "object",
+  "required": ["schema_version", "tool_version", "config_hash", "stats", "docs", "nodes", "edges"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "config_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "stats": {
+      "type": "object",
+      "required": ["doc_count", "total_raw_bytes"],
+      "properties": {
+        "doc_count": { "type": "integer", "minimum": 0 },
+        "total_raw_bytes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "docs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["doc_id", "raw_len", "text_len"],
+        "properties": {
+          "doc_id": { "type": "string", "pattern": "^blake3:[0-9a-f]{64}$" },
+          "source_name": { "type": ["string", "null"] },
+          "raw_len": { "type": "integer", "minimum": 0 },
+          "text_len": { "type": "integer", "minimum": 0 },
+          "offset_runs": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id"],
+        "properties": {
+          "node_id": { "type": "string" },
+          "labels": { "type": "array", "items": { "type": "string" } },
+          "properties": { "type": "object" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["subject", "predicate", "object", "tag", "confidence"],
+        "properties": {
+          "subject": { "type": "string" },
+          "predicate": { "type": "string" },
+          "object": { "type": "string" },
+          "tag": {
+            "type": "string",
+            "enum": ["STRUCTURAL", "EXTRACTED", "INFERRED", "GENERATED"]
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidence_count": { "type": "integer", "minimum": 0 },
+          "source_spans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["doc_id", "start", "end", "hash"],
+              "properties": {
+                "doc_id": { "type": "string" },
+                "start": { "type": "integer", "minimum": 0 },
+                "end": { "type": "integer", "minimum": 0 },
+                "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

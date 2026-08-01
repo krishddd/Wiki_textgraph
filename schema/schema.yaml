@@ -1,0 +1,30 @@
+# TextGraph induced-schema template (L3).
+#
+# By default TextGraph runs in "induced schema" mode: a cheap sample pass over the
+# corpus clusters observed entity/relation types, then freezes them here. Users can
+# hand-edit this file to pin an ontology, and a build with a frozen schema.yaml is
+# deterministic (G1). This template documents the shape; real content is generated
+# in Phase 2.
+
+version: 0
+
+entity_types: []
+  # - name: Organization
+  #   description: A company, agency, or institution.
+  #   aliases: [Org, Company]
+
+relation_types: []
+  # - name: SUPERSEDES
+  #   description: One policy/decision replaces another.
+  #   subject_types: [Policy, Decision]
+  #   object_types: [Policy, Decision]
+
+# Structured markers promoted to first-class Rationale nodes in L1 (zero models).
+rationale_markers:
+  - "WHY:"
+  - "DECISION:"
+  - "TODO:"
+  - "ACTION:"
+  - "MUST"      # RFC 2119
+  - "SHOULD"    # RFC 2119
+  - "SHALL"     # RFC 2119

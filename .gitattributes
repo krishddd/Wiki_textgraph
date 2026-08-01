@@ -1,0 +1,11 @@
+# Normalize all text to LF in the repo for cross-platform determinism.
+* text=auto eol=lf
+
+# Binary research artifacts — never touch line endings.
+*.pdf binary
+*.docx binary
+*.png binary
+*.parquet binary
+
+# Lockfile is generated; collapse diffs in review.
+uv.lock -diff linguist-generated=true
