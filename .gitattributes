@@ -7,5 +7,9 @@
 *.png binary
 *.parquet binary
 
+# Fixtures with intentionally invalid/non-UTF-8 bytes must be preserved exactly
+# (their doc_id is blake3(raw bytes) and must match on every platform / CI runner).
+tests/fixtures/corpus_docs/mixed-encoding.log binary
+
 # Lockfile is generated; collapse diffs in review.
 uv.lock -diff linguist-generated=true

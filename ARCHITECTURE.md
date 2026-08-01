@@ -39,6 +39,14 @@ everything above it must work without it (`--no-llm` always produces a full grap
 | Pinned `Config` + hash | `config.py` | G1 — output is a function of config |
 | `GraphStore` interface | `store/base.py` | backend-swappable L6/L7/L8 |
 
+### Note: L1 confidence tag (source-doc discrepancy, resolved)
+
+The research spec contradicts itself on the tag for structural-spine edges: §4.2
+calls them `EXTRACTED`, while the §6.4 taxonomy defines `STRUCTURAL` as "read
+directly from machine-readable structure, produced by L1." **§6.4 wins:** L1 edges
+are `STRUCTURAL`. This is what the `ConfidenceTag` enum encodes and what Phase 1
+must emit.
+
 ### Provenance model
 
 A citation stores a **canonical character span**. Verification maps it back to a

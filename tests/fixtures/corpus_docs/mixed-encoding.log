@@ -1,0 +1,3 @@
+2026-08-01 12:00:03 INFO conn from 10.0.0.1
+2026-08-01 12:00:04 WARN bad byte: ÿþ in payload €
+done

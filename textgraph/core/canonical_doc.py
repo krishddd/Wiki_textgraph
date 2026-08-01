@@ -23,6 +23,15 @@ from textgraph.core.offsets import OffsetMap
 _BOM = "﻿"
 
 
+def _byte_len(chars: str, encoding: str) -> int:
+    """Raw-byte length of ``chars`` under ``encoding``, surrogate-safe.
+
+    A lone surrogate produced by the surrogateescape decode re-encodes to exactly
+    the one original byte it stood for; a normal character to its usual width.
+    """
+    return len(chars.encode(encoding, errors="surrogateescape"))
+
+
 def normalize(raw: bytes, *, encoding: str = "utf-8") -> tuple[str, OffsetMap]:
     """Return ``(canonical_text, offset_map)`` for ``raw`` bytes.
 
@@ -30,7 +39,12 @@ def normalize(raw: bytes, *, encoding: str = "utf-8") -> tuple[str, OffsetMap]:
     consumed, so ``offset_map.to_raw_span`` recovers the original byte range.
     Deterministic: identical bytes always produce identical output (G1).
     """
-    text = raw.decode(encoding)
+    # Decode with surrogateescape so undecodable bytes (OCR output, mixed-encoding
+    # logs, binary-ish content — all in the L0 format matrix) each map to one lone
+    # surrogate code point instead of crashing. Re-encoding a surrogate with the
+    # same codec reproduces the exact original byte, so offset fidelity and
+    # provenance (G3) stay exact, and the transform stays deterministic (G1).
+    text = raw.decode(encoding, errors="surrogateescape")
 
     canonical_chars: list[str] = []
     byte_lengths: list[int] = []
@@ -42,7 +56,7 @@ def normalize(raw: bytes, *, encoding: str = "utf-8") -> tuple[str, OffsetMap]:
     i = 0
     n = len(text)
     if n and text[0] == _BOM:
-        raw_start = len(_BOM.encode(encoding))
+        raw_start = _byte_len(_BOM, encoding)
         i = 1
 
     while i < n:
@@ -53,16 +67,16 @@ def normalize(raw: bytes, *, encoding: str = "utf-8") -> tuple[str, OffsetMap]:
             # consumes either 2 raw bytes (CRLF) or 1 (lone CR).
             if i + 1 < n and text[i + 1] == "\n":
                 canonical_chars.append("\n")
-                byte_lengths.append(len("\r\n".encode(encoding)))
+                byte_lengths.append(_byte_len("\r\n", encoding))
                 i += 2
             else:
                 canonical_chars.append("\n")
-                byte_lengths.append(len("\r".encode(encoding)))
+                byte_lengths.append(_byte_len("\r", encoding))
                 i += 1
             continue
 
         canonical_chars.append(ch)
-        byte_lengths.append(len(ch.encode(encoding)))
+        byte_lengths.append(_byte_len(ch, encoding))
         i += 1
 
     canonical = "".join(canonical_chars)

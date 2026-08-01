@@ -56,3 +56,31 @@ def test_single_token_doc() -> None:
     doc = CanonicalDoc.from_bytes(b"x")
     assert doc.text == "x"
     assert doc.raw_span(0, 1) == (0, 1)
+
+
+def test_invalid_utf8_does_not_crash() -> None:
+    # Adversarial (§5.4): OCR / mixed-encoding / binary-ish bytes must degrade
+    # gracefully, not raise. Undecodable bytes become lone surrogates.
+    raw = b"valid \xff\xfe mix \x80 end"
+    doc = CanonicalDoc.from_bytes(raw)
+    assert doc.raw_len == len(raw)
+    # Whole-doc span still maps to the full raw byte range.
+    assert doc.raw_span(0, len(doc.text)) == (0, len(raw))
+
+
+def test_invalid_utf8_spans_still_rehash() -> None:
+    # Provenance (G3) must survive undecodable bytes: every span re-hashes exactly.
+    raw = b"a\xffb\x80c\r\nd"
+    doc = CanonicalDoc.from_bytes(raw)
+    for start in range(len(doc.text) + 1):
+        for end in range(start, len(doc.text) + 1):
+            b0, b1 = doc.raw_span(start, end)
+            assert doc.span_hash(raw, start, end) == blake3_hex(raw[b0:b1])
+
+
+def test_normalize_byte_accounting_is_total() -> None:
+    # The offset map must be total: last canonical index maps to raw_len,
+    # even with a BOM, CRLF collapse, and invalid bytes all present.
+    raw = "﻿café\r\n".encode() + b"\xff end"
+    _text, m = normalize(raw)
+    assert m.to_raw(m.canonical_len) == len(raw) == m.raw_len
