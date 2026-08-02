@@ -21,6 +21,17 @@ def blake3_hex(data: bytes) -> str:
     return blake3.blake3(data).hexdigest()
 
 
+def hash_text(text: str) -> str:
+    """Blake3 of ``text``, surrogate-safe.
+
+    Text derived from canonical content may contain lone surrogates (from
+    undecodable source bytes decoded with surrogateescape). Encoding with
+    ``surrogateescape`` never raises and stays deterministic, so this is the right
+    primitive for content-addressing node/edge ids off canonical text (G1).
+    """
+    return blake3_hex(text.encode("utf-8", errors="surrogateescape"))
+
+
 def doc_id_for(raw: bytes) -> str:
     """Return the canonical document id for ``raw`` bytes.
 

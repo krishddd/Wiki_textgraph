@@ -1,12 +1,13 @@
 """TextGraph command-line entry point.
 
-Phase 0 ships two commands:
+Phase 1 commands:
   * ``textgraph version`` — print the version.
-  * ``textgraph build <path> [-o graph.json]`` — run the (trivial) pipeline and
-    write a byte-stable ``graph.json``.
+  * ``textgraph build <path> [-o DIR]`` — run L0+L1 and write the textgraph-out/
+    artifact directory (graph.json, GRAPH_REPORT.md, graph.html, schema.yaml,
+    manifest.json). ``--json-only PATH`` writes just the byte-stable graph.json.
 
 The human CLI and the (future) MCP tool surface are built off the same underlying
-result objects, formatted two ways — never two drifting code paths (see §6.4).
+result objects, formatted two ways — never two drifting code paths (§6.4).
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ import sys
 from pathlib import Path
 
 from textgraph import __version__
-from textgraph.pipeline import build_graph_bytes
+from textgraph.l9_artifacts import write_artifacts
+from textgraph.pipeline import build, build_graph_bytes
 
 
 def _cmd_version(_: argparse.Namespace) -> int:
@@ -29,10 +31,33 @@ def _cmd_build(args: argparse.Namespace) -> int:
     if not root.exists():
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
-    data = build_graph_bytes(root)
-    out = Path(args.output)
-    out.write_bytes(data)
-    print(f"wrote {out} ({len(data)} bytes)")
+
+    if args.json_only:
+        data = build_graph_bytes(root)
+        out = Path(args.json_only)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(data)
+        print(f"wrote {out} ({len(data)} bytes)")
+        return 0
+
+    result = build(root)
+    paths = write_artifacts(
+        args.output,
+        config_hash=result.config_hash,
+        results=result.results,
+        nodes=result.nodes,
+        edges=result.edges,
+        timings_ms=result.timings_ms,
+    )
+    print(
+        f"built graph: {len(result.results)} docs, {len(result.nodes)} nodes, "
+        f"{len(result.edges)} edges"
+    )
+    print(f"  {paths.graph_json}")
+    print(f"  {paths.report}")
+    print(f"  {paths.graph_html}")
+    for warning in result.skipped:
+        print(f"  skipped {warning}", file=sys.stderr)
     return 0
 
 
@@ -44,10 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_version = sub.add_parser("version", help="print the TextGraph version")
     p_version.set_defaults(func=_cmd_version)
 
-    p_build = sub.add_parser("build", help="build a graph from a corpus path")
+    p_build = sub.add_parser("build", help="build a knowledge graph from a corpus path")
     p_build.add_argument("path", help="file or directory to ingest")
     p_build.add_argument(
-        "-o", "--output", default="graph.json", help="output path (default: graph.json)"
+        "-o",
+        "--output",
+        default="textgraph-out",
+        help="artifact directory (default: textgraph-out)",
+    )
+    p_build.add_argument(
+        "--json-only", metavar="PATH", help="write only graph.json to PATH and exit"
     )
     p_build.set_defaults(func=_cmd_build)
 

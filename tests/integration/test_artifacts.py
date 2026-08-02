@@ -1,0 +1,72 @@
+"""L9 artifact integrity: schema conformance, self-contained HTML, determinism."""
+
+import json
+from pathlib import Path
+
+import jsonschema
+import pytest
+from textgraph.l9_artifacts import write_artifacts
+from textgraph.pipeline import build
+
+ROOT = Path(__file__).parent.parent.parent
+SCHEMA_DIR = ROOT / "schema"
+CORPUS = ROOT / "tests" / "fixtures" / "corpora" / "docs"
+
+
+def _write(tmp_path: Path):
+    result = build(CORPUS)
+    return write_artifacts(
+        tmp_path,
+        config_hash=result.config_hash,
+        results=result.results,
+        nodes=result.nodes,
+        edges=result.edges,
+        timings_ms=result.timings_ms,
+    )
+
+
+def test_graph_json_conforms_to_schema(tmp_path: Path) -> None:
+    paths = _write(tmp_path)
+    graph = json.loads(paths.graph_json.read_text(encoding="utf-8"))
+    schema = json.loads((SCHEMA_DIR / "graph.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(graph, schema)
+
+
+def test_manifest_conforms_to_schema(tmp_path: Path) -> None:
+    paths = _write(tmp_path)
+    manifest = json.loads(paths.manifest.read_text(encoding="utf-8"))
+    schema = json.loads((SCHEMA_DIR / "manifest.schema.json").read_text(encoding="utf-8"))
+    jsonschema.validate(manifest, schema)
+
+
+def test_graph_html_is_self_contained(tmp_path: Path) -> None:
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    # No external scripts/styles (G2: local-first viewer, no CDN).
+    assert "<script src=" not in html
+    assert "<link " not in html
+    assert "cdn." not in html
+
+
+def test_every_non_generated_edge_has_a_citation(tmp_path: Path) -> None:
+    paths = _write(tmp_path)
+    graph = json.loads(paths.graph_json.read_text(encoding="utf-8"))
+    for edge in graph["edges"]:
+        if edge["tag"] != "GENERATED":
+            assert edge["source_spans"], edge
+
+
+@pytest.mark.parametrize("shape", ["docs", "adr", "chat"])
+def test_report_and_html_written_for_all_shapes(tmp_path: Path, shape: str) -> None:
+    corpus = ROOT / "tests" / "fixtures" / "corpora" / shape
+    result = build(corpus)
+    paths = write_artifacts(
+        tmp_path / shape,
+        config_hash=result.config_hash,
+        results=result.results,
+        nodes=result.nodes,
+        edges=result.edges,
+    )
+    assert paths.graph_json.exists()
+    assert paths.report.exists()
+    assert paths.graph_html.exists()

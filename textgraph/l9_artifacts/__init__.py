@@ -1,4 +1,9 @@
-"""Placeholder package for l9_artifacts.
+"""L9 — Artifacts & Skill Surface.
 
-Implemented in a later phase; see ARCHITECTURE.md for the layer contract.
+Emits the byte-stable graph.json contract plus GRAPH_REPORT.md, graph.html,
+schema.yaml, and manifest.json. See ARCHITECTURE.md.
 """
+
+from textgraph.l9_artifacts.artifacts import ArtifactPaths, write_artifacts
+
+__all__ = ["ArtifactPaths", "write_artifacts"]

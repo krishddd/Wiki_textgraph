@@ -29,8 +29,8 @@ jobs:
       - name: Cross-process byte-identity check
         shell: bash
         run: |
-          uv run textgraph build tests/fixtures/corpus_docs -o /tmp/graph-a.json
-          uv run textgraph build tests/fixtures/corpus_docs -o /tmp/graph-b.json
+          uv run textgraph build tests/fixtures/corpus_docs --json-only /tmp/graph-a.json
+          uv run textgraph build tests/fixtures/corpus_docs --json-only /tmp/graph-b.json
           if ! cmp -s /tmp/graph-a.json /tmp/graph-b.json; then
             echo "::error::graph.json is not byte-identical across builds (G1 violated)"
             exit 1

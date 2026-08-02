@@ -1,0 +1,5 @@
+[2026-07-30 09:12] Alice: We flagged three wire transfers from Acme Corp to Beta Ltd.
+[2026-07-30 09:13] Bob: Do they share a beneficial owner?
+[2026-07-30 09:15] Alice: Yes — both trace to the same nominee director. WHY: classic layering.
+[2026-07-30 09:16] Bob: DECISION: escalate case-4471 to the AML review board.
+[2026-07-30 09:18] Alice: Agreed. We MUST file a SAR within the deadline.

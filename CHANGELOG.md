@@ -6,6 +6,37 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 1: Structural Spine (L0 + L1)
+- **Mission focus:** positioned for financial-crime and technical-crime
+  investigation — surfacing who/what is connected and *why*, with audit-grade
+  provenance. README and docs reframed accordingly.
+- **L0 ingestion** with a format registry and hierarchical, heading-aware chunking:
+  - built-in (stdlib/pure-Python): markdown (markdown-it-py AST), plain text,
+    HTML/XHTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs (template mining),
+    transcripts (speaker turns).
+  - PDF behind the `[ingest]` extra (pypdf); missing extras are skipped with a
+    warning, never a crash (G2).
+  - byte-preserving formats cite original file bytes; derived-text formats
+    (docx/pdf/odt/epub/rtf/html) make the extracted text the canonical document and
+    every span still re-verifies against it (G3).
+- **L1 deterministic structure parse** (zero models): Document/Section hierarchy
+  (`CONTAINS`), links (`LINKS_TO`), definitions (`DEFINES`/Term), citations
+  (`CITES`), cross-references (`REFERENCES`), structured fields (`HAS_FIELD`),
+  transcript threads (`PARTICIPANT`/`SENT_BY`/`REPLIES_TO`), log templates
+  (`EMITS`), and **Rationale / Requirement** nodes from markers (WHY/DECISION/
+  TODO/ACTION/ADR + RFC-2119 MUST/SHALL/…). Every edge is `STRUCTURAL`,
+  confidence 1.0, with a re-verifiable source span.
+- **In-memory `GraphStore`** backend (deterministic ordering).
+- **L9 artifacts**: byte-stable `graph.json` (schema-conformant), `GRAPH_REPORT.md`
+  with 10 grounded questions, self-contained `graph.html` (no CDN, precomputed
+  layout, click-to-source-span), `schema.yaml`, `manifest.json`.
+- **CLI**: `textgraph build <path> -o DIR` writes the artifact set; `--json-only`
+  writes just graph.json.
+- **Tests**: L0/L1/rich-format/report/artifacts suites; determinism gate extended
+  to three corpus shapes (docs, ADR, chat); edge-level provenance re-verification
+  across every fixture corpus; graph.json/manifest.json validated against JSON
+  Schema. 91 tests, ~97% core coverage.
+
 ### Fixed
 - **Non-UTF-8 ingestion crash.** `normalize()` decoded with strict UTF-8, so any
   undecodable byte (OCR output, mixed-encoding logs, binary-ish content — all in

@@ -47,13 +47,48 @@ directly from machine-readable structure, produced by L1." **§6.4 wins:** L1 ed
 are `STRUCTURAL`. This is what the `ConfidenceTag` enum encodes and what Phase 1
 must emit.
 
+## Mission
+
+TextGraph is aimed at **financial-crime and technical-crime investigation**:
+turning heterogeneous case evidence into a graph that shows who/what connects to
+whom, through what, and *why* — with audit-grade, re-verifiable provenance on every
+claim. The `Rationale`/`Requirement` layer (the *why*) and byte-range provenance
+(the *proof*) are the two features that matter most for this domain.
+
+## Phase 1 (implemented): L0 + L1
+
+- **L0 (`textgraph/l0_ingest/`)** — a format registry (`register`/`dispatch`)
+  producing `IngestResult` = `CanonicalDoc` + span-carrying `Block` tree +
+  hierarchical `Chunk`s. Built-in ingestors: markdown (markdown-it-py AST),
+  plaintext, HTML/DOCX/ODT/RTF/EPUB (`richdocs`), JSON/YAML/TOML (`structured`),
+  logs (template mining), transcripts. PDF is behind the `[ingest]` extra.
+- **L1 (`textgraph/l1_structure/`)** — `parse_corpus` walks each block tree and
+  inline text to emit the structural spine (sections, links, definitions,
+  citations, cross-refs, fields, transcript threads, log templates, Rationale,
+  Requirement). Every edge is `STRUCTURAL`, confidence 1.0, with a source span.
+- **`GraphStore`** — in-memory backend with deterministic ordering; DuckDB/Parquet
+  lands in Phase 4.
+- **L9 (`textgraph/l9_artifacts/`)** — graph.json, GRAPH_REPORT.md, graph.html,
+  schema.yaml, manifest.json.
+
 ### Provenance model
 
 A citation stores a **canonical character span**. Verification maps it back to a
-**raw byte span** through the doc's offset map and re-hashes the original bytes; a
-citation is valid iff the re-hash matches the stored hash. Normalization
-(CRLF→LF, BOM stripping, multi-byte UTF-8) never breaks this mapping — the offset
-map records exactly how many raw bytes each canonical character consumed.
+**raw byte span** through the doc's offset map and re-hashes the source bytes; a
+citation is valid iff the re-hash matches the stored hash.
+
+Two ingestion modes preserve this guarantee:
+
+- **Byte-preserving** (md, txt, logs, json/yaml/toml, transcripts): canonical text
+  derives from the raw file bytes, so citations point at the **original file**.
+- **Derived-text** (docx, pdf, odt, epub, rtf, html): the extracted plain text
+  can't be a byte-substring of the binary, so the **extracted text becomes the
+  canonical document** (`doc_id` content-addresses it) and spans re-verify against
+  it. Investigators still get an exact, re-hashable citation into normalized text.
+
+Normalization (CRLF→LF, BOM stripping, multi-byte UTF-8, and undecodable bytes via
+`surrogateescape`) never breaks the mapping — the offset map records exactly how
+many raw bytes each canonical character consumed.
 
 ## Design goals
 

@@ -32,8 +32,8 @@ jobs:
       - name: Verify built wheel is importable and deterministic
         shell: bash
         run: |
-          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs -o /tmp/rel-a.json
-          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs -o /tmp/rel-b.json
+          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs --json-only /tmp/rel-a.json
+          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs --json-only /tmp/rel-b.json
           cmp -s /tmp/rel-a.json /tmp/rel-b.json || { echo "::error::released artifact is non-deterministic"; exit 1; }
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

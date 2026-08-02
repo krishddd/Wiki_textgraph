@@ -1,0 +1,133 @@
+"""GRAPH_REPORT.md generator (L9, §12.3).
+
+Human/agent orientation: corpus stats, node/edge breakdown, god nodes, rationale
+and requirements, defined terms, coverage/orphans, and — the part that makes an
+agent immediately effective — 10 suggested questions grounded in real graph nodes.
+Deterministic: identical graph => identical report.
+"""
+
+from __future__ import annotations
+
+from textgraph.core.layout import IngestResult
+from textgraph.l9_artifacts.analytics_lite import Diagnostics
+from textgraph.store.base import Edge, Node
+
+
+def _name(n: Node) -> str:
+    return str(n.properties.get("name", n.node_id))
+
+
+def suggested_questions(nodes: list[Node], edges: list[Edge], diag: Diagnostics) -> list[str]:
+    """Generate up to 10 grounded, answerable questions from real graph content."""
+    by_label = diag.by_label
+    questions: list[str] = []
+
+    def take(label: str, template: str, limit: int) -> None:
+        for n in sorted(by_label.get(label, []), key=lambda x: -diag.degree.get(x.node_id, 0))[
+            :limit
+        ]:
+            q = template.format(name=_name(n))
+            if q not in questions:
+                questions.append(q)
+
+    take("Section", "What does the section “{name}” cover?", 3)
+    take("Rationale", "Why was this decided: “{name}”?", 2)
+    take("Term", "What is the definition of “{name}”?", 2)
+    take("Requirement", "Which requirements does the corpus state (e.g. “{name}”)?", 1)
+    take("Participant", "What did {name} discuss in the conversation?", 1)
+    take("Reference", "What in the corpus links to “{name}”?", 1)
+    take("LogTemplate", "How often does the event “{name}” occur?", 1)
+    take("Document", "What are the main topics in {name}?", 2)
+
+    # Deterministic structural fallbacks to always reach 10.
+    fallbacks = [
+        "What are the most connected concepts (god nodes) in this corpus?",
+        "Which documents are most central to the graph?",
+        "What rationale or decisions are recorded across the corpus?",
+        "Which requirements (MUST/SHALL) does the corpus impose?",
+        "Which sections or messages cross-reference each other?",
+        "What terms or entities are defined across these documents?",
+        "What contradictions or superseded statements exist (temporal view)?",
+        "Which participants or documents are connected by shared references?",
+    ]
+    for f in fallbacks:
+        if len(questions) >= 10:
+            break
+        if f not in questions:
+            questions.append(f)
+    return questions[:10]
+
+
+def render_report(
+    *,
+    results: list[IngestResult],
+    nodes: list[Node],
+    edges: list[Edge],
+    diag: Diagnostics,
+    config_hash: str,
+) -> str:
+    node_by_id = {n.node_id: n for n in nodes}
+    label_counts = {label: len(ns) for label, ns in diag.by_label.items()}
+    pred_counts: dict[str, int] = {}
+    for e in edges:
+        pred_counts[e.predicate] = pred_counts.get(e.predicate, 0) + 1
+
+    lines: list[str] = ["# Graph Report", ""]
+    lines += [
+        f"- **Documents:** {len(results)}",
+        f"- **Nodes:** {len(nodes)}",
+        f"- **Edges:** {len(edges)} (all `STRUCTURAL` in the L0+L1 spine)",
+        f"- **Config hash:** `{config_hash}`",
+        "",
+        "## Corpus",
+        "",
+        "| document | format | bytes | chunks |",
+        "| --- | --- | --- | --- |",
+    ]
+    for ir in sorted(results, key=lambda r: r.source_name):
+        lines.append(
+            f"| {ir.source_name} | {ir.format} | {ir.canonical.raw_len} | {len(ir.chunks)} |"
+        )
+
+    lines += ["", "## Node types", "", "| label | count |", "| --- | --- |"]
+    for label in sorted(label_counts):
+        lines.append(f"| {label} | {label_counts[label]} |")
+
+    lines += ["", "## Edge types", "", "| predicate | count |", "| --- | --- |"]
+    for pred in sorted(pred_counts):
+        lines.append(f"| {pred} | {pred_counts[pred]} |")
+
+    lines += ["", "## God nodes (most connected)", ""]
+    if diag.god_nodes:
+        for nid, deg in diag.god_nodes[:5]:
+            n = node_by_id.get(nid)
+            label = n.labels[0] if n and n.labels else "?"
+            lines.append(f"- **{_name(n) if n else nid}** ({label}) — degree {deg}")
+    else:
+        lines.append("_None yet._")
+
+    rationale = diag.by_label.get("Rationale", [])
+    if rationale:
+        lines += ["", "## Rationale & decisions", ""]
+        for n in rationale[:8]:
+            marker = n.properties.get("marker", "")
+            lines.append(f"- `{marker}` — {_name(n)}")
+
+    terms = diag.by_label.get("Term", [])
+    if terms:
+        lines += ["", "## Defined terms", ""]
+        for n in sorted(terms, key=lambda x: _name(x)):
+            lines.append(f"- **{_name(n)}**")
+
+    lines += ["", f"## Coverage: {len(diag.orphans)} orphan node(s)", ""]
+    if diag.orphans:
+        for n in diag.orphans[:8]:
+            lines.append(f"- {_name(n)} ({n.labels[0] if n.labels else '?'})")
+    else:
+        lines.append("_Every node is connected to the graph._")
+
+    lines += ["", "## 10 questions this graph can answer well", ""]
+    for i, q in enumerate(suggested_questions(nodes, edges, diag), 1):
+        lines.append(f"{i}. {q}")
+
+    return "\n".join(lines) + "\n"

@@ -8,13 +8,22 @@ license = { text = "MIT" }
 authors = [{ name = "krishddd" }]
 keywords = ["knowledge-graph", "provenance", "information-extraction", "mcp", "deterministic", "rag"]
 dependencies = [
-    # Lean core: content addressing only. Everything heavy lives behind extras.
+    # Lean core: content addressing + pure-Python structural parsers only.
+    # Everything heavy (Docling, tree-sitter, encoder models) lives behind extras.
     "blake3>=0.4.1",
+    "markdown-it-py>=3.0.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-# Structural spine + rich-doc ingestion (Phase 1)
-ingest = ["docling>=2.0.0", "tree-sitter>=0.21.0", "drain3>=0.9.11"]
+# Rich-document ingestion. PDF text needs pypdf; Docling adds layout/table/OCR
+# fidelity; tree-sitter/Drain3 give deterministic structured-text/log parsing.
+ingest = [
+    "pypdf>=4.0.0",
+    "docling>=2.0.0",
+    "tree-sitter>=0.21.0",
+    "drain3>=0.9.11",
+]
 # Linguistic substrate + encoder IE (Phase 2)
 ie = ["spacy>=3.7.0", "gliner>=0.2.0", "fastcoref>=2.1.6"]
 # Entity resolution (Phase 3)
@@ -38,6 +47,8 @@ dev = [
     "ruff>=0.6.0",
     "mypy>=1.11.0",
     "pre-commit>=3.8.0",
+    "jsonschema>=4.20.0",
+    "types-PyYAML>=6.0",
 ]
 
 [project.scripts]
@@ -59,16 +70,29 @@ src = ["textgraph", "tests"]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# graph_html.py embeds a self-contained HTML/JS template; long template lines are
+# intentional and not real code lines.
+"textgraph/l9_artifacts/graph_html.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
-# Strict typing is enforced on the foundation modules first; the rest is ratcheted up per phase.
-files = ["textgraph/core", "textgraph/store", "textgraph/mcp"]
+# Strict typing is enforced on the foundation + Phase-1 layers; ratcheted up per phase.
+files = [
+    "textgraph/core",
+    "textgraph/store",
+    "textgraph/mcp",
+    "textgraph/l0_ingest",
+    "textgraph/l1_structure",
+    "textgraph/l9_artifacts",
+    "textgraph/pipeline.py",
+]
 warn_unused_ignores = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["blake3.*"]
+module = ["blake3.*", "yaml.*", "markdown_it.*", "pypdf.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

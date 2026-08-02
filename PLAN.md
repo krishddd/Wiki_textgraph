@@ -57,6 +57,19 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
 
 ---
 
+## Phase 1 — Definition of Done (met)
+
+- [x] L0 ingestion across md/txt/html/docx/odt/rtf/epub/json/yaml/toml/log/chat
+      (PDF behind `[ingest]`); offset fidelity + hierarchical chunking
+- [x] L1 zero-model structure parse incl. Rationale/Requirement nodes; every edge
+      `STRUCTURAL` with a re-verifiable span
+- [x] L9 artifacts: graph.json + GRAPH_REPORT.md (10 questions) + graph.html +
+      schema.yaml + manifest.json; `textgraph build`
+- [x] Determinism CI byte-identical across three corpus shapes
+- [x] Edge-level provenance re-verification (100%) across every fixture corpus
+- [x] `GRAPH_REPORT.md` 10 grounded questions on docs / ADR / chat corpora
+- [x] 91 tests green; ruff + strict mypy + ~97% core coverage
+
 ## Phase 0 — Definition of Done (tracking)
 
 - [x] Repo scaffold (Section 5.2)

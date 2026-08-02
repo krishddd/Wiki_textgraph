@@ -1,4 +1,11 @@
-"""Placeholder package for l1_structure.
+"""L1 — Deterministic Structure Parse.
 
-Implemented in a later phase; see ARCHITECTURE.md for the layer contract.
+Zero-model extraction of the structural spine: sections, links, definitions,
+citations, cross-references, rationale/requirement nodes, transcript threads, log
+templates, and structured fields. Every edge is STRUCTURAL with a re-verifiable
+span. See ARCHITECTURE.md.
 """
+
+from textgraph.l1_structure.structure import parse_corpus
+
+__all__ = ["parse_corpus"]

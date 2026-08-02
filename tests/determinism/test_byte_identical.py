@@ -7,15 +7,19 @@ as new layers land; it must stay green on every PR touching ``textgraph/``.
 
 from pathlib import Path
 
+import pytest
 from textgraph.core.content_address import blake3_hex
 from textgraph.pipeline import build_graph_bytes
 
-FIXTURE_CORPUS = Path(__file__).parent.parent / "fixtures" / "corpus_docs"
+FIXTURES = Path(__file__).parent.parent / "fixtures"
+FIXTURE_CORPUS = FIXTURES / "corpus_docs"
+ALL_CORPORA = [FIXTURE_CORPUS, *sorted((FIXTURES / "corpora").iterdir())]
 
 
-def test_graph_json_is_byte_identical_across_rebuilds() -> None:
-    first = build_graph_bytes(FIXTURE_CORPUS)
-    second = build_graph_bytes(FIXTURE_CORPUS)
+@pytest.mark.parametrize("corpus", ALL_CORPORA, ids=lambda p: p.name)
+def test_graph_json_is_byte_identical_across_rebuilds(corpus: Path) -> None:
+    first = build_graph_bytes(corpus)
+    second = build_graph_bytes(corpus)
     assert blake3_hex(first) == blake3_hex(second)
     assert first == second
 
