@@ -65,19 +65,43 @@ TextGraph turns any body of text into a queryable knowledge graph with byte-leve
 
 ## Architecture at a glance
 
-A strictly bottom-up layer stack, each layer a pure function of the one below it plus a pinned config hash:
+A strictly bottom-up layer stack. Each layer is a **pure function of the layer below it plus a pinned config hash** — the single property that makes determinism (G1) and incrementality (G5) achievable. `L0 → L1` (the structural spine) is implemented and ships today; the semantic and retrieval layers land in later phases.
 
-```
-any text → L0  INGEST & NORMALIZE          → CanonicalDoc (UTF-8 + layout tree + offsets)
-           L1  DETERMINISTIC STRUCTURE      → structural spine graph (0 models)
-           L2  LINGUISTIC SUBSTRATE         → sentences, deps, coref, discourse
-           L3  ENCODER IE                   → typed mentions + typed relations
-           L4  OPTIONAL LLM SEMANTIC        → abstractions, WHY-nodes (opt-in)
-           L5  ENTITY RESOLUTION            → canonical nodes, SAME_AS lattice
-           L6  GRAPH ASSEMBLY (bi-temporal) → reified Claim graph + provenance
-           L7  ANALYTICS                    → communities, god nodes, bridges
-           L8  RETRIEVAL (hybrid + PPR)     → ranked, cited context packs
-           L9  ARTIFACTS + MCP/SKILL        → graph.json / graph.html / REPORT.md / tools
+```mermaid
+flowchart TD
+    IN["📄 Case corpus<br/>PDF · DOCX · ODT · RTF · HTML · EPUB<br/>JSON/YAML · logs · chat/email exports"]
+
+    subgraph SPINE["🟢 Structural spine — Phase 1 (zero LLM, deterministic)"]
+        direction TB
+        L0["L0 · Ingest &amp; Normalize<br/><i>CanonicalDoc = UTF-8 + offset map + block tree</i>"]
+        L1["L1 · Deterministic Structure<br/><i>sections, links, definitions, citations,<br/>Rationale &amp; Requirement nodes</i>"]
+        L0 --> L1
+    end
+
+    subgraph SEM["⚪ Semantic layers — Phase 2+"]
+        direction TB
+        L2["L2 · Linguistic substrate<br/><i>coref · temporal · negation</i>"]
+        L3["L3 · Encoder IE<br/><i>entities + typed relations</i>"]
+        L4["L4 · Optional LLM<br/><i>rationale synthesis (opt-in)</i>"]
+        L5["L5 · Entity resolution<br/><i>SAME_AS lattice, non-destructive</i>"]
+        L2 --> L3 --> L4 --> L5
+    end
+
+    subgraph RETR["⚪ Graph &amp; retrieval — Phase 4+"]
+        direction TB
+        L6["L6 · Bi-temporal graph<br/><i>reified Claims + provenance</i>"]
+        L7["L7 · Analytics<br/><i>communities · god nodes · bridges</i>"]
+        L8["L8 · Retrieval<br/><i>hybrid + Personalized PageRank</i>"]
+        L6 --> L7 --> L8
+    end
+
+    L9["📦 L9 · Artifacts + MCP / Skill<br/>graph.json · graph.html · GRAPH_REPORT.md · MCP tools"]
+
+    IN --> L0
+    L1 --> L2
+    L5 --> L6
+    L8 --> L9
+    L1 -.->|"ships today (models-free)"| L9
 ```
 
 ## Status
@@ -88,6 +112,47 @@ any text → L0  INGEST & NORMALIZE          → CanonicalDoc (UTF-8 + layout tr
 - **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …) — the *why* behind the graph. Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
 - **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (with 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml`, and `manifest.json`.
 - CI gates all of it: lint, strict types, a byte-identical **determinism** gate, and 100% edge-provenance re-verification.
+
+### What Phase 1 does to each file
+
+```mermaid
+flowchart LR
+    F["file bytes"] --> DISP{"dispatch<br/>by extension"}
+    DISP --> CD["CanonicalDoc<br/>UTF-8 + offset map"]
+    CD --> BT["block tree<br/>+ hierarchical chunks"]
+    BT --> PARSE["L1 parse_corpus<br/>(zero models)"]
+    PARSE --> NODES["Nodes<br/>Document · Section · Chunk<br/>Term · Rationale · Requirement<br/>Participant · Message · Reference"]
+    PARSE --> EDGES["Edges — all STRUCTURAL, conf 1.0<br/>CONTAINS · LINKS_TO · DEFINES · CITES<br/>APPLIES_TO · STATES_REQUIREMENT<br/>+ re-verifiable byte-range citation"]
+    NODES --> OUT["📦 graph.json · GRAPH_REPORT.md · graph.html"]
+    EDGES --> OUT
+```
+
+### What you get (example: an AML case)
+
+A Phase-1 graph over the `chat` + `adr` fixtures — structural, cited, and already answering *why*. Entity/relation extraction (making `Acme Corp` a first-class `Organization` with a `TRANSFERRED` edge) is Phase 2.
+
+```mermaid
+graph LR
+    ALICE(["👤 Alice"]) -->|PARTICIPANT| DOC["📄 case-4471.chat"]
+    BOB(["👤 Bob"]) -->|PARTICIPANT| DOC
+    M1["💬 'three wire transfers<br/>Acme → Beta'"] -->|SENT_BY| ALICE
+    M2["💬 'escalate case-4471'"] -->|SENT_BY| BOB
+    M2 -->|REPLIES_TO| M1
+    R["🧭 Rationale · WHY<br/>'classic layering'"] -->|APPLIES_TO| M1
+    M2 -->|STATES_REQUIREMENT| REQ["⚖️ Requirement<br/>'MUST file a SAR'"]
+    DEC["🧭 Rationale · DECISION<br/>'link cases by shared<br/>beneficial owner'"] -->|APPLIES_TO| ADR["📄 adr-0007 · §Decision"]
+
+    classDef doc fill:#2f5d8a,color:#fff,stroke:#1f3d5a;
+    classDef who fill:#3f7d4e,color:#fff,stroke:#2a5a38;
+    classDef why fill:#8a5a2f,color:#fff,stroke:#5a3a1f;
+    classDef req fill:#7a4fa0,color:#fff,stroke:#4a2f70;
+    class DOC,ADR doc;
+    class ALICE,BOB who;
+    class R,DEC why;
+    class REQ req;
+```
+
+> Edges shown are exactly what L1 emits, each carrying a re-verifiable byte-range citation. `SENT_BY` points message → participant, `PARTICIPANT` participant → document, `APPLIES_TO` rationale → the block it justifies.
 
 Next: **Phase 2** — encoder IE (coreference + GLiNER-class entity/relation extraction) turns the structural spine into a full knowledge graph. See [PLAN.md](PLAN.md) for the Phase 0–10 roadmap.
 
