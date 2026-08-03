@@ -30,14 +30,23 @@ def suggested_questions(nodes: list[Node], edges: list[Edge], diag: Diagnostics)
             if q not in questions:
                 questions.append(q)
 
-    take("Section", "What does the section “{name}” cover?", 3)
+    take("Organization", "How is “{name}” connected to other parties, and why?", 3)
+    take("Person", "What role does {name} play in the network?", 1)
+    take("Section", "What does the section “{name}” cover?", 2)
     take("Rationale", "Why was this decided: “{name}”?", 2)
-    take("Term", "What is the definition of “{name}”?", 2)
+    take("Term", "What is the definition of “{name}”?", 1)
     take("Requirement", "Which requirements does the corpus state (e.g. “{name}”)?", 1)
     take("Participant", "What did {name} discuss in the conversation?", 1)
-    take("Reference", "What in the corpus links to “{name}”?", 1)
-    take("LogTemplate", "How often does the event “{name}” occur?", 1)
-    take("Document", "What are the main topics in {name}?", 2)
+    take("Money", "Which transfers involve the amount {name}?", 1)
+
+    # Relationship-shaped questions grounded in real relation edges.
+    preds = {e.predicate for e in edges}
+    if "TRANSFERRED" in preds:
+        questions.append("Follow the money: who transferred funds to whom?")
+    if "CONTROLS" in preds or "BENEFICIAL_OWNER_OF" in preds:
+        questions.append("Who ultimately controls or owns each entity?")
+    if "DIRECTOR_OF" in preds:
+        questions.append("Which individuals are directors or officers of which organizations?")
 
     # Deterministic structural fallbacks to always reach 10.
     fallbacks = [
@@ -97,12 +106,41 @@ def render_report(
     for pred in sorted(pred_counts):
         lines.append(f"| {pred} | {pred_counts[pred]} |")
 
+    # Entities (Phase 2): grouped by type, top by degree.
+    _RELATION_PREDS = (
+        "TRANSFERRED",
+        "CONTROLS",
+        "CONTROLLED_BY",
+        "DIRECTOR_OF",
+        "BENEFICIAL_OWNER_OF",
+        "ASSOCIATED_WITH",
+    )
+    entity_nodes = [n for n in nodes if "Entity" in n.labels]
+    if entity_nodes:
+        lines += ["", "## Entities", "", "| type | entity | mentions |", "| --- | --- | --- |"]
+        for n in sorted(entity_nodes, key=lambda n: (-diag.degree.get(n.node_id, 0), n.node_id))[
+            :12
+        ]:
+            etype = n.properties.get("etype", (n.labels[1] if len(n.labels) > 1 else "?"))
+            lines.append(f"| {etype} | {_name(n)} | {n.properties.get('mention_count', 0)} |")
+
+    relations = [e for e in edges if e.predicate in _RELATION_PREDS]
+    if relations:
+        lines += ["", "## Key relationships", ""]
+        for e in sorted(relations, key=lambda e: (e.predicate, e.subject, e.object))[:15]:
+            subj = _name(node_by_id[e.subject]) if e.subject in node_by_id else e.subject
+            obj = _name(node_by_id[e.object]) if e.object in node_by_id else e.object
+            amount = e.properties.get("amount", "")
+            neg = " (negated)" if e.properties.get("polarity") == "neg" else ""
+            amt = f" — {amount}" if amount else ""
+            lines.append(f"- **{subj}** → `{e.predicate}` → **{obj}**{amt} [`{e.tag}`]{neg}")
+
     lines += ["", "## God nodes (most connected)", ""]
     if diag.god_nodes:
         for nid, deg in diag.god_nodes[:5]:
-            n = node_by_id.get(nid)
-            label = n.labels[0] if n and n.labels else "?"
-            lines.append(f"- **{_name(n) if n else nid}** ({label}) — degree {deg}")
+            gn = node_by_id.get(nid)
+            label = gn.labels[0] if gn and gn.labels else "?"
+            lines.append(f"- **{_name(gn) if gn else nid}** ({label}) — degree {deg}")
     else:
         lines.append("_None yet._")
 

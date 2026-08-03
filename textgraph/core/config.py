@@ -31,6 +31,10 @@ class Config:
     llm_enabled: bool = False
     # Hierarchical chunking target (tokens); never fixed 512-token windows.
     chunk_target_tokens: int = 600
+    # L2+L3 encoder IE: on by default; backend is the deterministic rule extractor
+    # unless "gliner" is selected (requires the [ie] extra).
+    extract_ie: bool = True
+    ie_backend: str = "rules"
     # Free-form, pinned model ids per layer (filled in as layers are added).
     model_pins: dict[str, str] = field(default_factory=dict)
 

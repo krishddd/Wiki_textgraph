@@ -57,6 +57,18 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
 
 ---
 
+## Phase 2 — Definition of Done (met)
+
+- [x] L2 substrate (sentences, coref-lite, negation/modality) + L3 entity/relation
+      extraction; default deterministic rule backend, GLiNER behind `[ie]`
+- [x] `textgraph build` produces entities (Org/Person/Money/Account/Date/Email) and
+      typed relations (TRANSFERRED/CONTROLS/DIRECTOR_OF/…), tagged EXTRACTED/INFERRED
+- [x] four-tier confidence taxonomy wired through the graph; negation/modality kept
+- [x] Determinism CI still byte-identical with IE in the loop; models pinned/seeded
+- [x] coref coverage reported in `manifest.json`; `schema.yaml` records observed types
+- [x] ablation harness: L1-only vs. +encoder IE (edge/entity/relation delta)
+- [x] CPU-only, model-free default path (zero GPU); 112 tests green, ~97% coverage
+
 ## Phase 1 — Definition of Done (met)
 
 - [x] L0 ingestion across md/txt/html/docx/odt/rtf/epub/json/yaml/toml/log/chat

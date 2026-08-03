@@ -48,10 +48,13 @@ def _cmd_build(args: argparse.Namespace) -> int:
         nodes=result.nodes,
         edges=result.edges,
         timings_ms=result.timings_ms,
+        ie_stats=result.ie_stats,
     )
+    ie = result.ie_stats
     print(
         f"built graph: {len(result.results)} docs, {len(result.nodes)} nodes, "
-        f"{len(result.edges)} edges"
+        f"{len(result.edges)} edges "
+        f"({ie.get('entities', 0)} entities, {ie.get('relations', 0)} relations)"
     )
     print(f"  {paths.graph_json}")
     print(f"  {paths.report}")

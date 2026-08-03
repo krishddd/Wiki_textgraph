@@ -85,6 +85,8 @@ files = [
     "textgraph/mcp",
     "textgraph/l0_ingest",
     "textgraph/l1_structure",
+    "textgraph/l2_linguistic",
+    "textgraph/l3_encoder_ie",
     "textgraph/l9_artifacts",
     "textgraph/pipeline.py",
 ]
@@ -92,7 +94,7 @@ warn_unused_ignores = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["blake3.*", "yaml.*", "markdown_it.*", "pypdf.*"]
+module = ["blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

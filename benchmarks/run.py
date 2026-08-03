@@ -12,10 +12,36 @@ import argparse
 import json
 from pathlib import Path
 
-from textgraph.pipeline import build_graph
+from textgraph.core.config import Config
+from textgraph.pipeline import build, build_graph
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CORPUS = ROOT / "tests" / "fixtures" / "corpus_docs"
+DEFAULT_CORPUS = ROOT / "tests" / "fixtures" / "corpora" / "docs"
+
+
+def _ablation(corpus: Path) -> dict[str, object]:
+    """L1-only (structural spine) vs. +encoder IE — the Phase-2 ablation.
+
+    Shows the node/edge/entity/relation delta the IE layer adds. Deterministic, so
+    the numbers are reproducible and diffable across runs.
+    """
+    spine = build(corpus, config=Config(extract_ie=False))
+    full = build(corpus, config=Config(extract_ie=True))
+    return {
+        "L1_only": {"nodes": len(spine.nodes), "edges": len(spine.edges)},
+        "plus_encoder_ie": {
+            "nodes": len(full.nodes),
+            "edges": len(full.edges),
+            "entities": full.ie_stats.get("entities", 0),
+            "relations": full.ie_stats.get("relations", 0),
+            "coref_resolved": full.ie_stats.get("pronouns_resolved", 0),
+            "coref_total": full.ie_stats.get("pronouns_total", 0),
+        },
+        "delta": {
+            "nodes": len(full.nodes) - len(spine.nodes),
+            "edges": len(full.edges) - len(spine.edges),
+        },
+    }
 
 
 def run(corpus: Path) -> dict[str, object]:
@@ -27,9 +53,11 @@ def run(corpus: Path) -> dict[str, object]:
             "total_raw_bytes": graph["stats"]["total_raw_bytes"],
             "node_count": len(graph["nodes"]),
             "edge_count": len(graph["edges"]),
+            "tag_counts": graph["stats"].get("tag_counts", {}),
             "config_hash": graph["config_hash"],
         },
-        # Extrinsic (LoCoMo / LongMemEval-S) + ablations arrive in Phase 4.
+        "ablation": _ablation(corpus),
+        # Extrinsic (LoCoMo / LongMemEval-S) arrive in Phase 4.
         "extrinsic": {},
     }
 
@@ -49,6 +77,27 @@ def render_report(result: dict[str, object]) -> str:
     ]
     for key in sorted(intr):
         lines.append(f"| {key} | {intr[key]} |")
+
+    abl = result.get("ablation")
+    if isinstance(abl, dict):
+        spine = abl["L1_only"]
+        full = abl["plus_encoder_ie"]
+        delta = abl["delta"]
+        lines += [
+            "",
+            "## Ablation: structural spine (L1) vs. + encoder IE (L2+L3)",
+            "",
+            "| configuration | nodes | edges | entities | relations |",
+            "| --- | --- | --- | --- | --- |",
+            f"| L1 only | {spine['nodes']} | {spine['edges']} | 0 | 0 |",
+            f"| + encoder IE | {full['nodes']} | {full['edges']} | "
+            f"{full['entities']} | {full['relations']} |",
+            f"| **delta** | +{delta['nodes']} | +{delta['edges']} | "
+            f"+{full['entities']} | +{full['relations']} |",
+            "",
+            f"Coreference-lite resolved {full['coref_resolved']}/{full['coref_total']} pronouns.",
+        ]
+
     lines += [
         "",
         "## Extrinsic",

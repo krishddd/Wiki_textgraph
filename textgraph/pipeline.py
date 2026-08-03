@@ -17,6 +17,7 @@ from textgraph.core.layout import IngestResult
 from textgraph.l0_ingest import ingest_path
 from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l1_structure import parse_corpus
+from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l9_artifacts.graph_json import build_graph_document, dump_graph_bytes
 from textgraph.store.base import Edge, Node
 from textgraph.store.memory import InMemoryGraphStore
@@ -60,6 +61,7 @@ class BuildResult:
     edges: list[Edge]
     timings_ms: dict[str, float] = field(default_factory=dict)
     skipped: list[str] = field(default_factory=list)
+    ie_stats: dict[str, int] = field(default_factory=dict)
 
     @property
     def config_hash(self) -> str:
@@ -89,9 +91,36 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
             skipped.append(f"{p.name}: {exc}")
     l0_ms = (time.perf_counter() - t0) * 1000
 
+    # L1 — deterministic structural spine.
     t1 = time.perf_counter()
     nodes, edges = parse_corpus(results)
     l1_ms = (time.perf_counter() - t1) * 1000
+
+    # L2 + L3 — encoder IE (default: deterministic rule backend). Entities merge
+    # across documents by (type, normalized name); relations/mentions carry spans.
+    entity_nodes: dict[str, Node] = {}
+    ie_edges: dict[str, Edge] = {}
+    ie_ms = 0.0
+    pron_total = pron_resolved = entity_count = relation_count = 0
+    if config.extract_ie:
+        t2 = time.perf_counter()
+        for ir in results:
+            ie = run_ie(ir.text, backend=config.ie_backend)
+            pron_total += ie.pronouns_total
+            pron_resolved += ie.pronouns_resolved
+            relation_count += len(ie.relations)
+            ie_n, ie_e = emit_ie(ir, ie)
+            for n in ie_n:
+                entity_nodes.setdefault(n.node_id, n)
+            for e in ie_e:
+                ie_edges.setdefault(e.edge_id, e)
+        entity_count = len(entity_nodes)
+        ie_ms = (time.perf_counter() - t2) * 1000
+
+    merged_nodes = {n.node_id: n for n in nodes} | entity_nodes
+    merged_edges = {e.edge_id: e for e in edges} | ie_edges
+    nodes = sorted(merged_nodes.values(), key=lambda n: n.node_id)
+    edges = sorted(merged_edges.values(), key=lambda e: e.edge_id)
 
     store = InMemoryGraphStore()
     for n in nodes:
@@ -105,8 +134,14 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
         store=store,
         nodes=nodes,
         edges=edges,
-        timings_ms={"L0": l0_ms, "L1": l1_ms},
+        timings_ms={"L0": l0_ms, "L1": l1_ms, "L2_L3": ie_ms},
         skipped=skipped,
+        ie_stats={
+            "entities": entity_count,
+            "relations": relation_count,
+            "pronouns_total": pron_total,
+            "pronouns_resolved": pron_resolved,
+        },
     )
 
 

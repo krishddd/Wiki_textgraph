@@ -6,6 +6,33 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 2: Encoder IE (L2 + L3)
+- **The build now produces a real knowledge graph, not just a structural spine.**
+- **L2 linguistic substrate** (`textgraph/l2_linguistic/`): deterministic sentence
+  segmentation, coreference-lite (pronoun/definite-NP → nearest compatible entity),
+  and NegEx-style negation/modality detection.
+- **L3 encoder IE** (`textgraph/l3_encoder_ie/`): entity + relation extraction with a
+  backend interface. Default `rules` backend is deterministic, zero-model, CPU-only —
+  detects Organization/Person/Money/Account/Date/Email entities and TRANSFERRED
+  (with amount) / CONTROLS / BENEFICIAL_OWNER_OF / DIRECTOR_OF / ASSOCIATED_WITH
+  relations; predicate canonicalization keeps the surface form as evidence. GLiNER
+  backend scaffolded behind the `[ie]` extra (import-guarded, pinned model id).
+- **Full four-tier confidence taxonomy (G4)** now exercised end-to-end: `STRUCTURAL`
+  (L1), `EXTRACTED` (L3 entities/relations), `INFERRED` (coref-resolved relations),
+  with `GENERATED` reserved for the Phase-6 LLM pass. Negation/modality preserved as
+  edge attributes (never dropped).
+- **Manifest** reports per-layer L0–L3 counts and **coref coverage**
+  (`resolved/total` pronouns); `schema.yaml` records observed entity/relation types.
+- **`GRAPH_REPORT.md`** gains Entities and Key-relationships sections and
+  relationship-shaped suggested questions ("Follow the money…").
+- **Config**: `extract_ie` (default true) and `ie_backend`; `Config(extract_ie=False)`
+  builds the structural spine only.
+- **Ablation harness** (`benchmarks/run.py`): L1-only vs. +encoder IE, showing the
+  node/edge/entity/relation delta and coref coverage — deterministic and diffable.
+- **Tests**: L2/L3 units + IE-pipeline integration (entities/relations, coref,
+  negation, hedging, all-tags, provenance re-verification, byte-identical rebuild).
+  Determinism gate stays green with IE in the loop. 112 tests, ~97% core coverage.
+
 ### Added — Phase 1: Structural Spine (L0 + L1)
 - **Mission focus:** positioned for financial-crime and technical-crime
   investigation — surfacing who/what is connected and *why*, with audit-grade

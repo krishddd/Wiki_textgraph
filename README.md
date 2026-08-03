@@ -106,12 +106,13 @@ flowchart TD
 
 ## Status
 
-🟢 **Phase 1 complete — the deterministic structural spine (L0 + L1) is working.**
+🟢 **Phase 2 complete — the structural spine is now a real knowledge graph (L0–L3).**
 
 - **L0 ingestion** across markdown, plain text, HTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs, and transcripts (PDF behind the `[ingest]` extra), each producing a `CanonicalDoc` + span-carrying block tree + hierarchical chunks.
-- **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …) — the *why* behind the graph. Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
-- **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (with 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml`, and `manifest.json`.
-- CI gates all of it: lint, strict types, a byte-identical **determinism** gate, and 100% edge-provenance re-verification.
+- **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …). Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
+- **L2 + L3 encoder IE** — the build now extracts **entities** (Organization, Person, Money, Account, Date, Email) and **typed relations** (`TRANSFERRED` with amount, `CONTROLS`, `BENEFICIAL_OWNER_OF`, `DIRECTOR_OF`, `ASSOCIATED_WITH`), tagged `EXTRACTED`. Coreference-lite resolves `it`/`the company` to the nearest org (relations so resolved are tagged `INFERRED`), and **negation/modality are preserved** (`did not transfer` → negated; `may be linked` → hedged). The default backend is deterministic and model-free (CPU-only, CI-safe); a GLiNER backend lives behind the `[ie]` extra.
+- **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (entities, key relationships, 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml` (observed entity/relation types), and `manifest.json` (per-layer counts + coref coverage).
+- CI gates all of it: lint, strict types, a byte-identical **determinism** gate (models pinned/seeded), and 100% edge-provenance re-verification across the full four-tier taxonomy.
 
 ### What Phase 1 does to each file
 
@@ -129,7 +130,7 @@ flowchart LR
 
 ### What you get (example: an AML case)
 
-A Phase-1 graph over the `chat` + `adr` fixtures — structural, cited, and already answering *why*. Entity/relation extraction (making `Acme Corp` a first-class `Organization` with a `TRANSFERRED` edge) is Phase 2.
+**The structural spine (L1)** over the `chat` + `adr` fixtures — cited, and already answering *why*:
 
 ```mermaid
 graph LR
@@ -154,7 +155,27 @@ graph LR
 
 > Edges shown are exactly what L1 emits, each carrying a re-verifiable byte-range citation. `SENT_BY` points message → participant, `PARTICIPANT` participant → document, `APPLIES_TO` rationale → the block it justifies.
 
-Next: **Phase 2** — encoder IE (coreference + GLiNER-class entity/relation extraction) turns the structural spine into a full knowledge graph. See [PLAN.md](PLAN.md) for the Phase 0–10 roadmap.
+**The entities & relationships (L2 + L3)** — now extracted from `wire-transfers.md`. "Acme Corp wired $2,000,000 to Beta Ltd" becomes a real `Organization → TRANSFERRED → Organization` edge:
+
+```mermaid
+graph LR
+    ACME(["🏢 Acme Corp"]) -->|"TRANSFERRED · $2,000,000"| BETA(["🏢 Beta Ltd"])
+    ACME -->|CONTROLS| GAMMA(["🏢 Gamma Holdings"])
+    GAMMA -->|BENEFICIAL_OWNER_OF| DELTA(["🏢 Delta Trust"])
+    JOHN(["👤 John Doe"]) -->|DIRECTOR_OF| BETA
+    BETA -.->|"TRANSFERRED (inferred via 'the company')"| GAMMA
+    BETA -.->|"TRANSFERRED (negated)"| OMEGA(["🏢 Omega Bank"])
+    ACME -.->|"ASSOCIATED_WITH (hedged)"| SIGMA(["🏢 Sigma Partners"])
+
+    classDef org fill:#2f5d8a,color:#fff,stroke:#1f3d5a;
+    classDef person fill:#3f7d4e,color:#fff,stroke:#2a5a38;
+    class ACME,BETA,GAMMA,DELTA,OMEGA,SIGMA org;
+    class JOHN person;
+```
+
+> Solid edges are `EXTRACTED`; dotted are `INFERRED` (coref) or carry a preserved `polarity`/`modality` attribute (negated / hedged) — never silently dropped. Every edge still cites the exact source span. The default extractor is deterministic and model-free; GLiNER (`[ie]`) is a higher-recall drop-in.
+
+Next: **Phase 3** — entity resolution (blocking + Splink + non-destructive `SAME_AS`) so `Acme Corp` / `ACME` / "the company" collapse to one canonical entity. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 

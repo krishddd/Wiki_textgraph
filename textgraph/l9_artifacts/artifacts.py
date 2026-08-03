@@ -39,7 +39,8 @@ def _schema_yaml(nodes: list[Node], edges: list[Edge]) -> str:
     relation_types = sorted({e.predicate for e in edges})
     doc = {
         "version": 0,
-        "mode": "observed",  # L1 spine; induced/user schema arrives in Phase 2
+        # Observed from L1 structure + L3 IE; induced/user-supplied ontology is Phase 3.
+        "mode": "observed",
         "entity_types": entity_types,
         "relation_types": relation_types,
     }
@@ -53,9 +54,15 @@ def _manifest(
     nodes: list[Node],
     edges: list[Edge],
     timings_ms: dict[str, float] | None,
+    ie_stats: dict[str, int] | None,
 ) -> dict[str, Any]:
     timings_ms = timings_ms or {}
+    ie_stats = ie_stats or {}
     tag_counts = Counter(str(e.tag) for e in edges)
+    entity_nodes = sum(1 for n in nodes if "Entity" in n.labels)
+    pron_total = ie_stats.get("pronouns_total", 0)
+    pron_resolved = ie_stats.get("pronouns_resolved", 0)
+    coref_coverage = round(pron_resolved / pron_total, 4) if pron_total else 0.0
     return {
         "tool_version": __version__,
         "config_hash": config_hash,
@@ -71,15 +78,33 @@ def _manifest(
             {
                 "layer": "L1",
                 "wall_ms": round(timings_ms.get("L1", 0.0), 3),
-                "nodes_out": len(nodes),
-                "edges_out": len(edges),
+                "nodes_out": len(nodes) - entity_nodes,
+                "edges_out": 0,
                 "model": None,
+            },
+            {
+                "layer": "L2",
+                "wall_ms": 0.0,
+                "nodes_out": 0,
+                "edges_out": 0,
+                "model": "coref-lite (rules)",
+            },
+            {
+                "layer": "L3",
+                "wall_ms": round(timings_ms.get("L2_L3", 0.0), 3),
+                "nodes_out": entity_nodes,
+                "edges_out": ie_stats.get("relations", 0),
+                "model": "rules",
             },
         ],
         "coverage": {
             "doc_count": len(results),
             "total_raw_bytes": sum(ir.canonical.raw_len for ir in results),
             "tag_counts": dict(sorted(tag_counts.items())),
+            "entities": entity_nodes,
+            "relations": ie_stats.get("relations", 0),
+            "coref_coverage": coref_coverage,
+            "coref_pronouns": {"total": pron_total, "resolved": pron_resolved},
         },
     }
 
@@ -92,6 +117,7 @@ def write_artifacts(
     nodes: list[Node],
     edges: list[Edge],
     timings_ms: dict[str, float] | None = None,
+    ie_stats: dict[str, int] | None = None,
 ) -> ArtifactPaths:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -128,6 +154,7 @@ def write_artifacts(
                 nodes=nodes,
                 edges=edges,
                 timings_ms=timings_ms,
+                ie_stats=ie_stats,
             )
         )
     )

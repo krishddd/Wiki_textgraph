@@ -71,6 +71,30 @@ claim. The `Rationale`/`Requirement` layer (the *why*) and byte-range provenance
 - **L9 (`textgraph/l9_artifacts/`)** — graph.json, GRAPH_REPORT.md, graph.html,
   schema.yaml, manifest.json.
 
+## Phase 2 (implemented): L2 + L3
+
+- **L2 (`textgraph/l2_linguistic/`)** — deterministic sentence segmentation,
+  coreference-lite (pronoun/definite-NP → nearest compatible entity), and NegEx-style
+  negation/modality. Statistical upgrades (spaCy, fastcoref, HeidelTime) attach
+  behind the ``[ie]`` extra.
+- **L3 (`textgraph/l3_encoder_ie/`)** — entity + relation extraction. The default
+  backend (`rules`) is a deterministic, zero-model, CPU-only extractor: Organization/
+  Person/Money/Account/Date/Email entities and TRANSFERRED/CONTROLS/DIRECTOR_OF/
+  BENEFICIAL_OWNER_OF/ASSOCIATED_WITH relations, with predicate canonicalization
+  (surface form kept as evidence). ``backend="gliner"`` selects the GLiNER encoder
+  (``[ie]`` extra) with the same output shape.
+- **Confidence taxonomy fully realised (G4).** L1 → `STRUCTURAL`; L3 entities/
+  relations → `EXTRACTED`; coref-resolved relations → `INFERRED`; the (Phase-6) LLM
+  pass → `GENERATED`. Every non-generated edge still carries a re-verifiable span.
+
+### Why the default backend is model-free
+
+Determinism (G1) must survive in CI, which can't download model weights, and the
+tool must run with zero GPU (G2). So the *default* extractor is deterministic rules;
+GLiNER is the higher-recall opt-in. Both emit the same `IEResult`, so the graph
+shape, provenance, and downstream layers are backend-independent. When the GLiNER
+path is used, weights are pinned and inference is temperature-free to preserve G1.
+
 ### Provenance model
 
 A citation stores a **canonical character span**. Verification maps it back to a
