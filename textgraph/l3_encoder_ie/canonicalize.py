@@ -63,3 +63,38 @@ def entity_id(etype: str, name: str) -> str:
 
 def strip_org_suffix(name: str) -> str:
     return _ORG_SUFFIX.sub("", name).strip()
+
+
+# Org suffix -> family. Corp/Corporation are the same family; Bank/Corp are not.
+_SUFFIX_FAMILY = {
+    "corp": "corp",
+    "corporation": "corp",
+    "ltd": "ltd",
+    "limited": "ltd",
+    "inc": "inc",
+    "incorporated": "inc",
+    "llc": "llc",
+    "plc": "plc",
+    "gmbh": "gmbh",
+    "sa": "sa",
+    "bank": "bank",
+    "group": "group",
+    "holding": "holdings",
+    "holdings": "holdings",
+    "trust": "trust",
+    "fund": "fund",
+    "partners": "partners",
+    "co": "co",
+}
+
+
+def suffix_family(name: str) -> str:
+    """Return the normalized org suffix family of ``name`` ('' if none).
+
+    Used by entity resolution to keep same-base but differently-incorporated
+    entities apart ("Acme Bank" vs "Acme Corp"), which are usually distinct.
+    """
+    toks = normalize_name(name).replace(".", "").split()
+    if not toks:
+        return ""
+    return _SUFFIX_FAMILY.get(toks[-1], "")

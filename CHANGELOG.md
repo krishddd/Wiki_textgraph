@@ -34,6 +34,15 @@ to Semantic Versioning.
 - **False Person from heading title-case** ("Corporate Aliases") — the person-bigram
   heuristic is disabled for headings, and `_PERSON_CUE` no longer uses global
   `IGNORECASE` (which had let "director on paper only" capture a lowercase "person").
+- **ER over-merge: conflicting suffix families.** "Acme Bank" and "Acme Corp" (same
+  base, different legal form) were merged by the suffix-stripped exact match. Added a
+  `suffix_family` classifier; same-base names with conflicting families now score
+  below the match threshold. Corp/Corporation, Ltd/Limited, Inc/Incorporated remain
+  the same family, so true aliases still merge.
+- **ER over-merge: shared suffix inflating similarity.** "Acme Corp" vs "Apex Corp"
+  scored 0.867 (> 0.86) because the shared "Corp" lifted Jaro-Winkler over threshold.
+  Name similarity is now computed on the suffix-stripped base name ("acme" vs "apex"
+  → 0.70), so distinct companies no longer merge.
 
 ### Added — Phase 2: Encoder IE (L2 + L3)
 - **The build now produces a real knowledge graph, not just a structural spine.**

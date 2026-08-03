@@ -58,6 +58,34 @@ def test_score_stripped_match_is_strong() -> None:
     assert score_pair(_rec("a", "Acme Corp", "acme"), _rec("b", "ACME", "acme")) >= 0.9
 
 
+def _pair(na: str, sa: str, nb: str, sb: str) -> float:
+    return score_pair(_rec("a", na, sa), _rec("b", nb, sb))
+
+
+def test_conflicting_suffix_families_do_not_merge() -> None:
+    # Regression: same base, different suffix families = distinct legal entities.
+    from textgraph.l5_entity_resolution.scoring import MATCH_THRESHOLD
+
+    assert _pair("Acme Bank", "acme", "Acme Corp", "acme") < MATCH_THRESHOLD
+    assert _pair("Gamma Holdings", "gamma", "Gamma Group", "gamma") < MATCH_THRESHOLD
+
+
+def test_shared_suffix_does_not_inflate_distinct_names() -> None:
+    # Regression: "Acme Corp" vs "Apex Corp" — the shared "Corp" must not push the
+    # Jaro-Winkler score over threshold. Similarity is on the stripped base name.
+    from textgraph.l5_entity_resolution.scoring import MATCH_THRESHOLD
+
+    assert _pair("Acme Corp", "acme", "Apex Corp", "apex") < MATCH_THRESHOLD
+
+
+def test_same_family_and_acronym_still_merge() -> None:
+    from textgraph.l5_entity_resolution.scoring import MATCH_THRESHOLD
+
+    assert _pair("Acme Corp", "acme", "Acme Corporation", "acme") >= MATCH_THRESHOLD
+    assert _pair("Beta Ltd", "beta", "Beta Limited", "beta") >= MATCH_THRESHOLD
+    assert _pair("ACME", "acme", "Acme Corp", "acme") >= MATCH_THRESHOLD
+
+
 def test_score_relational_boost() -> None:
     base = score_pair(_rec("a", "Acme Group", "acme"), _rec("b", "Acme Inc", "acme"))
     boosted = score_pair(

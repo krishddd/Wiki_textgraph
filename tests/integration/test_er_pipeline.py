@@ -13,8 +13,7 @@ from textgraph.l5_entity_resolution import (
     run_er,
 )
 from textgraph.l5_entity_resolution.blocking import candidate_pairs
-from textgraph.l5_entity_resolution.model import ERecord
-from textgraph.l5_entity_resolution.similarity import acronym
+from textgraph.l5_entity_resolution.model import Cluster, ERResult, SameAs
 from textgraph.l9_artifacts import analytics_lite
 from textgraph.pipeline import build
 from textgraph.store.base import SourceSpan
@@ -94,26 +93,20 @@ def test_same_as_edges_have_provenance() -> None:
 
 
 def test_god_node_flags_injected_over_merge() -> None:
-    # Inject many aliases that all resolve to one canonical -> high-degree god node.
-    recs = [
-        ERecord(
-            entity_id=f"entity:Organization:acme {sfx}",
-            name=f"Acme {sfx.title()}",
-            etype="Organization",
-            norm=f"acme {sfx}",
-            stripped="acme",
-            acronym=acronym(f"Acme {sfx}"),
-            mention_spans=(_FAKE_SPAN,),
-        )
-        for sfx in ("corp", "ltd", "inc", "group", "trust", "fund", "holdings")
-    ]
-    er = run_er(recs)
+    # Inject an over-merge directly: one canonical node fused from 7 members. The
+    # god-node diagnostic must flag the resulting high-degree node for review.
+    members = [f"entity:Organization:acme {sfx}" for sfx in "abcdefg"]
+    cid = "canonical:Organization:acme"
+    er = ERResult(
+        clusters=[
+            Cluster(canonical_id=cid, canonical_name="Acme", etype="Organization", members=members)
+        ],
+        same_as=[SameAs(m, cid, 0.95, _FAKE_SPAN) for m in members],
+    )
     nodes, edges = emit_er(er)
     diag = analytics_lite.compute(nodes, edges)
-    canonical_ids = {n.node_id for n in nodes if "Canonical" in n.labels}
-    assert canonical_ids
     god_ids = {nid for nid, _deg in diag.god_nodes}
-    assert canonical_ids & god_ids  # the over-merged canonical is flagged
+    assert cid in god_ids  # the over-merged canonical is flagged
 
 
 def test_er_build_is_deterministic() -> None:

@@ -8,6 +8,7 @@ higher-quality alternative behind the ``[er]`` extra.
 
 from __future__ import annotations
 
+from textgraph.l3_encoder_ie.canonicalize import suffix_family
 from textgraph.l5_entity_resolution.model import ERecord
 from textgraph.l5_entity_resolution.similarity import jaro_winkler, token_set_ratio
 
@@ -15,6 +16,9 @@ from textgraph.l5_entity_resolution.similarity import jaro_winkler, token_set_ra
 # adjudicator would sit (Phase 6). Below LOW is a non-match.
 MATCH_THRESHOLD = 0.86
 LOW_BAND = 0.6
+# Same base name but conflicting suffix families ("Acme Bank" vs "Acme Corp") are
+# usually different legal entities — score them below the match threshold.
+_SUFFIX_CONFLICT = 0.7
 
 
 def _shared_neighbor_boost(a: ERecord, b: ERecord) -> float:
@@ -31,12 +35,17 @@ def score_pair(a: ERecord, b: ERecord) -> float:
     """Return a match score in [0, 1] for two same-typed records."""
     if a.etype != b.etype:
         return 0.0
-    # Exact suffix-stripped equality is the strongest deterministic signal
-    # ("Acme Corp" / "Acme Corporation" / "ACME" all strip to "acme").
     if a.stripped and a.stripped == b.stripped:
-        base = 0.95
+        # Exact suffix-stripped equality is the strongest signal ("Acme Corp" /
+        # "Acme Corporation" / "ACME" all strip to "acme") — UNLESS the two carry
+        # conflicting explicit suffix families (Bank vs Corp), which usually marks
+        # distinct legal entities.
+        fa, fb = suffix_family(a.name), suffix_family(b.name)
+        base = _SUFFIX_CONFLICT if (fa and fb and fa != fb) else 0.95
     else:
-        name_sim = jaro_winkler(a.norm, b.norm)
+        # Similarity on the *stripped* base names, so a shared suffix ("Corp") can't
+        # inflate the score ("Acme Corp" vs "Apex Corp" must not match).
+        name_sim = jaro_winkler(a.stripped, b.stripped)
         token_sim = token_set_ratio(a.stripped, b.stripped)
         acr = (
             0.9
