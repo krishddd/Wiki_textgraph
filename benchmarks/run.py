@@ -36,6 +36,8 @@ def _ablation(corpus: Path) -> dict[str, object]:
             "relations": full.ie_stats.get("relations", 0),
             "coref_resolved": full.ie_stats.get("pronouns_resolved", 0),
             "coref_total": full.ie_stats.get("pronouns_total", 0),
+            "canonical_merges": full.er_stats.get("canonical_entities", 0),
+            "same_as_edges": full.er_stats.get("same_as_edges", 0),
         },
         "delta": {
             "nodes": len(full.nodes) - len(spine.nodes),
@@ -95,7 +97,9 @@ def render_report(result: dict[str, object]) -> str:
             f"| **delta** | +{delta['nodes']} | +{delta['edges']} | "
             f"+{full['entities']} | +{full['relations']} |",
             "",
-            f"Coreference-lite resolved {full['coref_resolved']}/{full['coref_total']} pronouns.",
+            f"Coreference-lite resolved {full['coref_resolved']}/{full['coref_total']} pronouns; "
+            f"entity resolution merged aliases into {full['canonical_merges']} canonical "
+            f"entities via {full['same_as_edges']} SAME_AS links.",
         ]
 
     lines += [

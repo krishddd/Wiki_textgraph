@@ -135,6 +135,22 @@ def render_report(
             amt = f" — {amount}" if amount else ""
             lines.append(f"- **{subj}** → `{e.predicate}` → **{obj}**{amt} [`{e.tag}`]{neg}")
 
+    # Resolved entities (Phase 3): canonical nodes and their SAME_AS members.
+    canonical = [n for n in nodes if "Canonical" in n.labels]
+    if canonical:
+        members_of: dict[str, list[str]] = {}
+        for e in edges:
+            if e.predicate == "SAME_AS":
+                members_of.setdefault(e.object, []).append(e.subject)
+        lines += ["", "## Resolved entities (SAME_AS)", ""]
+        for c in sorted(canonical, key=lambda n: n.node_id):
+            member_names = [
+                _name(node_by_id[m])
+                for m in sorted(members_of.get(c.node_id, []))
+                if m in node_by_id
+            ]
+            lines.append(f"- **{_name(c)}** ← {', '.join(member_names)}")
+
     lines += ["", "## God nodes (most connected)", ""]
     if diag.god_nodes:
         for nid, deg in diag.god_nodes[:5]:

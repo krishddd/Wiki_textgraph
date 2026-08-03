@@ -55,11 +55,13 @@ def _manifest(
     edges: list[Edge],
     timings_ms: dict[str, float] | None,
     ie_stats: dict[str, int] | None,
+    er_stats: dict[str, int] | None,
 ) -> dict[str, Any]:
     timings_ms = timings_ms or {}
     ie_stats = ie_stats or {}
+    er_stats = er_stats or {}
     tag_counts = Counter(str(e.tag) for e in edges)
-    entity_nodes = sum(1 for n in nodes if "Entity" in n.labels)
+    entity_nodes = sum(1 for n in nodes if "Entity" in n.labels and "Canonical" not in n.labels)
     pron_total = ie_stats.get("pronouns_total", 0)
     pron_resolved = ie_stats.get("pronouns_resolved", 0)
     coref_coverage = round(pron_resolved / pron_total, 4) if pron_total else 0.0
@@ -96,6 +98,13 @@ def _manifest(
                 "edges_out": ie_stats.get("relations", 0),
                 "model": "rules",
             },
+            {
+                "layer": "L5",
+                "wall_ms": round(timings_ms.get("L5", 0.0), 3),
+                "nodes_out": er_stats.get("canonical_entities", 0),
+                "edges_out": er_stats.get("same_as_edges", 0),
+                "model": "rules",
+            },
         ],
         "coverage": {
             "doc_count": len(results),
@@ -105,6 +114,10 @@ def _manifest(
             "relations": ie_stats.get("relations", 0),
             "coref_coverage": coref_coverage,
             "coref_pronouns": {"total": pron_total, "resolved": pron_resolved},
+            "canonical_entities": er_stats.get("canonical_entities", 0),
+            "same_as_edges": er_stats.get("same_as_edges", 0),
+            "blocking_candidate_pairs": er_stats.get("candidate_pairs", 0),
+            "blocking_cross_product": er_stats.get("cross_product", 0),
         },
     }
 
@@ -118,6 +131,7 @@ def write_artifacts(
     edges: list[Edge],
     timings_ms: dict[str, float] | None = None,
     ie_stats: dict[str, int] | None = None,
+    er_stats: dict[str, int] | None = None,
 ) -> ArtifactPaths:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -155,6 +169,7 @@ def write_artifacts(
                 edges=edges,
                 timings_ms=timings_ms,
                 ie_stats=ie_stats,
+                er_stats=er_stats,
             )
         )
     )

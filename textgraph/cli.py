@@ -17,12 +17,30 @@ import sys
 from pathlib import Path
 
 from textgraph import __version__
+from textgraph.l5_entity_resolution import build_records, render_audit, run_er
 from textgraph.l9_artifacts import write_artifacts
 from textgraph.pipeline import build, build_graph_bytes
 
 
 def _cmd_version(_: argparse.Namespace) -> int:
     print(__version__)
+    return 0
+
+
+def _cmd_er_audit(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    result = build(root)
+    records = build_records(result.nodes, result.edges)
+    er = run_er(records)
+    report = render_audit(er, records)
+    if args.output:
+        Path(args.output).write_text(report, encoding="utf-8")
+        print(f"wrote {args.output}")
+    else:
+        print(report)
     return 0
 
 
@@ -49,12 +67,15 @@ def _cmd_build(args: argparse.Namespace) -> int:
         edges=result.edges,
         timings_ms=result.timings_ms,
         ie_stats=result.ie_stats,
+        er_stats=result.er_stats,
     )
     ie = result.ie_stats
+    er = result.er_stats
     print(
         f"built graph: {len(result.results)} docs, {len(result.nodes)} nodes, "
         f"{len(result.edges)} edges "
-        f"({ie.get('entities', 0)} entities, {ie.get('relations', 0)} relations)"
+        f"({ie.get('entities', 0)} entities, {ie.get('relations', 0)} relations, "
+        f"{er.get('canonical_entities', 0)} canonical merges)"
     )
     print(f"  {paths.graph_json}")
     print(f"  {paths.report}")
@@ -84,6 +105,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--json-only", metavar="PATH", help="write only graph.json to PATH and exit"
     )
     p_build.set_defaults(func=_cmd_build)
+
+    p_er = sub.add_parser("er", help="entity-resolution utilities")
+    er_sub = p_er.add_subparsers(dest="er_command", required=True)
+    p_audit = er_sub.add_parser("audit", help="audit proposed SAME_AS merges for review")
+    p_audit.add_argument("path", help="corpus path to resolve")
+    p_audit.add_argument("-o", "--output", help="write the audit markdown to this path")
+    p_audit.set_defaults(func=_cmd_er_audit)
 
     return parser
 

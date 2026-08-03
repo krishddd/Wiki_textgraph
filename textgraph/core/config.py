@@ -35,6 +35,10 @@ class Config:
     # unless "gliner" is selected (requires the [ie] extra).
     extract_ie: bool = True
     ie_backend: str = "rules"
+    # L5 entity resolution: link alias entities to a canonical node via SAME_AS.
+    # Default rule backend is deterministic; "splink" requires the [er] extra.
+    resolve_entities: bool = True
+    er_backend: str = "rules"
     # Free-form, pinned model ids per layer (filled in as layers are added).
     model_pins: dict[str, str] = field(default_factory=dict)
 

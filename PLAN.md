@@ -57,6 +57,17 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
 
 ---
 
+## Phase 3 — Definition of Done (met)
+
+- [x] Blocking (deterministic keys, type-gated) + scoring (Jaro-Winkler + relational
+      shared-neighbour) + non-destructive complete-linkage clustering
+- [x] `SAME_AS` lattice to canonical nodes; original entities preserved (reversible)
+- [x] `textgraph er audit` command; B-cubed metrics gated in CI (F1 ≥ 0.9 floor)
+- [x] Blocking recall ≥ 0.99 on the ER fixture
+- [x] god-node diagnostic flags an intentionally-injected over-merge
+- [x] "Acme Corp" / "Acme Corporation" / "ACME" collapse; "Alpha Bank" stays separate
+- [x] Splink behind `[er]`; determinism holds with L5; 133 tests, ~97% coverage
+
 ## Phase 2 — Definition of Done (met)
 
 - [x] L2 substrate (sentences, coref-lite, negation/modality) + L3 entity/relation

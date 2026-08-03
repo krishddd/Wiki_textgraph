@@ -106,13 +106,14 @@ flowchart TD
 
 ## Status
 
-🟢 **Phase 2 complete — the structural spine is now a real knowledge graph (L0–L3).**
+🟢 **Phase 3 complete — entities now resolve to canonical identities (L0–L3, L5).**
 
 - **L0 ingestion** across markdown, plain text, HTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs, and transcripts (PDF behind the `[ingest]` extra), each producing a `CanonicalDoc` + span-carrying block tree + hierarchical chunks.
 - **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …). Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
 - **L2 + L3 encoder IE** — the build now extracts **entities** (Organization, Person, Money, Account, Date, Email) and **typed relations** (`TRANSFERRED` with amount, `CONTROLS`, `BENEFICIAL_OWNER_OF`, `DIRECTOR_OF`, `ASSOCIATED_WITH`), tagged `EXTRACTED`. Coreference-lite resolves `it`/`the company` to the nearest org (relations so resolved are tagged `INFERRED`), and **negation/modality are preserved** (`did not transfer` → negated; `may be linked` → hedged). The default backend is deterministic and model-free (CPU-only, CI-safe); a GLiNER backend lives behind the `[ie]` extra.
-- **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (entities, key relationships, 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml` (observed entity/relation types), and `manifest.json` (per-layer counts + coref coverage).
-- CI gates all of it: lint, strict types, a byte-identical **determinism** gate (models pinned/seeded), and 100% edge-provenance re-verification across the full four-tier taxonomy.
+- **L5 entity resolution** — alias entities collapse to one canonical identity: `Acme Corp` / `Acme Corporation` / `ACME` → **"Acme Corporation"**, linked non-destructively via `SAME_AS` (tagged `INFERRED`, reversible, span-cited). Deterministic blocking (suffix-stripped / acronym / token keys) → Jaro-Winkler + **relational shared-neighbour** scoring → complete-linkage clustering that blocks the over-merge catastrophe. `textgraph er audit` surfaces every proposed merge; B-cubed F1 is gated in CI. Splink (Fellegi-Sunter) is the optional `[er]` backend.
+- **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (entities, key relationships, resolved SAME_AS clusters, 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml`, and `manifest.json` (per-layer counts + coref coverage + blocking stats).
+- CI gates all of it: lint, strict types, a byte-identical **determinism** gate (models pinned/seeded), 100% edge-provenance re-verification across the full four-tier taxonomy, and a B-cubed ER-quality floor.
 
 ### What Phase 1 does to each file
 
@@ -175,7 +176,9 @@ graph LR
 
 > Solid edges are `EXTRACTED`; dotted are `INFERRED` (coref) or carry a preserved `polarity`/`modality` attribute (negated / hedged) — never silently dropped. Every edge still cites the exact source span. The default extractor is deterministic and model-free; GLiNER (`[ie]`) is a higher-recall drop-in.
 
-Next: **Phase 3** — entity resolution (blocking + Splink + non-destructive `SAME_AS`) so `Acme Corp` / `ACME` / "the company" collapse to one canonical entity. See [PLAN.md](PLAN.md) for the roadmap.
+> **Phase 3 update:** `Acme Corp`, `Acme Corporation`, and `ACME` now collapse into one canonical **"Acme Corporation"** node via reversible `SAME_AS` links, while `Alpha Bank` stays separate. Run `textgraph er audit ./case-files` to review every proposed merge with its match score.
+
+Next: **Phase 4** — retrieval (dual-node graph + Personalized PageRank + the MCP tool surface) so an agent can actually query the graph. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 

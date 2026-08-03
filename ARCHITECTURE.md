@@ -87,6 +87,26 @@ claim. The `Rationale`/`Requirement` layer (the *why*) and byte-range provenance
   relations → `EXTRACTED`; coref-resolved relations → `INFERRED`; the (Phase-6) LLM
   pass → `GENERATED`. Every non-generated edge still carries a re-verifiable span.
 
+## Phase 3 (implemented): L5
+
+- **L5 (`textgraph/l5_entity_resolution/`)** — resolves alias entities to a canonical
+  identity. Three stages, each with its own failure mode guarded:
+  - **Blocking** (`blocking.py`) — deterministic keys (suffix-stripped name, acronym,
+    first token), type-gated, unioned. Reduces the O(n²) cross-product while keeping
+    recall ≥ 0.99 on true pairs.
+  - **Scoring** (`scoring.py`) — suffix-stripped exact match, Jaro-Winkler, token-set,
+    acronym↔name, plus the graph-native **relational** signal (shared neighbours).
+  - **Clustering** (`clustering.py`) — **complete-linkage** agglomeration: two clusters
+    merge only if *every* cross-pair clears the cohesion threshold, so one bad edge
+    can't chain-merge dissimilar entities (the over-merge catastrophe).
+- **Non-destructive** (§8.3): original entity nodes are kept; a new
+  `("Entity","Canonical",<etype>)` node is linked to each member by a `SAME_AS` edge
+  (tagged INFERRED, span-cited), so merges are auditable and reversible.
+- `textgraph er audit` renders proposed merges for human review; B-cubed / blocking
+  metrics (`metrics.py`) gate ER quality in CI. Splink is the optional `[er]` backend.
+- Note: `"the company"` is resolved earlier by L2 coref; L5 handles the *entity-node*
+  aliases (`Acme Corp` / `Acme Corporation` / `ACME`).
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

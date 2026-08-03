@@ -6,6 +6,35 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 3: Entity Resolution (L5)
+- **Alias entities collapse to a canonical identity.** `Acme Corp` / `Acme
+  Corporation` / `ACME` resolve to one canonical **"Acme Corporation"** node;
+  `Beta Ltd` / `Beta Limited` → "Beta Limited"; unrelated `Alpha Bank` stays separate.
+- **Blocking** (`blocking.py`): deterministic keys (suffix-stripped name, acronym,
+  first-token), type-gated. Blocking recall gated ≥ 0.99 in CI.
+- **Scoring** (`scoring.py`): Jaro-Winkler + token-set + acronym match + the
+  graph-native **relational** shared-neighbour signal. Splink (Fellegi-Sunter on
+  DuckDB) scaffolded behind the `[er]` extra.
+- **Clustering** (`clustering.py`): complete-linkage agglomeration with a cohesion
+  threshold — prevents the classic over-merge catastrophe (one bad edge merging two
+  galaxies). Verified by a chain-merge unit test.
+- **Non-destructive** `SAME_AS` lattice (`emit_er.py`): original entity nodes kept; a
+  new `("Entity","Canonical",<etype>)` node links members via INFERRED, span-cited
+  `SAME_AS` edges — fully reversible and auditable (§8.3).
+- **`textgraph er audit`** command renders proposed merges with match scores for
+  human review; **B-cubed metrics** (`metrics.py`) with a pinned F1 floor gated in
+  CI; the god-node diagnostic flags an injected over-merge.
+- **IE now runs per prose block** (not whole-doc text), so an entity can't span a
+  heading→paragraph boundary; **acronym-of-known-org** detection links `ACME` to
+  `Acme Corp`. Manifest reports canonical/SAME_AS/blocking counts; report gains a
+  "Resolved entities (SAME_AS)" section; ablation shows the ER contribution.
+- 133 tests, ~97% core coverage; determinism holds with L5 in the loop.
+
+### Fixed — Phase 3 review
+- **False Person from heading title-case** ("Corporate Aliases") — the person-bigram
+  heuristic is disabled for headings, and `_PERSON_CUE` no longer uses global
+  `IGNORECASE` (which had let "director on paper only" capture a lowercase "person").
+
 ### Added — Phase 2: Encoder IE (L2 + L3)
 - **The build now produces a real knowledge graph, not just a structural spine.**
 - **L2 linguistic substrate** (`textgraph/l2_linguistic/`): deterministic sentence

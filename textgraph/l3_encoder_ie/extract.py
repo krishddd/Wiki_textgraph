@@ -10,11 +10,42 @@ from __future__ import annotations
 
 import re
 
-from textgraph.core.layout import Span
+from textgraph.core.layout import Block, BlockKind, Span
 from textgraph.l2_linguistic import modality, polarity, segment
-from textgraph.l3_encoder_ie.canonicalize import canonical_predicate, entity_id
+from textgraph.l3_encoder_ie.canonicalize import (
+    canonical_predicate,
+    entity_id,
+    normalize_name,
+    strip_org_suffix,
+)
 from textgraph.l3_encoder_ie.model import Entity, IEResult, Mention, Relation
 from textgraph.l3_encoder_ie.rules import extract_entities
+
+# All-caps token (ACME, IBM). Marker/RFC words that must never be read as an org.
+_ACRONYM = re.compile(r"\b[A-Z]{2,}\b")
+_ACRONYM_STOP = frozenset(
+    {
+        "MUST",
+        "SHALL",
+        "SHOULD",
+        "MAY",
+        "WHY",
+        "TODO",
+        "ADR",
+        "RFC",
+        "SAR",
+        "AML",
+        "KYC",
+        "INFO",
+        "WARN",
+        "ERROR",
+        "DEBUG",
+        "NOTE",
+        "OK",
+        "ID",
+        "URL",
+    }
+)
 
 # Predicate surfaces, longest first so "nominee director of" beats "director of".
 _SURFACES = sorted(
@@ -100,14 +131,16 @@ class _Coref:
         pool = self._orgs if kind == "org" else self._persons
         return _nearest_before(pool, pos)
 
-    def count_coverage(self, text: str) -> None:
-        """Count resolvable pronouns across the whole doc (the coverage metric)."""
-        for pat, kind in ((_ORG_PRONOUN, "org"), (_PERSON_PRONOUN, "person")):
-            for m in pat.finditer(text):
-                pool = self._orgs if kind == "org" else self._persons
-                self.total += 1
-                if _nearest_before(pool, m.start()) is not None:
-                    self.resolved += 1
+    def count_coverage(self, text: str, spans: list[Span]) -> None:
+        """Count resolvable pronouns across the prose blocks (the coverage metric)."""
+        for bs in spans:
+            sub = text[bs.start : bs.end]
+            for pat, kind in ((_ORG_PRONOUN, "org"), (_PERSON_PRONOUN, "person")):
+                for m in pat.finditer(sub):
+                    pool = self._orgs if kind == "org" else self._persons
+                    self.total += 1
+                    if _nearest_before(pool, bs.start + m.start()) is not None:
+                        self.resolved += 1
 
 
 def _resolve_slot(
@@ -135,10 +168,73 @@ def _resolve_slot(
     return None, False
 
 
-def extract_document(text: str) -> IEResult:
-    mentions = extract_entities(text)
+# Prose blocks that IE runs over. Entities/sentences are confined to a block so a
+# heading word never merges with the paragraph below it; coref still runs doc-wide.
+_PROSE_BLOCKS = {
+    BlockKind.HEADING,
+    BlockKind.PARAGRAPH,
+    BlockKind.LIST_ITEM,
+    BlockKind.QUOTE,
+    BlockKind.TRANSCRIPT_TURN,
+}
 
-    # Canonical entities (merge same type+name).
+
+def _prose_units(text: str, blocks: list[Block] | None) -> list[tuple[Span, BlockKind]]:
+    if blocks is None:
+        return [(Span(0, len(text)), BlockKind.PARAGRAPH)]
+    return [
+        (b.span, b.kind)
+        for top in blocks
+        for b in top.walk()
+        if b.kind in _PROSE_BLOCKS and b.span.end > b.span.start
+    ]
+
+
+def extract_document(text: str, blocks: list[Block] | None = None) -> IEResult:
+    units = _prose_units(text, blocks)
+    block_spans = [span for span, _ in units]
+
+    # Detect mentions within each block, then shift spans to absolute canonical coords.
+    mentions: list[Mention] = []
+    for bs, kind in units:
+        for m in extract_entities(
+            text[bs.start : bs.end], allow_person_bigram=kind is not BlockKind.HEADING
+        ):
+            mentions.append(
+                Mention(
+                    text=m.text,
+                    etype=m.etype,
+                    span=Span(bs.start + m.span.start, bs.start + m.span.end),
+                    norm=m.norm,
+                )
+            )
+    # Acronym linkage: an all-caps token whose lowercase matches a known org's
+    # suffix-stripped form is that org (ACME ~ "Acme Corp"). Strictly gated to
+    # already-detected orgs, so it stays low-noise and deterministic.
+    known_orgs = {
+        normalize_name(strip_org_suffix(m.text)).replace(" ", "")
+        for m in mentions
+        if m.etype == "Organization"
+    }
+    known_orgs.discard("")
+    existing_spans = [m.span for m in mentions]
+    for bs in block_spans:
+        sub = text[bs.start : bs.end]
+        for am in _ACRONYM.finditer(sub):
+            tok = am.group(0)
+            if tok in _ACRONYM_STOP or tok.lower() not in known_orgs:
+                continue
+            span = Span(bs.start + am.start(), bs.start + am.end())
+            if any(span.start < e.end and e.start < span.end for e in existing_spans):
+                continue
+            mentions.append(
+                Mention(text=tok, etype="Organization", span=span, norm=normalize_name(tok))
+            )
+            existing_spans.append(span)
+
+    mentions.sort(key=lambda x: (x.span.start, x.span.end, x.etype))
+
+    # Canonical entities (merge same type+name), preserving first-seen surface.
     entities: dict[str, Entity] = {}
     for m in mentions:
         eid = entity_id(m.etype, m.text)
@@ -149,10 +245,10 @@ def extract_document(text: str) -> IEResult:
             ent.mentions.append(m)
 
     coref = _Coref(mentions)
-    sentences = segment(text)
     relations: list[Relation] = []
     linkable = [m for m in mentions if m.etype in ("Organization", "Person")]
 
+    sentences = [s for bs in block_spans for s in segment(text[bs.start : bs.end], bs.start)]
     for s in sentences:
         sub = text[s.start : s.end]
         pol = polarity(sub)
@@ -212,7 +308,7 @@ def extract_document(text: str) -> IEResult:
                             )
                         )
 
-    coref.count_coverage(text)
+    coref.count_coverage(text, block_spans)
 
     # Deterministic relation order + dedup.
     relations.sort(key=lambda r: (r.subject_id, r.predicate, r.object_id, r.span.start))

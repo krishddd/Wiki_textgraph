@@ -40,11 +40,13 @@ _DATE = re.compile(
     r"November|December)\s+(?:\d{1,2},?\s+)?\d{4}\b"
 )
 _EMAIL = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
+# Cue keywords are case-insensitive (scoped `(?i:…)`), but the captured NAME stays
+# case-sensitive — a global IGNORECASE would let "director on paper only" capture the
+# lowercase "on paper only" as a person.
 _PERSON_CUE = re.compile(
-    rf"\b(?:Mr|Mrs|Ms|Dr|Prof)\.?{_H}+([A-Z][a-z]+(?:{_H}+[A-Z][a-z]+){{0,2}})"
-    rf"|\b(?:nominee director|director|CEO|officer|owner|suspect|beneficiary){_H}+"
-    rf"([A-Z][a-z]+(?:{_H}+[A-Z][a-z]+){{1,2}})",
-    re.IGNORECASE,
+    rf"\b(?i:mr|mrs|ms|dr|prof)\.?{_H}+([A-Z][a-z]+(?:{_H}+[A-Z][a-z]+){{0,2}})"
+    rf"|\b(?i:nominee director|director|ceo|officer|owner|suspect|beneficiary){_H}+"
+    rf"([A-Z][a-z]+(?:{_H}+[A-Z][a-z]+){{1,2}})"
 )
 _PERSON_BIGRAM = re.compile(rf"\b([A-Z][a-z]+{_H}+[A-Z][a-z]+)\b")
 
@@ -127,11 +129,13 @@ def _overlaps(a: Span, b: Span) -> bool:
     return a.start < b.end and b.start < a.end
 
 
-def extract_entities(text: str) -> list[Mention]:
+def extract_entities(text: str, *, allow_person_bigram: bool = True) -> list[Mention]:
     """Detect entity mentions in ``text`` with exact canonical-char spans.
 
     Higher-priority types (Org/Money/Account/Date/Email) claim their spans first;
     Person mentions are only kept where they don't overlap an existing mention.
+    ``allow_person_bigram=False`` (used for headings) keeps only cue-based Persons,
+    since title-case heading phrases ("Corporate Aliases") are false-positive prone.
     """
     mentions: list[Mention] = []
 
@@ -152,11 +156,12 @@ def extract_entities(text: str) -> list[Mention]:
     for m in _PERSON_CUE.finditer(text):
         grp = 1 if m.group(1) else 2
         _add(person_spans, text, "Person", m.start(grp), m.end(grp))
-    for m in _PERSON_BIGRAM.finditer(text):
-        toks = [t.lower() for t in m.group(1).split()]
-        if any(t in _PERSON_STOP or t in _MONTHS for t in toks):
-            continue
-        _add(person_spans, text, "Person", m.start(1), m.end(1))
+    if allow_person_bigram:
+        for m in _PERSON_BIGRAM.finditer(text):
+            toks = [t.lower() for t in m.group(1).split()]
+            if any(t in _PERSON_STOP or t in _MONTHS for t in toks):
+                continue
+            _add(person_spans, text, "Person", m.start(1), m.end(1))
 
     existing = high_priority[:]
     for p in person_spans:
