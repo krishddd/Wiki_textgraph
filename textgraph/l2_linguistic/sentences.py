@@ -12,7 +12,10 @@ import re
 
 from textgraph.core.layout import Span
 
-# Common abbreviations whose trailing period must not end a sentence.
+# Abbreviations whose trailing period must not end a sentence. NOTE: org suffixes
+# (Ltd/Inc/Corp/Co/LLC) are deliberately excluded — unlike titles, they routinely
+# end a sentence ("...paid Beta Ltd. Acme then..."), and keeping them here produced
+# run-on sentences that misattributed relation subjects.
 _ABBREV = {
     "mr",
     "mrs",
@@ -24,11 +27,6 @@ _ABBREV = {
     "st",
     "vs",
     "etc",
-    "inc",
-    "ltd",
-    "llc",
-    "corp",
-    "co",
     "no",
     "fig",
     "eq",

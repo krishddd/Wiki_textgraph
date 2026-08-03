@@ -94,6 +94,21 @@ def test_predicate_canonicalization() -> None:
     assert canonical_predicate("nominee director of") == "DIRECTOR_OF"
 
 
+def test_coref_coverage_not_double_counted() -> None:
+    # One resolvable org-pronoun ("It") that also fills a relation subject slot must
+    # be counted exactly once, not once per slot-resolution attempt.
+    ie = run_ie("Acme Corp received funds. It transferred money to Beta Ltd.")
+    assert ie.pronouns_total == 1
+    assert ie.pronouns_resolved == 1
+
+
+def test_coverage_counts_unresolvable_pronoun() -> None:
+    # A leading pronoun with no antecedent counts toward total but not resolved.
+    ie = run_ie("It transferred money to Beta Ltd.")
+    assert ie.pronouns_total == 1
+    assert ie.pronouns_resolved == 0
+
+
 def test_extraction_is_deterministic() -> None:
     a = run_ie(WIRE)
     b = run_ie(WIRE)

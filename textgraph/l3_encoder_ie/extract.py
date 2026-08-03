@@ -92,15 +92,16 @@ class _Coref:
         self.resolved = 0
 
     def resolve(self, kind: str, pos: int) -> Mention | None:
+        """Pure lookup used for relation slot-filling — never touches counters.
+
+        The coverage metric is computed once by :meth:`count_coverage`; counting here
+        too would double-count pronouns that also fill a relation slot.
+        """
         pool = self._orgs if kind == "org" else self._persons
-        self.total += 1
-        ant = _nearest_before(pool, pos)
-        if ant is not None:
-            self.resolved += 1
-        return ant
+        return _nearest_before(pool, pos)
 
     def count_coverage(self, text: str) -> None:
-        """Count resolvable pronouns across the whole doc (coverage metric)."""
+        """Count resolvable pronouns across the whole doc (the coverage metric)."""
         for pat, kind in ((_ORG_PRONOUN, "org"), (_PERSON_PRONOUN, "person")):
             for m in pat.finditer(text):
                 pool = self._orgs if kind == "org" else self._persons

@@ -33,6 +33,21 @@ to Semantic Versioning.
   negation, hedging, all-tags, provenance re-verification, byte-identical rebuild).
   Determinism gate stays green with IE in the loop. 112 tests, ~97% core coverage.
 
+### Fixed — Phase 2 review pass
+- **Coref coverage was double-counted.** `_Coref.resolve()` (used for relation
+  slot-filling, called repeatedly per slot) incremented the same counters that
+  `count_coverage()` uses, inflating `resolved/total` in `manifest.json`. `resolve()`
+  is now a pure lookup; coverage is computed once over all pronouns.
+- **Sentence segmenter treated org suffixes as abbreviations.** `Ltd.`/`Inc.`/
+  `Corp.`/`Co.` were in the abbreviation list, so "...Beta Ltd. Acme Corp acted."
+  never split — a run-on sentence that could misattribute relation subjects. Those
+  suffixes (which routinely end sentences, unlike titles) were removed.
+- **`MENTIONS` edges aggregated.** Instead of one edge per mention, each entity now
+  has a single `MENTIONS` edge with `evidence_count` and all occurrence spans —
+  surfacing repetition as a precision signal (§6.4) and shrinking the edge set.
+- **Cross-document `mention_count`.** An entity appearing in several documents now
+  reports its corpus-wide mention total, not just the first document's.
+
 ### Added — Phase 1: Structural Spine (L0 + L1)
 - **Mission focus:** positioned for financial-crime and technical-crime
   investigation — surfacing who/what is connected and *why*, with audit-grade

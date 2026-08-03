@@ -1,13 +1,16 @@
 """Emit L3 IE results as graph nodes/edges with confidence tags + provenance.
 
-Entity nodes are labelled ``("Entity", <etype>)``. Mentions become EXTRACTED
-``MENTIONS`` edges (doc → entity); typed relations become EXTRACTED edges, or
-INFERRED when an endpoint was resolved via coref. Every edge carries a re-verifiable
-source span (G3), realising the full four-tier taxonomy (G4).
+Entity nodes are labelled ``("Entity", <etype>)``. Each entity gets a single
+EXTRACTED ``MENTIONS`` edge (doc → entity) whose ``evidence_count`` and
+``source_spans`` capture every occurrence — repetition is the best precision signal
+(§6.4), so it is surfaced, not exploded into many edges. Typed relations become
+EXTRACTED edges, or INFERRED when an endpoint was resolved via coref. Every edge
+carries re-verifiable spans (G3), realising the full four-tier taxonomy (G4).
 """
 
 from __future__ import annotations
 
+from textgraph.core.content_address import hash_text
 from textgraph.core.layout import IngestResult
 from textgraph.l1_structure.emit import edge, sanitize, source_span
 from textgraph.l3_encoder_ie.model import IEResult
@@ -35,16 +38,20 @@ def emit_ie(ir: IngestResult, ie: IEResult) -> tuple[list[Node], list[Edge]]:
                 },
             )
         )
-        for m in ent.mentions:
+        # One aggregated MENTIONS edge carrying every occurrence's span.
+        spans = tuple(source_span(ir, m.span) for m in ent.mentions)
+        if spans:
             edges.append(
-                edge(
-                    doc_id,
-                    "MENTIONS",
-                    eid,
-                    source_span(ir, m.span),
+                Edge(
+                    edge_id="edge:" + hash_text(f"{doc_id}|MENTIONS|{eid}"),
+                    subject=doc_id,
+                    predicate="MENTIONS",
+                    object=eid,
                     tag=ConfidenceTag.EXTRACTED,
                     confidence=_ENTITY_CONF,
-                    etype=ent.etype,
+                    evidence_count=len(spans),
+                    source_spans=spans,
+                    properties={"etype": ent.etype},
                 )
             )
 

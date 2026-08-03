@@ -111,7 +111,15 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
             relation_count += len(ie.relations)
             ie_n, ie_e = emit_ie(ir, ie)
             for n in ie_n:
-                entity_nodes.setdefault(n.node_id, n)
+                existing = entity_nodes.get(n.node_id)
+                if existing is None:
+                    entity_nodes[n.node_id] = n
+                else:
+                    # Same entity in multiple docs: accumulate the total mention count
+                    # so the node reflects corpus-wide evidence, not just the first doc.
+                    existing.properties["mention_count"] = int(
+                        existing.properties.get("mention_count", 0)
+                    ) + int(n.properties.get("mention_count", 0))
             for e in ie_e:
                 ie_edges.setdefault(e.edge_id, e)
         entity_count = len(entity_nodes)
