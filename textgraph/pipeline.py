@@ -182,9 +182,10 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
     contradiction_count = 0
     if config.analytics:
         t5 = time.perf_counter()
-        analytics = compute_analytics(nodes, edges)
+        analytics = compute_analytics(nodes, edges, backend=config.analytics_backend)
         nodes = sorted(enrich_nodes(nodes, analytics), key=lambda n: n.node_id)
-        contra = contradiction_edges(edges, analytics)
+        claim_ids = {n.node_id for n in nodes if "Claim" in n.labels}
+        contra = contradiction_edges(edges, analytics, claim_ids)
         contradiction_count = len(contra)
         edges = sorted(
             ({e.edge_id: e for e in edges} | {e.edge_id: e for e in contra}).values(),

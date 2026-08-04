@@ -39,6 +39,23 @@ def test_search_is_deterministic() -> None:
     assert qe.search("funds").to_dict() == qe.search("funds").to_dict()
 
 
+def test_search_no_match_returns_no_hits() -> None:
+    # Regression: a query matching nothing lexically and no entity name must not
+    # fabricate hits from uniform-PageRank degree centrality.
+    qe = _engine()
+    assert qe.search("zzzqqq nonsense xyzzy plugh").hits == []
+
+
+def test_path_k_shortest_finds_the_alternate() -> None:
+    # Acme reaches Gamma directly (CONTROLS) and via Beta (TRANSFERRED x2); both
+    # loopless paths must be enumerated by the k-shortest search.
+    qe = _engine()
+    res = qe.path("Acme Corp", "Gamma Holdings", k=3)
+    assert len(res.paths) >= 2
+    # Shortest (most likely) first.
+    assert res.paths[0].likelihood >= res.paths[-1].likelihood
+
+
 def test_search_respects_token_budget() -> None:
     qe = _engine()
     tight = qe.search("acme corp transfer beta", k=10, max_tokens=1)

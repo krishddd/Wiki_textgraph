@@ -98,7 +98,10 @@ warn_unused_ignores = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*"]
+module = [
+    "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
+    "igraph.*", "leidenalg.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

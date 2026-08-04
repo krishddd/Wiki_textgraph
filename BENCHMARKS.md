@@ -5,7 +5,7 @@ Quality *and* cost for every run (G7 — no number without its cost). Generated 
 
 | benchmark | queries | k | recall@k | MRR | mean tokens/query | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| fixture:docs | 5 | 5 | 0.600 | 0.290 | 163 | 5.05 | 12.50 |
+| fixture:docs | 5 | 5 | 0.600 | 0.290 | 163 | 2.66 | 3.18 |
 
 ## Method
 

@@ -27,7 +27,7 @@ from textgraph.l7_analytics.algorithms import (
     is_bridge,
     pagerank,
 )
-from textgraph.l7_analytics.communities import label_communities, label_propagation
+from textgraph.l7_analytics.communities import detect_communities, label_communities
 from textgraph.store.base import Edge, Node
 
 
@@ -126,8 +126,14 @@ def _contradictions(edges: list[Edge]) -> list[tuple[str, str]]:
     return sorted(pairs)
 
 
-def compute_analytics(nodes: list[Node], edges: list[Edge], *, top_k: int = 10) -> Analytics:
-    """Run L7 analytics + diagnostics over the assembled graph (deterministic)."""
+def compute_analytics(
+    nodes: list[Node], edges: list[Edge], *, top_k: int = 10, backend: str = "builtin"
+) -> Analytics:
+    """Run L7 analytics + diagnostics over the assembled graph (deterministic).
+
+    ``backend`` selects the community algorithm: ``builtin`` (label propagation,
+    CI-safe) or ``leiden`` (the ``[graph]`` upgrade, falling back if unavailable).
+    """
     entity_ids, adj = _entity_adjacency(nodes, edges)
     if not entity_ids:
         return Analytics()
@@ -136,7 +142,7 @@ def compute_analytics(nodes: list[Node], edges: list[Edge], *, top_k: int = 10) 
 
     pr = pagerank(entity_ids, adj)
     bc = betweenness(entity_ids, adj)
-    community_of = label_propagation(entity_ids, adj)
+    community_of = detect_communities(entity_ids, adj, backend=backend)
     community_labels = label_communities(community_of, names, pr)
 
     god_nodes = _god_nodes(pr, bc, top_k=top_k)

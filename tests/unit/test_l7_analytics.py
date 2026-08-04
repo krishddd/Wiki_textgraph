@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import pytest
+from textgraph.core.config import Config
+from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l7_analytics import compute_analytics
 from textgraph.l7_analytics.algorithms import (
     betweenness,
@@ -10,7 +13,11 @@ from textgraph.l7_analytics.algorithms import (
     is_bridge,
     pagerank,
 )
-from textgraph.l7_analytics.communities import label_propagation
+from textgraph.l7_analytics.communities import (
+    detect_communities,
+    label_propagation,
+    leiden_communities,
+)
 from textgraph.pipeline import build
 
 DOCS = Path(__file__).parent.parent / "fixtures" / "corpora" / "docs"
@@ -77,3 +84,20 @@ def test_contradiction_becomes_a_contradicts_edge() -> None:
     assert e.subject.startswith("claim:") and e.object.startswith("claim:")
     assert str(e.tag) == "INFERRED"
     assert e.source_spans
+
+
+def test_no_dangling_contradicts_when_reification_is_off() -> None:
+    # Regression: CONTRADICTS links Claim nodes; with L6 off there are no claims, so
+    # no CONTRADICTS edge may be emitted pointing at phantom nodes.
+    result = build(CONTRA, config=Config(reify_claims=False))
+    assert not any(n.node_id.startswith("claim:") for n in result.nodes)
+    assert not [e for e in result.edges if e.predicate == "CONTRADICTS"]
+
+
+def test_leiden_backend_falls_back_without_the_graph_extra() -> None:
+    # [graph] isn't installed in CI, so leiden_communities raises and detect_communities
+    # falls back to the deterministic built-in — same result, never a crash.
+    nodes, adj = _triangle()
+    with pytest.raises(UnsupportedFormat):
+        leiden_communities(nodes, adj)
+    assert detect_communities(nodes, adj, backend="leiden") == label_propagation(nodes, adj)

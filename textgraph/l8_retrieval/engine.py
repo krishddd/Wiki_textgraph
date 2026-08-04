@@ -43,7 +43,12 @@ from textgraph.l8_retrieval.model import (
 from textgraph.store.base import Edge, Node
 
 _RRF_K = 60  # Reciprocal Rank Fusion damping constant (standard default).
+# Edges that are graph plumbing, not entity-to-entity relations, kept out of the
+# relation adjacency used by path().
 _NON_RELATION = frozenset({"SAME_AS", "MENTIONS", "HAS_CHUNK", "SUBJECT_OF", "HAS_OBJECT"})
+# Edges hidden from neighbors(): reification plumbing + membership/provenance edges,
+# so an entity's semantic relations surface instead of being buried under MENTIONS.
+_HIDDEN_NEIGHBORS = frozenset({"SUBJECT_OF", "HAS_OBJECT", "MENTIONS", "HAS_CHUNK"})
 
 
 def _citations(edge: Edge) -> list[Citation]:
@@ -186,7 +191,10 @@ class QueryEngine:
             seed[cid] = seed.get(cid, 0.0) + max(score, 0.0)
             for ent in self._chunk_entities.get(cid, []):
                 seed[ent] = seed.get(ent, 0.0) + max(score, 0.0) * 0.5
-        ppr = pagerank(self._ppr_ids, self._ppr_adj, personalization=seed or None)
+        # Only rank entities by PPR when the query actually seeded the walk. With an
+        # empty seed the teleport is uniform, so PPR would just re-emit degree
+        # centrality — surfacing arbitrary "hits" for a query that matched nothing.
+        ppr = pagerank(self._ppr_ids, self._ppr_adj, personalization=seed) if seed else {}
         ent_ranking = sorted(
             (nid for nid in self._entity_ids if ppr.get(nid, 0.0) > 0),
             key=lambda nid: (-ppr.get(nid, 0.0), nid),
@@ -239,7 +247,7 @@ class QueryEngine:
             return NeighborsResult(node_id=handle, name=handle)
         out: list[NeighborEdge] = []
         for e in self._edges:
-            if e.predicate in ("SUBJECT_OF", "HAS_OBJECT"):
+            if e.predicate in _HIDDEN_NEIGHBORS:
                 continue
             if e.subject == node_id:
                 out.append(
@@ -284,8 +292,19 @@ class QueryEngine:
     def _edge_weight(self, e: Edge) -> float:
         return -math.log(max(1e-6, min(1.0, e.confidence)))
 
-    def _dijkstra(self, s: str, t: str, banned: set[tuple[str, str]]) -> list[tuple[str, Edge]]:
-        """Min ``-log(confidence)`` path as a list of (node, incoming_edge)."""
+    def _dijkstra(
+        self,
+        s: str,
+        t: str,
+        banned: set[tuple[str, str]],
+        blocked: frozenset[str] = frozenset(),
+    ) -> list[tuple[str, Edge]]:
+        """Min ``-log(confidence)`` path as a list of (node, incoming_edge).
+
+        ``banned`` removes specific directed edges and ``blocked`` removes nodes
+        entirely — the two exclusions Yen's algorithm needs to enumerate loopless
+        alternates.
+        """
         dist: dict[str, float] = {s: 0.0}
         prev: dict[str, tuple[str, Edge]] = {}
         pq: list[tuple[float, str]] = [(0.0, s)]
@@ -298,7 +317,7 @@ class QueryEngine:
             if u == t:
                 break
             for v, e in sorted(self._rel_adj.get(u, []), key=lambda x: (x[0], x[1].edge_id)):
-                if (u, v) in banned or v in visited:
+                if (u, v) in banned or v in visited or v in blocked:
                     continue
                 nd = d + self._edge_weight(e)
                 if nd < dist.get(v, math.inf):
@@ -357,14 +376,17 @@ class QueryEngine:
                     p_nodes = [s] + [c[0] for c in p]
                     if p[:i] == root and i < len(p):
                         banned.add((p_nodes[i], p[i][0]))
-                spur_chain = self._dijkstra(spur, t, banned)
+                # Block the root's nodes (all before the spur) so the spur path can't
+                # loop back through them — this is what makes k-shortest complete.
+                blocked = frozenset(prev_nodes[:i])
+                spur_chain = self._dijkstra(spur, t, banned, blocked)
                 if not spur_chain:
                     continue
                 total = root + spur_chain
                 cost = sum(self._edge_weight(e) for _, e in total)
                 node_seq = [s] + [c[0] for c in total]
                 if len(set(node_seq)) != len(node_seq):
-                    continue  # loopless only
+                    continue  # loopless safety net
                 if total in accepted or any(total == c[2] for c in candidates):
                     continue
                 counter += 1

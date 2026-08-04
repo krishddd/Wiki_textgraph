@@ -37,10 +37,29 @@ to Semantic Versioning.
   centrality/community properties, and `CONTRADICTS` edges — still byte-identical across
   rebuilds. `manifest.json` gains L6/L7/L8 stages + claim/community/contradiction/chunk
   coverage; `GRAPH_REPORT.md` gains Communities and Contradictions sections.
-- **Tests:** +30 (L6/L7/L8/MCP unit suites + a tool-only **agent-session** integration
-  test that verifies every answer's byte citations); 166 total. Determinism and 100%
+- **Tests:** L6/L7/L8/MCP unit suites + a tool-only **agent-session** integration test
+  that verifies every answer's byte citations; 170 total. Determinism and 100%
   edge-provenance re-verification hold with L6–L8 in the loop, including a new
   opposite-polarity contradiction fixture.
+
+### Fixed — Phase 4 review
+- **`search` fabricated hits for no-match queries.** With an empty seed the Personalized
+  PageRank teleport is uniform, so it re-emitted degree centrality — surfacing arbitrary
+  entities for a query that matched nothing lexically or by name. Entity ranking is now
+  gated on a real seed signal; a true no-match returns zero hits.
+- **Dangling `CONTRADICTS` edges when reification is off.** `CONTRADICTS` links `Claim`
+  nodes, so with `reify_claims=False` (L6 disabled) it pointed at nodes that don't
+  exist. Emission now skips any pair whose claims aren't present in the graph.
+- **`neighbors` buried relations under provenance edges.** `MENTIONS` / `HAS_CHUNK`
+  (confidence 0.9) outranked real `TRANSFERRED` / `CONTROLS` relations (0.78); these
+  membership edges are now hidden from `neighbors`, so semantic connections surface.
+- **k-shortest paths were incomplete.** `path`'s Yen search discarded spur paths that
+  looped through root nodes instead of routing around them; the spur Dijkstra now blocks
+  root nodes, so genuine alternate paths are found.
+- **Leiden was promised but not wired.** `analytics_backend="leiden"` now runs a real
+  import-guarded Leiden pass (`igraph` + `leidenalg` behind `[graph]`) that raises
+  `UnsupportedFormat` and falls back to the deterministic built-in when absent — matching
+  the architecture's upgrade-or-fall-back pattern (the config field was previously dead).
 
 ### Added — Phase 3: Entity Resolution (L5)
 - **Alias entities collapse to a canonical identity.** `Acme Corp` / `Acme

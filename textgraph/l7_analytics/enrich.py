@@ -44,8 +44,13 @@ def enrich_nodes(nodes: list[Node], analytics: Analytics) -> list[Node]:
     return out
 
 
-def contradiction_edges(edges: list[Edge], analytics: Analytics) -> list[Edge]:
-    """Emit a ``CONTRADICTS`` edge between the Claim nodes of each conflicting pair."""
+def contradiction_edges(edges: list[Edge], analytics: Analytics, claim_ids: set[str]) -> list[Edge]:
+    """Emit a ``CONTRADICTS`` edge between the Claim nodes of each conflicting pair.
+
+    ``claim_ids`` is the set of Claim node ids actually present in the graph; a pair
+    whose claims were not reified (e.g. L6 disabled) is skipped rather than left
+    pointing at phantom nodes.
+    """
     by_id = {e.edge_id: e for e in edges}
     out: dict[str, Edge] = {}
     for eid_a, eid_b in analytics.contradictions:
@@ -53,6 +58,8 @@ def contradiction_edges(edges: list[Edge], analytics: Analytics) -> list[Edge]:
         if ea is None or eb is None:
             continue
         claim_a, claim_b = claim_id_for(ea), claim_id_for(eb)
+        if claim_a not in claim_ids or claim_b not in claim_ids:
+            continue
         subject, obj = min(claim_a, claim_b), max(claim_a, claim_b)
         spans = tuple(ea.source_spans) + tuple(eb.source_spans)
         edge = Edge(

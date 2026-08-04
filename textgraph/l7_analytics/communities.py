@@ -12,6 +12,22 @@ import math
 import re
 from collections import Counter, defaultdict
 
+from textgraph.l0_ingest.base import UnsupportedFormat
+
+
+def _renumber(community_of: dict[str, str], nodes: list[str]) -> dict[str, int]:
+    """Compact raw labels to ints ordered by each group's smallest member (G1)."""
+    groups: dict[str, list[str]] = defaultdict(list)
+    for nid in nodes:
+        groups[community_of[nid]].append(nid)
+    ordered = sorted(groups.values(), key=lambda g: sorted(g)[0])
+    out: dict[str, int] = {}
+    for cid, members in enumerate(ordered):
+        for nid in members:
+            out[nid] = cid
+    return out
+
+
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9]{2,}")
 _STOP = frozenset(
     {
@@ -70,16 +86,69 @@ def label_propagation(
                 changed = True
         if not changed:
             break
-    # Renumber to compact, deterministic ints ordered by smallest member.
-    groups: dict[str, list[str]] = defaultdict(list)
-    for nid in nodes:
-        groups[label[nid]].append(nid)
-    ordered = sorted(groups.values(), key=lambda g: sorted(g)[0])
-    community_of: dict[str, int] = {}
-    for cid, members in enumerate(ordered):
-        for nid in members:
-            community_of[nid] = cid
-    return community_of
+    return _renumber(label, nodes)
+
+
+def leiden_communities(
+    node_ids: list[str], adj: dict[str, list[tuple[str, float]]], *, seed: int = 0
+) -> dict[str, int]:
+    """Higher-quality communities via Leiden — the import-guarded ``[graph]`` upgrade.
+
+    Raises :class:`UnsupportedFormat` if ``igraph`` / ``leidenalg`` are absent, so the
+    caller can fall back to :func:`label_propagation`. Seeded for reproducibility, and
+    renumbered by smallest member so ids match the built-in convention.
+    """
+    try:
+        import igraph
+        import leidenalg
+    except ImportError as exc:  # pragma: no cover - exercised only without [graph]
+        raise UnsupportedFormat(
+            "Leiden community detection requires the [graph] extra (igraph + leidenalg)"
+        ) from exc
+
+    nodes = sorted(node_ids)
+    index = {nid: i for i, nid in enumerate(nodes)}
+    seen: set[tuple[int, int]] = set()
+    edges: list[tuple[int, int]] = []
+    weights: list[float] = []
+    for a in nodes:
+        for b, w in adj.get(a, []):
+            i, j = index[a], index[b]
+            key = (i, j) if i < j else (j, i)
+            if i == j or key in seen:
+                continue
+            seen.add(key)
+            edges.append(key)
+            weights.append(w)
+    graph = igraph.Graph(n=len(nodes), edges=edges)
+    partition = leidenalg.find_partition(
+        graph,
+        leidenalg.ModularityVertexPartition,
+        weights=weights,
+        seed=seed,
+    )
+    raw = {nodes[i]: str(partition.membership[i]) for i in range(len(nodes))}
+    return _renumber(raw, nodes)
+
+
+def detect_communities(
+    node_ids: list[str],
+    adj: dict[str, list[tuple[str, float]]],
+    *,
+    backend: str = "builtin",
+    seed: int = 0,
+) -> dict[str, int]:
+    """Community detection with graceful fallback: ``leiden`` -> ``label_propagation``.
+
+    The default ``builtin`` backend is pure-Python and CI-safe (G1). ``leiden`` is the
+    opt-in accelerator; if its libraries are missing we fall back rather than fail.
+    """
+    if backend == "leiden":
+        try:
+            return leiden_communities(node_ids, adj, seed=seed)
+        except UnsupportedFormat:
+            pass
+    return label_propagation(node_ids, adj)
 
 
 def label_communities(
