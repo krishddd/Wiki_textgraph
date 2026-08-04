@@ -48,6 +48,18 @@ def test_graph_html_is_self_contained(tmp_path: Path) -> None:
     assert "cdn." not in html
 
 
+def test_graph_html_is_the_interactive_offline_viewer(tmp_path: Path) -> None:
+    # graph.html shares the console's canvas renderer and embeds everything needed to be
+    # fully interactive with no server: the graph payload, per-node cited claims, and
+    # the client-side path/search adapter.
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    assert "window.__TG_DATA__" in html  # embedded data, not an API fetch
+    assert '"claims"' in html  # per-node claims for offline click-to-inspect
+    assert "function clientPath" in html  # offline maximum-likelihood path
+    assert "function draw()" in html and "initTime" in html  # the shared renderer
+
+
 def test_every_non_generated_edge_has_a_citation(tmp_path: Path) -> None:
     paths = _write(tmp_path)
     graph = json.loads(paths.graph_json.read_text(encoding="utf-8"))

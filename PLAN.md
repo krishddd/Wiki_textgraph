@@ -35,7 +35,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
 | **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
 | **6** | Optional LLM + UI polish + packaging | 3 units | **Done — v1.0.0 shipped.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅, version bump + release ✅. |
-| **v1.1** | Interactive graph console | 3.5 units | **In progress.** Layout + canvas renderer + community sidebar + inspect + search + tag-filter + path mode + temporal slider ✅; shared `graph.html` renderer + retrieval-quality debt next. |
+| **v1.1** | Interactive graph console | 3.5 units | **Near done.** Layout, canvas renderer, community sidebar, inspect, search, tag-filter, path mode, temporal slider, and shared offline `graph.html` viewer ✅; only the retrieval-quality debt remains. |
 | 7 | GQL / standards layer | 2 units | Extension. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
@@ -52,7 +52,9 @@ No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0�
       click-to-inspect (cited claims + validity windows), path mode
 - [x] Temporal slider — drag a date, superseded claims fade out (per-edge `[t_valid,
       t_invalid)` window on `/api/graph`; label reddens on supersession)
-- [ ] Share the canvas renderer with the offline `graph.html` artifact (no-API mode)
+- [x] Shared canvas renderer (`console/renderer.py`): the live console and the offline
+      `graph.html` render identically via a `TG` adapter (API vs embedded data +
+      client-side path/search). Retires the concentric-ring SVG stub.
 - [ ] Retrieval-quality debt: RRF fusion weights + cross-encoder reranker (MRR 0.29);
       extend the coverage gate beyond `core/` to L6/L7/L8
 

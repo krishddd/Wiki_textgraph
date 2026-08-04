@@ -25,7 +25,13 @@ to Semantic Versioning.
   the browser only *draws* the precomputed layout, never runs physics. Bounded for large
   graphs (top-N by PageRank + induced edges, with a visible "showing N of M" note, G7).
 - New `/api/graph` endpoint + `QueryEngine.graph_view()`; zero external requests (G2).
-  +5 tests (layout determinism + graph endpoint); 212 total.
+- **The offline `graph.html` artifact is now the same interactive viewer.** The canvas
+  renderer, CSS, and skeleton live in one shared module (`console/renderer.py`) driven by
+  a small `TG` adapter, so the live console and the emailed file **never drift**: the
+  console feeds it over `/api`, and `graph.html` embeds the graph + per-node cited claims
+  and runs **client-side** path (Dijkstra over `-log(confidence)`) and search — fully
+  interactive with no server. Retires the old concentric-ring SVG stub.
+  +3 tests (temporal windows, offline viewer, layout); 214 total.
 
 ## [1.0.0] - 2026-08-04
 
