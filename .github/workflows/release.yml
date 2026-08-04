@@ -38,5 +38,8 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          # Only the distributables — not uv's auto-generated dist/.gitignore.
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           generate_release_notes: true
