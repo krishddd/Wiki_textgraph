@@ -6,7 +6,28 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
-### Added — Phase 6 (in progress): local console + packaging
+## [1.0.0] - 2026-08-04
+
+First stable release. TextGraph turns any text corpus into a deterministic, fully
+provenanced knowledge graph and makes it queryable by agents and humans alike — the
+complete L0-L9 layer stack (Phases 0-6):
+
+- **L0-L1** deterministic ingest + structural spine; **L2-L3** encoder IE (entities +
+  typed relations); **L5** non-destructive entity resolution.
+- **L6** citable, **bi-temporal** claims — corrections *invalidate* rather than delete.
+- **L7** pure-Python analytics (PageRank, communities, contradictions).
+- **L8** HippoRAG-style dual-node retrieval: eight typed, bounded, **cited** tools over
+  a hybrid BM25 + Personalized-PageRank engine, exposed identically via the CLI, an MCP
+  server, and a local web **console**.
+- **L4** opt-in LLM synthesis, `GENERATED`-tagged and quarantined; **off by default**.
+- **L9** byte-stable `graph.json` + report/HTML/manifest; DuckDB persistence and
+  incremental `watch` rebuilds.
+
+Every non-generated edge carries a re-verifiable byte-range citation; `graph.json` is
+byte-identical across rebuilds (CI-gated); the default path is local-first and
+zero-LLM. 207 tests, strict types, determinism + provenance gates green.
+
+### Added — Phase 6: local console + packaging
 - **`textgraph console <path>`** — a dependency-free, read-only web UI over the L8
   `QueryEngine` (`textgraph/console/`): all eight typed tools (search / neighbors / path
   / why / timeline / contradictions / communities / stats) in the browser, each result
@@ -18,7 +39,7 @@ to Semantic Versioning.
   (`console`, `l4_llm_optional`, `store/duckdb_store`, `watch`) with the `textgraph`
   console-script entry point.
 
-### Added — Phase 6 (in progress): optional LLM pass (L4)
+### Added — Phase 6: optional LLM pass (L4)
 - **Model-authored community summaries, quarantined by tag.** Opt-in L4
   (`l4_llm_optional/`) asks an LLM to summarize the largest L7 communities using *only*
   the facts passed to it, and emits a `Summary` node + `SUMMARIZES` edges tagged

@@ -119,7 +119,7 @@ flowchart TD
 
 ## Status
 
-🟢 **Phase 5 complete — bi-temporal graph, persistent storage, and incremental `watch` (L0–L8 + MCP).**
+🟢 **v1.0.0 — the full L0–L9 stack is shipped** (deterministic ingest → IE → resolution → bi-temporal claims → analytics → hybrid retrieval → optional LLM, with CLI, MCP, and a local web console).
 
 - **L0 ingestion** across markdown, plain text, HTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs, and transcripts (PDF behind the `[ingest]` extra), each producing a `CanonicalDoc` + span-carrying block tree + hierarchical chunks.
 - **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …). Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
@@ -229,9 +229,9 @@ graph LR
 > textgraph build ./case-files --llm     # adds GENERATED community summaries
 > ```
 
-> **Phase 6 update:** the opt-in LLM pass (L4, `GENERATED`-tagged, off by default) and a dependency-free local **`textgraph console`** web UI have landed — all eight typed tools in the browser, every row cited. Packaging is verified (wheel + `textgraph` entry point).
+> **Phase 6 update:** the opt-in LLM pass (L4, `GENERATED`-tagged, off by default) and a dependency-free local **`textgraph console`** web UI have landed — all eight typed tools in the browser, every row cited.
 
-Next: the v1.0 version bump and release notes — the ship point. See [PLAN.md](PLAN.md) for the roadmap.
+**🎉 v1.0.0 is out** — the full L0–L9 stack, shipped. See the [CHANGELOG](CHANGELOG.md) for the release summary and [PLAN.md](PLAN.md) for the post-v1.0 extension roadmap (Phases 7–10).
 
 ## Specification documents
 

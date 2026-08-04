@@ -34,7 +34,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | 3 | Entity resolution (L5) | 3 units | Blocking → Splink scoring → non-destructive clustering. |
 | **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
 | **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
-| **6** | Optional LLM + UI polish + packaging | 3 units | **Near done.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅; only the v1.0 version bump remains. |
+| **6** | Optional LLM + UI polish + packaging | 3 units | **Done — v1.0.0 shipped.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅, version bump + release ✅. |
 | 7 | GQL / standards layer | 2 units | Extension. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
@@ -70,7 +70,8 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
       `route()` unit-tested without a socket
 - [x] **Packaging**: wheel builds and bundles the new packages (console, l4_llm_optional,
       duckdb_store, watch) with the `textgraph` console-script entry point
-- [ ] v1.0 version bump + release notes (deferred until sign-off)
+- [x] **v1.0.0 shipped** (2026-08-04): version bumped, CHANGELOG cut, tagged `v1.0.0`;
+      the release workflow re-verifies determinism on the built wheel before publishing
 
 ## Phase 5 — Definition of Done (met)
 

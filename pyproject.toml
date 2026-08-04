@@ -1,6 +1,6 @@
 [project]
 name = "textgraph"
-version = "0.0.1"
+version = "1.0.0"
 description = "Turn any textual corpus into a queryable knowledge graph with byte-level provenance on every claim. Local-first, deterministic, zero-LLM-by-default."
 readme = "README.md"
 requires-python = ">=3.11"
