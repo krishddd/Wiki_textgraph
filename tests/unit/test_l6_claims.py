@@ -2,11 +2,13 @@
 
 from pathlib import Path
 
+from textgraph.core.config import Config
 from textgraph.core.content_address import verify_span_hash
 from textgraph.l6_graph_model import claim_id_for, reify_claims
 from textgraph.pipeline import build
 
 DOCS = Path(__file__).parent.parent / "fixtures" / "corpora" / "docs"
+TEMPORAL = Path(__file__).parent.parent / "fixtures" / "corpora" / "temporal"
 
 
 def test_each_relation_edge_is_reified_into_a_claim() -> None:
@@ -62,3 +64,52 @@ def test_temporal_grounding_from_nearby_date() -> None:
         if "Claim" in n.labels and n.properties["predicate"] == "TRANSFERRED"
     ]
     assert any(n.properties["t_valid"] for n in transfers)
+
+
+def _claims_by_polarity(nodes: list, predicate: str) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for n in nodes:
+        p = n.properties
+        if "Claim" in n.labels and p["predicate"] == predicate:
+            out[str(p["polarity"])] = p
+    return out
+
+
+def test_later_correction_supersedes_and_closes_the_window() -> None:
+    # "transferred (2026-05-01)" then "did not transfer (2026-06-01)" — the later,
+    # opposite-polarity claim invalidates the earlier one (invalidation, not deletion).
+    result = build(TEMPORAL)
+    claims = _claims_by_polarity(result.nodes, "TRANSFERRED")
+    assert claims["pos"]["t_valid"] == "2026-05-01"
+    assert claims["pos"]["t_invalid"] == "2026-06-01"  # closed by the correction
+    assert claims["neg"]["t_valid"] == "2026-06-01"
+    assert claims["neg"]["t_invalid"] is None  # the current belief stays open
+
+
+def test_supersedes_edge_is_emitted_and_cited() -> None:
+    result = build(TEMPORAL)
+    sup = [e for e in result.edges if e.predicate == "SUPERSEDES"]
+    assert len(sup) == 1
+    e = sup[0]
+    assert e.subject.startswith("claim:") and e.object.startswith("claim:")
+    assert str(e.tag) == "INFERRED"
+    assert e.source_spans  # the correcting assertion cites real bytes
+    raw = {ir.doc_id: ir.raw for ir in result.results}
+    for s in e.source_spans:
+        assert verify_span_hash(raw[s.doc_id], s.start, s.end, s.hash)
+
+
+def test_invalidation_can_be_disabled() -> None:
+    result = build(TEMPORAL, config=Config(invalidate_claims=False))
+    assert not [e for e in result.edges if e.predicate == "SUPERSEDES"]
+    assert all(n.properties.get("t_invalid") is None for n in result.nodes if "Claim" in n.labels)
+
+
+def test_undated_conflict_is_not_superseded() -> None:
+    # The contradiction fixture dates only the positive claim, so the two can't be
+    # ordered in time — no wall-clock guess, no SUPERSEDES (G1). The conflict still
+    # surfaces via L7's CONTRADICTS.
+    contra = Path(__file__).parent.parent / "fixtures" / "corpora" / "contradiction"
+    result = build(contra)
+    assert not [e for e in result.edges if e.predicate == "SUPERSEDES"]
+    assert [e for e in result.edges if e.predicate == "CONTRADICTS"]

@@ -188,7 +188,13 @@ class ClaimView:
     confidence: float
     t_valid: str | None
     tag: str
+    t_invalid: str | None = None
     citations: list[Citation] = field(default_factory=list)
+
+    @property
+    def status(self) -> str:
+        """``superseded`` once a later claim closed this one's window, else ``current``."""
+        return "superseded" if self.t_invalid else "current"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -200,6 +206,8 @@ class ClaimView:
             "modality": self.modality,
             "confidence": round(self.confidence, 6),
             "t_valid": self.t_valid,
+            "t_invalid": self.t_invalid,
+            "status": self.status,
             "tag": self.tag,
             "citations": [c.to_dict() for c in self.citations],
         }

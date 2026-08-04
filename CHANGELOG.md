@@ -6,6 +6,23 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 5 (in progress): bi-temporal claims (L6)
+- **Invalidation, not deletion.** When two claims about the same
+  `(subject, predicate, object)` disagree in polarity, the later-dated one now
+  *supersedes* the earlier: the earlier claim's `t_invalid` is closed to the later
+  claim's `t_valid`, and a cited `SUPERSEDES` edge records the correction. The
+  superseded claim stays in the graph, so an agent can still ask *what was believed
+  true, and when it changed* (`l6_graph_model/temporal.py`).
+- **Deterministic time source (G1).** Ordering uses only **valid-time dates stated in
+  the corpus** (`t_valid`, compared lexically — ISO dates sort chronologically); there
+  is no wall-clock. A conflict whose claims aren't both dated can't be ordered, so it
+  is left open (never invalidated by a guess) and still surfaces via L7 `CONTRADICTS`.
+- **Surfaced everywhere:** `ClaimView` gains `t_invalid` + a `status` (`current` /
+  `superseded`); `timeline` / `why` / `contradictions` show the `[t_valid, t_invalid)`
+  window; `textgraph explain` renders `valid=[…, …) SUPERSEDED`. `manifest.json` reports
+  `supersedes` counts; `graph.json` stays byte-identical. New `invalidate_claims` config
+  flag (default on). +6 tests incl. a `corpora/temporal` fixture; 176 total.
+
 ### Added — Phase 4: Retrieval (L6 + L7 + L8 + MCP)
 - **The graph is queryable.** Same `QueryEngine` drives the new CLI verbs
   (`textgraph query|path|explain`) and the MCP tool surface — an agent answers through

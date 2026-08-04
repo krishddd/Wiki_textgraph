@@ -19,7 +19,7 @@ from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l1_structure import parse_corpus
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
-from textgraph.l6_graph_model import reify_claims
+from textgraph.l6_graph_model import apply_temporal, reify_claims
 from textgraph.l7_analytics import Analytics, compute_analytics
 from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
 from textgraph.l8_retrieval.emit_chunks import emit_chunks
@@ -158,13 +158,24 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
             "cross_product": er.cross_product,
         }
 
-    # L6 — reify relation edges into citable Claim nodes (keeps the direct edges).
+    # L6 — reify relation edges into citable Claim nodes (keeps the direct edges),
+    # then close validity windows across contradicting claims (invalidation, G8).
     l6_ms = 0.0
     claim_count = 0
+    supersedes_count = 0
     if config.reify_claims and config.extract_ie:
         t4 = time.perf_counter()
         claim_nodes, claim_edges = reify_claims(nodes, edges)
         claim_count = len(claim_nodes)
+        if config.invalidate_claims:
+            claim_nodes, supersedes_edges = apply_temporal(claim_nodes, claim_edges)
+            supersedes_count = len(supersedes_edges)
+            claim_edges = sorted(
+                (
+                    {e.edge_id: e for e in claim_edges} | {e.edge_id: e for e in supersedes_edges}
+                ).values(),
+                key=lambda e: e.edge_id,
+            )
         nodes = sorted(
             ({n.node_id: n for n in nodes} | {n.node_id: n for n in claim_nodes}).values(),
             key=lambda n: n.node_id,
@@ -242,6 +253,7 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
         er_stats=er_stats,
         graph_stats={
             "claims": claim_count,
+            "supersedes": supersedes_count,
             "communities": community_count,
             "contradictions": contradiction_count,
             "chunks": chunk_count,

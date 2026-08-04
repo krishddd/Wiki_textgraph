@@ -124,6 +124,14 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   invalidation is Phase 5**. No wall-clock ever enters the graph, and each reified
   `SUBJECT_OF` / `HAS_OBJECT` edge re-cites the relation's own byte span, so provenance
   still re-verifies (G3).
+- **L6 (cont.) — bi-temporal assembly (`temporal.py`, Phase 5).** After reification,
+  validity windows are closed across contradicting claims: for claims sharing a
+  `(subject, predicate, object)`, the later-dated, opposite-polarity claim supersedes
+  the earlier — the earlier's `t_invalid` is set to the later's `t_valid` and a cited
+  `SUPERSEDES` edge is emitted (invalidation, not deletion). The ordering source is
+  **valid-time dates stated in the text only** — no wall-clock — so an undated conflict
+  is left open (surfaced via L7 `CONTRADICTS`) rather than ordered by a guess, and
+  `graph.json` stays byte-identical (G1).
 - **L7 — analytics (`textgraph/l7_analytics/`)** — over a weighted entity subgraph
   (edge weight `confidence · log(1+evidence_count)`): weighted **PageRank** and
   **Brandes betweenness** (`algorithms.py`), **label-propagation communities** with

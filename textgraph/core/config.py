@@ -41,6 +41,9 @@ class Config:
     er_backend: str = "rules"
     # L6 claim reification: turn each relation edge into a citable Claim node.
     reify_claims: bool = True
+    # L6 bi-temporal assembly: close validity windows on superseded claims (invalidation
+    # not deletion) using in-text dates only — no wall-clock, so graph.json stays stable.
+    invalidate_claims: bool = True
     # L7 graph analytics: PageRank/betweenness/communities folded into the graph,
     # contradictions surfaced as CONTRADICTS edges. Pure-Python deterministic default;
     # "leiden" (behind the [graph] extra) is the optional higher-quality community pass.

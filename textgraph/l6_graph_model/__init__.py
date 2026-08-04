@@ -6,5 +6,6 @@ contradiction. Deterministic and model-free; see :mod:`textgraph.l6_graph_model.
 """
 
 from textgraph.l6_graph_model.claims import claim_id_for, is_relation_edge, reify_claims
+from textgraph.l6_graph_model.temporal import apply_temporal
 
-__all__ = ["claim_id_for", "is_relation_edge", "reify_claims"]
+__all__ = ["apply_temporal", "claim_id_for", "is_relation_edge", "reify_claims"]

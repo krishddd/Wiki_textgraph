@@ -86,7 +86,12 @@ def _cmd_explain(args: argparse.Namespace) -> int:
     for c in res["claims"]:
         cites = " ".join(_fmt_citation(x) for x in c["citations"])
         neg = " (negated)" if c["polarity"] == "neg" else ""
-        when = f"  t_valid={c['t_valid']}" if c["t_valid"] else ""
+        if c["t_valid"] and c.get("t_invalid"):
+            when = f"  valid=[{c['t_valid']}, {c['t_invalid']}) SUPERSEDED"
+        elif c["t_valid"]:
+            when = f"  valid=[{c['t_valid']}, now)"
+        else:
+            when = ""
         print(
             f"  {c['subject']} -{c['predicate']}-> {c['object']}{neg}"
             f"  [{c['tag']} {c['confidence']}]{when} {cites}"

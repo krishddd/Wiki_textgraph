@@ -111,8 +111,8 @@ def _manifest(
                 "layer": "L6",
                 "wall_ms": round(timings_ms.get("L6", 0.0), 3),
                 "nodes_out": graph_stats.get("claims", 0),
-                "edges_out": 0,
-                "model": "reify",
+                "edges_out": graph_stats.get("supersedes", 0),
+                "model": "reify+temporal",
             },
             {
                 "layer": "L7",
@@ -142,6 +142,7 @@ def _manifest(
             "blocking_candidate_pairs": er_stats.get("candidate_pairs", 0),
             "blocking_cross_product": er_stats.get("cross_product", 0),
             "claims": graph_stats.get("claims", 0),
+            "supersedes": graph_stats.get("supersedes", 0),
             "communities": graph_stats.get("communities", 0),
             "contradictions": graph_stats.get("contradictions", 0),
             "chunks": graph_stats.get("chunks", 0),

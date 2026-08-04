@@ -170,6 +170,7 @@ class QueryEngine:
             modality=str(p.get("modality", "asserted")),
             confidence=float(p.get("confidence", 0.0)),
             t_valid=(str(tv) if (tv := p.get("t_valid")) is not None else None),
+            t_invalid=(str(ti) if (ti := p.get("t_invalid")) is not None else None),
             tag=str(p.get("tag", "")),
             citations=self._claim_citation.get(claim_id, []),
         )
