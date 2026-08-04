@@ -6,6 +6,23 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — interactive graph console (toward v1.1)
+- **`textgraph console` is now a real graph viewer.** A hand-rolled, dependency-free
+  HTML5 **canvas** renderer draws the graph the way an investigator expects: nodes
+  coloured by L7 community and sized by PageRank, pan/zoom/hover, a **Communities
+  sidebar** with per-cluster toggles + "Select All" (counts and colour dots), a
+  **confidence-tag filter** (so `GENERATED` output is visibly quarantined), hybrid
+  **search** that highlights matching nodes and lists cited passages, **click-to-inspect**
+  (a node's cited claims with `[t_valid, t_invalid)` windows, superseded ones flagged),
+  and a **path** mode that traces the maximum-likelihood chain between two clicked nodes.
+- **Deterministic server-side layout (`l7_analytics/layout.py`).** Fruchterman-Reingold
+  with community-aware gravity, **hash-seeded (no RNG) and fixed-iteration**, coordinates
+  rounded and baked onto entity nodes as `x`/`y`. `graph.json` stays byte-identical (G1);
+  the browser only *draws* the precomputed layout, never runs physics. Bounded for large
+  graphs (top-N by PageRank + induced edges, with a visible "showing N of M" note, G7).
+- New `/api/graph` endpoint + `QueryEngine.graph_view()`; zero external requests (G2).
+  +5 tests (layout determinism + graph endpoint); 212 total.
+
 ## [1.0.0] - 2026-08-04
 
 First stable release. TextGraph turns any text corpus into a deterministic, fully

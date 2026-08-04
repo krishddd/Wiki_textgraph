@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import heapq
 import math
+from typing import Any
 
 from textgraph.l7_analytics.algorithms import build_adjacency, pagerank
 from textgraph.l8_retrieval.bm25 import BM25Index, tokenize
@@ -127,6 +128,66 @@ class QueryEngine:
             if docs:
                 self._node_docs.setdefault(e.subject, set()).update(docs)
                 self._node_docs.setdefault(e.object, set()).update(docs)
+
+    # -- graph view (for the visual console) ------------------------------------
+
+    def graph_view(self, *, max_nodes: int = 600) -> dict[str, Any]:
+        """Render payload: laid-out entity nodes + their relations, capped by PageRank.
+
+        Bounded for large graphs (G7): keeps the top ``max_nodes`` entities by PageRank
+        and the edges induced on them, reporting how many were dropped rather than
+        truncating silently.
+        """
+        ranked = sorted(
+            self._entity_ids,
+            key=lambda nid: (-float(self._node[nid].properties.get("pagerank", 0.0)), nid),
+        )
+        kept = set(ranked[:max_nodes])
+        nodes = [
+            {
+                "id": nid,
+                "name": self._name(nid),
+                "x": float(self._node[nid].properties.get("x", 0.0)),
+                "y": float(self._node[nid].properties.get("y", 0.0)),
+                "community": int(self._node[nid].properties.get("community", -1)),
+                "community_label": str(self._node[nid].properties.get("community_label", "")),
+                "pagerank": round(float(self._node[nid].properties.get("pagerank", 0.0)), 6),
+                "etype": str(self._node[nid].properties.get("etype", "")),
+            }
+            for nid in sorted(kept)
+        ]
+        edges = [
+            {
+                "source": e.subject,
+                "target": e.object,
+                "predicate": e.predicate,
+                "tag": str(e.tag),
+                "confidence": round(e.confidence, 4),
+            }
+            for e in self._edges
+            if e.predicate not in _NON_RELATION and e.subject in kept and e.object in kept
+        ]
+        # Community roster (size = all entities in the community, not just the kept ones).
+        sizes: dict[int, int] = {}
+        labels: dict[int, str] = {}
+        for nid in sorted(self._entity_ids):
+            cid = int(self._node[nid].properties.get("community", -1))
+            if cid < 0:
+                continue
+            sizes[cid] = sizes.get(cid, 0) + 1
+            labels[cid] = str(self._node[nid].properties.get("community_label", ""))
+        communities = [
+            {"community_id": cid, "label": labels[cid], "size": sizes[cid]}
+            for cid in sorted(sizes, key=lambda c: (-sizes[c], c))
+        ]
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "communities": communities,
+            "shown": len(nodes),
+            "total": len(self._entity_ids),
+            "truncated": len(self._entity_ids) > len(nodes),
+        }
 
     # -- helpers ----------------------------------------------------------------
 

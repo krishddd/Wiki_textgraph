@@ -45,9 +45,11 @@ textgraph contradictions ./case-files                # conflicting assertions, c
 # Keep the graph in sync with a live case folder (incremental, only re-extracts edits):
 textgraph watch ./case-files -o textgraph-out
 
-# ...or explore all eight tools in a local, dependency-free web console:
+# ...or open the interactive graph console (canvas viewer + all eight tools):
 textgraph console ./case-files          # -> http://127.0.0.1:8765
 ```
+
+The console draws the graph the way an investigator reads it — nodes coloured by community and sized by PageRank, a communities sidebar with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, click-to-inspect for a node's cited claims and validity windows, and a path mode that traces the maximum-likelihood chain between two entities. Layout is precomputed server-side and deterministic, so the browser only ever *draws* it — no CDN, no physics engine, `graph.json` stays byte-identical.
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
 

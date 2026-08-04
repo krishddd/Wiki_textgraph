@@ -40,6 +40,9 @@ def enrich_nodes(nodes: list[Node], analytics: Analytics) -> list[Node]:
         if cid is not None:
             props["community"] = cid
             props["community_label"] = analytics.community_labels.get(cid, "")
+        xy = analytics.positions.get(n.node_id)
+        if xy is not None:
+            props["x"], props["y"] = xy
         out.append(replace(n, properties=props))
     return out
 

@@ -35,12 +35,25 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
 | **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
 | **6** | Optional LLM + UI polish + packaging | 3 units | **Done — v1.0.0 shipped.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅, version bump + release ✅. |
+| **v1.1** | Interactive graph console | 3.5 units | **In progress.** Deterministic server-side layout ✅, canvas renderer + community sidebar + inspect + search + tag-filter + path mode ✅; shared `graph.html` renderer + temporal slider next. |
 | 7 | GQL / standards layer | 2 units | Extension. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
 | 10 | Dynamic agent reasoning (GoT) | 2 units | Extension. |
 
-No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0→L1→L2→L3→L5→L6→L7→L8→L9, with L4 last among core layers).
+No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0→L1→L2→L3→L5→L6→L7→L8→L9, with L4 last among core layers). v1.1 (interactive UI) and Phases 7–10 are post-v1.0.
+
+## Post-v1.0 — v1.1 UI (in progress)
+
+- [x] Deterministic force-directed layout (`l7_analytics/layout.py`), hash-seeded + fixed
+      iterations, coords baked onto entity nodes; `graph.json` stays byte-identical
+- [x] Interactive canvas console: community-coloured/PageRank-sized nodes, pan/zoom/hover,
+      Communities sidebar with toggles, confidence-tag filter, search highlight,
+      click-to-inspect (cited claims + validity windows), path mode
+- [ ] Share the canvas renderer with the offline `graph.html` artifact (no-API mode)
+- [ ] Temporal slider — drag a date, fade out superseded claims (needs claim→edge validity)
+- [ ] Retrieval-quality debt: RRF fusion weights + cross-encoder reranker (MRR 0.29);
+      extend the coverage gate beyond `core/` to L6/L7/L8
 
 ## 4. Open questions / assumptions
 

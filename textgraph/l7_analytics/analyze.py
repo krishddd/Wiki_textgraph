@@ -28,6 +28,7 @@ from textgraph.l7_analytics.algorithms import (
     pagerank,
 )
 from textgraph.l7_analytics.communities import detect_communities, label_communities
+from textgraph.l7_analytics.layout import force_layout
 from textgraph.store.base import Edge, Node
 
 
@@ -45,6 +46,8 @@ class Analytics:
     # Each contradiction is a sorted pair of relation edge ids asserting the same
     # (subject, predicate, object) with opposite polarity.
     contradictions: list[tuple[str, str]] = field(default_factory=list)
+    # Deterministic force-directed coordinates per entity, for the graph viewer.
+    positions: dict[str, tuple[float, float]] = field(default_factory=dict)
 
 
 def _entity_adjacency(
@@ -149,6 +152,9 @@ def compute_analytics(
     bridges = _bridges(adj, community_of)
     orphans = sorted(nid for nid in entity_ids if not adj.get(nid))
     contradictions = _contradictions(edges)
+    # Fewer iterations for very large graphs keeps the O(n^2) pass bounded (G7).
+    iters = 300 if len(entity_ids) <= 400 else 120
+    positions = force_layout(entity_ids, adj, community_of=community_of, iterations=iters)
 
     return Analytics(
         pagerank=pr,
@@ -159,4 +165,5 @@ def compute_analytics(
         bridges=bridges,
         orphans=orphans,
         contradictions=contradictions,
+        positions=positions,
     )

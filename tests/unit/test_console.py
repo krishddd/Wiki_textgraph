@@ -60,3 +60,21 @@ def test_unknown_tool_is_400() -> None:
 def test_unknown_path_is_404() -> None:
     status, _, _ = route(_engine(), "/favicon.ico", {})
     assert status == 404
+
+
+def test_graph_endpoint_returns_laid_out_nodes_and_communities() -> None:
+    status, ctype, body = route(_engine(), "/api/graph", {})
+    assert status == 200 and "application/json" in ctype
+    g = json.loads(body)
+    assert g["nodes"] and g["edges"] and g["communities"]
+    for n in g["nodes"]:
+        assert {"id", "name", "x", "y", "community", "pagerank"} <= set(n)
+    # Roster carries labels + sizes for the sidebar.
+    assert all("label" in c and "size" in c for c in g["communities"])
+
+
+def test_graph_endpoint_is_bounded_and_reports_truncation() -> None:
+    _, _, body = route(_engine(), "/api/graph", {"max_nodes": "3"})
+    g = json.loads(body)
+    assert g["shown"] <= 3
+    assert g["truncated"] is (g["total"] > g["shown"])

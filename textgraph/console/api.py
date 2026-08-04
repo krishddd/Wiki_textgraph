@@ -50,6 +50,11 @@ def route(engine: QueryEngine, path: str, params: dict[str, str]) -> tuple[int, 
         return 200, "text/html; charset=utf-8", render_page().encode("utf-8")
     if path == "/api/tools":
         return _json(200, {"tools": tool_specs()})
+    if path == "/api/graph":
+        max_nodes = 600
+        with contextlib.suppress(TypeError, ValueError):
+            max_nodes = int(params.get("max_nodes", "600"))
+        return _json(200, engine.graph_view(max_nodes=max_nodes))
     if path == "/api/call":
         tool = params.get("tool", "")
         if tool not in _TOOL_PARAMS:
