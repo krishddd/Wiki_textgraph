@@ -36,6 +36,12 @@ _PAGE = r"""<!doctype html>
     background:rgba(17,21,29,.9); color:var(--fg); cursor:pointer; white-space:nowrap; }
   .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
   #note { position:absolute; bottom:10px; left:14px; color:var(--mut); font-size:11px; z-index:5; }
+  #time { position:absolute; bottom:12px; left:50%; transform:translateX(-50%); z-index:5;
+    display:none; align-items:center; gap:10px; padding:8px 14px; border-radius:10px;
+    background:rgba(17,21,29,.92); border:1px solid var(--line); backdrop-filter:blur(6px); }
+  #time input[type=range] { width:220px; accent-color:var(--acc); }
+  #time .lbl { font-variant-numeric:tabular-nums; min-width:78px; text-align:center; }
+  #time .lbl.sup { color:var(--sup); }
   #tip { position:absolute; pointer-events:none; padding:4px 8px; background:#000c;
     border:1px solid var(--line); border-radius:6px; font-size:12px; display:none; z-index:6; }
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; }
@@ -72,6 +78,11 @@ _PAGE = r"""<!doctype html>
     <canvas id="c"></canvas>
     <div id="tip"></div>
     <div id="note"></div>
+    <div id="time">
+      <span>⏱</span>
+      <input type="range" id="tslider" min="0" value="0" step="1">
+      <span class="lbl" id="tlabel">all time</span>
+    </div>
   </div>
   <aside>
     <h2>Communities</h2>
@@ -88,7 +99,7 @@ const PALETTE = ['#5b8cff','#f59e42','#e0555b','#4bc4a3','#7bc043','#f2c14e','#c
   '#ef8fb4','#9b7b5b','#9aa4b2','#5b8cff','#f59e42','#e0555b','#4bc4a3'];
 const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
-  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set() };
+  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(), date:null };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -107,6 +118,11 @@ const SX = n => n.x*S.scale + S.tx, SY = n => n.y*S.scale + S.ty;
 const rad = n => 3 + Math.sqrt(n.pagerank)*46;
 function visible(n){ return !S.hidden.has(n.community); }
 function dim(n){ return (S.match && !S.match.has(n.id)); }
+// An edge holds at time S.date if the date lies in its [t_valid, t_invalid) window.
+function edgeActive(e){ if(S.date===null) return true;
+  if(e.t_valid && e.t_valid > S.date) return false;      // not yet asserted
+  if(e.t_invalid && S.date >= e.t_invalid) return false; // superseded by a correction
+  return true; }
 
 function draw(){
   const r = c.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
@@ -115,8 +131,10 @@ function draw(){
     if(!S.tags.has(e.tag)) continue;
     const a=byId[e.source], b=byId[e.target]; if(!a||!b||!visible(a)||!visible(b)) continue;
     const inPath = S.pathEdges.has(e.source+'>'+e.target)||S.pathEdges.has(e.target+'>'+e.source);
+    const active = edgeActive(e);
+    const alpha = (dim(a)||dim(b)) ? 0.04 : (active ? 0.14 : 0.025);
     ctx.beginPath(); ctx.moveTo(SX(a),SY(a)); ctx.lineTo(SX(b),SY(b));
-    ctx.strokeStyle = inPath?'#5b8cff':'rgba(120,130,150,'+((dim(a)||dim(b))?0.04:0.14)+')';
+    ctx.strokeStyle = inPath?'#5b8cff':'rgba(120,130,150,'+alpha+')';
     ctx.lineWidth = inPath?2.5:1; ctx.stroke();
   }
   for(const n of S.g.nodes){
@@ -231,10 +249,24 @@ document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter')
   if(e.key==='Escape'){ e.target.value=''; S.match=null; draw(); } });
 addEventListener('resize',resize);
 
+// Temporal scrubber: position 0 = all time, then each dated moment in order.
+function initTime(){
+  const dates = S.g.dates || [];
+  if(!dates.length) return;
+  const box=document.getElementById('time'), sl=document.getElementById('tslider'),
+    lab=document.getElementById('tlabel');
+  box.style.display='flex'; sl.max=String(dates.length); sl.value='0';
+  sl.oninput=()=>{ const i=+sl.value; S.date = i===0 ? null : dates[i-1];
+    lab.textContent = S.date || 'all time';
+    // Superseded-at-this-date shows red so the correction is legible.
+    const anySup = S.date && S.g.edges.some(e=>e.t_invalid && S.date>=e.t_invalid);
+    lab.classList.toggle('sup', !!anySup); draw(); };
+}
+
 (async function init(){
   S.g=await (await fetch('/api/graph')).json();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildSidebar(); resize(); fit();
+  buildSidebar(); initTime(); resize(); fit();
 })();
 </script>
 </body>

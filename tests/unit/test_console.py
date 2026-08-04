@@ -8,10 +8,11 @@ from textgraph.l8_retrieval import QueryEngine
 from textgraph.pipeline import build
 
 DOCS = Path(__file__).parent.parent / "fixtures" / "corpora" / "docs"
+TEMPORAL = Path(__file__).parent.parent / "fixtures" / "corpora" / "temporal"
 
 
-def _engine() -> QueryEngine:
-    r = build(DOCS)
+def _engine(corpus: Path = DOCS) -> QueryEngine:
+    r = build(corpus)
     return QueryEngine(r.nodes, r.edges)
 
 
@@ -78,3 +79,16 @@ def test_graph_endpoint_is_bounded_and_reports_truncation() -> None:
     g = json.loads(body)
     assert g["shown"] <= 3
     assert g["truncated"] is (g["total"] > g["shown"])
+
+
+def test_graph_edges_carry_temporal_windows_for_the_slider() -> None:
+    # The temporal fixture has a 2026-05-01 transfer superseded by a 2026-06-01
+    # correction; the graph payload must expose both dates + per-edge windows so the
+    # console's time scrubber can fade the superseded edge.
+    _, _, body = route(_engine(TEMPORAL), "/api/graph", {})
+    g = json.loads(body)
+    assert g["dates"] == ["2026-05-01", "2026-06-01"]
+    transfers = [e for e in g["edges"] if e["predicate"] == "TRANSFERRED"]
+    windows = {(e["t_valid"], e["t_invalid"]) for e in transfers}
+    assert ("2026-05-01", "2026-06-01") in windows  # the superseded assertion
+    assert ("2026-06-01", None) in windows  # the current correction

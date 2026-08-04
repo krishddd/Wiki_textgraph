@@ -156,17 +156,32 @@ class QueryEngine:
             }
             for nid in sorted(kept)
         ]
-        edges = [
-            {
-                "source": e.subject,
-                "target": e.object,
-                "predicate": e.predicate,
-                "tag": str(e.tag),
-                "confidence": round(e.confidence, 4),
-            }
-            for e in self._edges
-            if e.predicate not in _NON_RELATION and e.subject in kept and e.object in kept
-        ]
+        # Attach each relation's claim-validity window so the console can scrub time.
+        from textgraph.l6_graph_model import claim_id_for
+
+        edges = []
+        dates: set[str] = set()
+        for e in self._edges:
+            if e.predicate in _NON_RELATION or e.subject not in kept or e.object not in kept:
+                continue
+            claim = self._node.get(claim_id_for(e))
+            t_valid = claim.properties.get("t_valid") if claim else None
+            t_invalid = claim.properties.get("t_invalid") if claim else None
+            if isinstance(t_valid, str):
+                dates.add(t_valid)
+            if isinstance(t_invalid, str):
+                dates.add(t_invalid)
+            edges.append(
+                {
+                    "source": e.subject,
+                    "target": e.object,
+                    "predicate": e.predicate,
+                    "tag": str(e.tag),
+                    "confidence": round(e.confidence, 4),
+                    "t_valid": t_valid,
+                    "t_invalid": t_invalid,
+                }
+            )
         # Community roster (size = all entities in the community, not just the kept ones).
         sizes: dict[int, int] = {}
         labels: dict[int, str] = {}
@@ -184,6 +199,7 @@ class QueryEngine:
             "nodes": nodes,
             "edges": edges,
             "communities": communities,
+            "dates": sorted(dates),  # scrubber stops for the temporal slider
             "shown": len(nodes),
             "total": len(self._entity_ids),
             "truncated": len(self._entity_ids) > len(nodes),

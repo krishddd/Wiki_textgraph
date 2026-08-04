@@ -14,7 +14,11 @@ to Semantic Versioning.
   **confidence-tag filter** (so `GENERATED` output is visibly quarantined), hybrid
   **search** that highlights matching nodes and lists cited passages, **click-to-inspect**
   (a node's cited claims with `[t_valid, t_invalid)` windows, superseded ones flagged),
-  and a **path** mode that traces the maximum-likelihood chain between two clicked nodes.
+  a **path** mode that traces the maximum-likelihood chain between two clicked nodes,
+  and a **temporal slider** — scrub a date and superseded claims fade out (the edge's
+  `[t_valid, t_invalid)` window drives it; the label turns red the moment a correction
+  supersedes an assertion). Nothing else on the market visualizes bi-temporal
+  invalidation — and here it falls straight out of the L6 model.
 - **Deterministic server-side layout (`l7_analytics/layout.py`).** Fruchterman-Reingold
   with community-aware gravity, **hash-seeded (no RNG) and fixed-iteration**, coordinates
   rounded and baked onto entity nodes as `x`/`y`. `graph.json` stays byte-identical (G1);
