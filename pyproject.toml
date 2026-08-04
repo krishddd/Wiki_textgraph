@@ -87,6 +87,7 @@ files = [
     "textgraph/l1_structure",
     "textgraph/l2_linguistic",
     "textgraph/l3_encoder_ie",
+    "textgraph/l4_llm_optional",
     "textgraph/l5_entity_resolution",
     "textgraph/l6_graph_model",
     "textgraph/l7_analytics",

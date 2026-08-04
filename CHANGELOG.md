@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 6 (in progress): optional LLM pass (L4)
+- **Model-authored community summaries, quarantined by tag.** Opt-in L4
+  (`l4_llm_optional/`) asks an LLM to summarize the largest L7 communities using *only*
+  the facts passed to it, and emits a `Summary` node + `SUMMARIZES` edges tagged
+  **`GENERATED`** — so model output can never be mistaken for an extracted, cited fact
+  (G4). Enabled with `textgraph build --llm`; **off by default**, so the determinism
+  gate never sees an LLM and `graph.json` stays byte-identical (G1, G2).
+- **Dependency-free, OpenAI-compatible client** (`client.py`, stdlib `urllib`): works
+  against OpenAI, vLLM, Ollama, or any `/chat/completions` endpoint via `base_url`. The
+  **API key is read from the environment only** (`API_KEY` / `TEXTGRAPH_LLM_API_KEY` /
+  `OPENAI_API_KEY`) — never stored on `Config`, hashed into `config_hash`, or written to
+  an artifact. An unconfigured `--llm` build skips L4 rather than failing.
+- **Hard-budgeted + cached** (`cache.py`, G7): at most `llm_max_calls` communities are
+  summarized (biggest first), and responses are cached by a content hash of
+  `(model, system, user, params)` so a warm rebuild is reproducible and free.
+- `manifest.json` gains an `L4` stage + `summaries` coverage and reflects `llm_enabled`.
+  +8 tests (mock client, no network); 200 total.
+
 ### Added — Phase 5: temporal + incremental
 - **Bi-temporal claims (L6) — invalidation, not deletion.** When two claims about the
   same `(subject, predicate, object)` disagree in polarity, the later-dated one

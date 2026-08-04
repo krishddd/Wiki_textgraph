@@ -217,7 +217,16 @@ graph LR
 
 > **Phase 5 update:** the graph is now bi-temporal and incremental. Corrections *invalidate* rather than delete — `Acme Corp transferred $1M to Beta Ltd` (2026-05-01) is superseded by a dated correction, its window closed to `[2026-05-01, 2026-06-01)` with a cited `SUPERSEDES` edge, and `textgraph timeline` shows both. `textgraph watch ./case-files` keeps artifacts in sync, re-extracting only edited files; `textgraph build --store g.duckdb` persists the graph so it reloads without a rebuild.
 
-Next: **Phase 6** — the opt-in LLM pass (L4, `GENERATED`-tagged), UI/console polish, and packaging — the v1.0 ship point. See [PLAN.md](PLAN.md) for the roadmap.
+> **Phase 6 (in progress):** the opt-in LLM pass (L4) has landed. It's **off by default** — when enabled it summarizes the graph's communities and tags every summary `GENERATED`, so model output is quarantined and can never be mistaken for a cited fact (and `graph.json` stays byte-identical whenever the LLM is off):
+>
+> ```bash
+> export API_KEY=…                       # read from the env only, never persisted
+> export MODEL_BASE_URL=https://…/v1     # OpenAI / vLLM / Ollama — any /chat/completions
+> export MODEL_NAME=your-model
+> textgraph build ./case-files --llm     # adds GENERATED community summaries
+> ```
+
+Next: finishing **Phase 6** — a local `textgraph console` UI and packaging polish — the v1.0 ship point. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 

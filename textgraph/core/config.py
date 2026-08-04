@@ -51,6 +51,15 @@ class Config:
     analytics_backend: str = "builtin"
     # L8 retrieval: emit Chunk nodes + entity<->chunk links (the dual-node graph).
     emit_chunks: bool = True
+    # L4 optional LLM (Phase 6): synthesizes GENERATED community summaries. Off by
+    # default (G2) so the determinism gate never sees an LLM. The model id + base URL
+    # affect output, so they belong in the config hash; the API key never does — it is
+    # read from the environment only and must not leak into config_hash/manifest.
+    llm_model: str = ""
+    llm_base_url: str = ""
+    llm_max_calls: int = 8  # hard budget on LLM calls per build (G7)
+    llm_max_tokens: int = 256
+    llm_temperature: float = 0.0  # deterministic-leaning; responses are also cached
     # Free-form, pinned model ids per layer (filled in as layers are added).
     model_pins: dict[str, str] = field(default_factory=dict)
 

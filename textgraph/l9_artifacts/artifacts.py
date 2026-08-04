@@ -57,6 +57,7 @@ def _manifest(
     ie_stats: dict[str, int] | None,
     er_stats: dict[str, int] | None,
     graph_stats: dict[str, int] | None,
+    llm_enabled: bool = False,
 ) -> dict[str, Any]:
     timings_ms = timings_ms or {}
     ie_stats = ie_stats or {}
@@ -70,8 +71,15 @@ def _manifest(
     return {
         "tool_version": __version__,
         "config_hash": config_hash,
-        "llm_enabled": False,
+        "llm_enabled": llm_enabled,
         "stages": [
+            {
+                "layer": "L4",
+                "wall_ms": round(timings_ms.get("L4", 0.0), 3),
+                "nodes_out": graph_stats.get("summaries", 0),
+                "edges_out": 0,
+                "model": "llm" if llm_enabled else None,
+            },
             {
                 "layer": "L0",
                 "wall_ms": round(timings_ms.get("L0", 0.0), 3),
@@ -146,6 +154,7 @@ def _manifest(
             "communities": graph_stats.get("communities", 0),
             "contradictions": graph_stats.get("contradictions", 0),
             "chunks": graph_stats.get("chunks", 0),
+            "summaries": graph_stats.get("summaries", 0),
         },
     }
 
@@ -161,6 +170,7 @@ def write_artifacts(
     ie_stats: dict[str, int] | None = None,
     er_stats: dict[str, int] | None = None,
     graph_stats: dict[str, int] | None = None,
+    llm_enabled: bool = False,
 ) -> ArtifactPaths:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -200,6 +210,7 @@ def write_artifacts(
                 ie_stats=ie_stats,
                 er_stats=er_stats,
                 graph_stats=graph_stats,
+                llm_enabled=llm_enabled,
             )
         )
     )

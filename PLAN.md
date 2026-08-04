@@ -34,7 +34,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | 3 | Entity resolution (L5) | 3 units | Blocking → Splink scoring → non-destructive clustering. |
 | **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
 | **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
-| 6 | Optional LLM + UI polish + packaging | 3 units | **v1.0 ship point.** |
+| **6** | Optional LLM + UI polish + packaging | 3 units | **In progress.** L4 opt-in LLM (GENERATED summaries) ✅; UI console + packaging next. **v1.0 ship point.** |
 | 7 | GQL / standards layer | 2 units | Extension. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
@@ -56,6 +56,17 @@ No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0�
 See Section 5.2 of the build prompt — generated in Phase 0 exactly as specified (`textgraph/` package with `core/`, `l0_ingest/`…`l9_artifacts/`, `store/`, `mcp/`, `cli.py`; `ui/`, `schema/`, `tests/{unit,integration,determinism,fixtures}`, `benchmarks/`, `docs/`, `.github/workflows/`, root docs).
 
 ---
+
+## Phase 6 — Definition of Done (in progress)
+
+- [x] **L4 optional LLM (`l4_llm_optional/`)**: opt-in (`build --llm`), off by default;
+      GENERATED community summaries (`Summary` nodes + `SUMMARIZES` edges), quarantined by
+      tag so they never masquerade as cited facts; dependency-free OpenAI-compatible
+      client with the API key read from the environment only (never hashed/persisted);
+      hard-budgeted + response-cached; determinism holds (byte-identical with LLM off).
+      Verified live against a vLLM Nemotron endpoint; 8 mock-client tests in CI.
+- [ ] UI / `textgraph console` (local web app over the QueryEngine)
+- [ ] Packaging polish for v1.0 (wheels, entry points, docs)
 
 ## Phase 5 — Definition of Done (met)
 

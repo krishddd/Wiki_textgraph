@@ -251,7 +251,10 @@ def _cmd_build(args: argparse.Namespace) -> int:
         print(f"wrote {out} ({len(data)} bytes)")
         return 0
 
-    result = build(root)
+    from textgraph.core.config import Config
+
+    config = Config(llm_enabled=True) if args.llm else None
+    result = build(root, config=config)
     paths = write_artifacts(
         args.output,
         config_hash=result.config_hash,
@@ -262,6 +265,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
         ie_stats=result.ie_stats,
         er_stats=result.er_stats,
         graph_stats=result.graph_stats,
+        llm_enabled=result.config.llm_enabled,
     )
     ie = result.ie_stats
     er = result.er_stats
@@ -310,6 +314,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--store",
         metavar="PATH.duckdb",
         help="also persist the graph to a DuckDB file (requires the [graph] extra)",
+    )
+    p_build.add_argument(
+        "--llm",
+        action="store_true",
+        help="run the opt-in L4 LLM pass (GENERATED community summaries); reads "
+        "API_KEY/MODEL_BASE_URL/MODEL_NAME from the environment",
     )
     p_build.set_defaults(func=_cmd_build)
 

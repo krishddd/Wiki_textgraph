@@ -85,6 +85,30 @@ def _iter_corpus_files(root: Path) -> list[Path]:
     )
 
 
+def _run_l4(
+    nodes: list[Node],
+    edges: list[Edge],
+    analytics: Analytics,
+    config: Config,
+    cache_dir: str | Path | None,
+) -> tuple[list[Node], list[Edge]]:
+    """Resolve the LLM client + cache and run L4 synthesis; return ([], []) if skipped."""
+    import tempfile
+
+    from textgraph.l4_llm_optional import PromptCache, resolve_client, synthesize
+
+    client = resolve_client(config)
+    if client is None:
+        return [], []
+    llm_cache_dir = (
+        Path(cache_dir) / "llm"
+        if cache_dir is not None
+        else Path(tempfile.mkdtemp(prefix="textgraph-llm-"))
+    )
+    cache = PromptCache(llm_cache_dir)
+    return synthesize(nodes, edges, analytics, client, cache, max_calls=config.llm_max_calls)
+
+
 def build(
     root: str | Path, *, config: Config | None = None, cache_dir: str | Path | None = None
 ) -> BuildResult:
@@ -250,6 +274,25 @@ def build(
         )
         l8_ms = (time.perf_counter() - t6) * 1000
 
+    # L4 — optional LLM synthesis (opt-in, GENERATED-tagged, quarantined). Runs last so
+    # it can summarize the finished communities; skipped (never fails) if unconfigured.
+    l4_ms = 0.0
+    summary_count = 0
+    if config.llm_enabled and analytics is not None:
+        t7 = time.perf_counter()
+        summary_nodes, summary_edges = _run_l4(nodes, edges, analytics, config, cache_dir)
+        summary_count = len(summary_nodes)
+        if summary_nodes:
+            nodes = sorted(
+                ({n.node_id: n for n in nodes} | {n.node_id: n for n in summary_nodes}).values(),
+                key=lambda n: n.node_id,
+            )
+            edges = sorted(
+                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in summary_edges}).values(),
+                key=lambda e: e.edge_id,
+            )
+        l4_ms = (time.perf_counter() - t7) * 1000
+
     store = InMemoryGraphStore()
     for n in nodes:
         store.add_node(n)
@@ -266,6 +309,7 @@ def build(
             "L0": l0_ms,
             "L1": l1_ms,
             "L2_L3": ie_ms,
+            "L4": l4_ms,
             "L5": er_ms,
             "L6": l6_ms,
             "L7": l7_ms,
@@ -285,6 +329,7 @@ def build(
             "communities": community_count,
             "contradictions": contradiction_count,
             "chunks": chunk_count,
+            "summaries": summary_count,
         },
         analytics=analytics,
     )

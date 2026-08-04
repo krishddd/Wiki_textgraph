@@ -183,6 +183,27 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   refuses an output/cache dir nested inside the watched corpus, which would otherwise
   re-ingest its own `graph.json`/`.md`/`.html` and loop.
 
+## Phase 6 (in progress): the optional LLM pass (L4)
+
+- **L4 is the one non-deterministic layer, and it is quarantined.** Off by default (G2)
+  so the determinism gate never sees it; when enabled with `build --llm` it runs *last*
+  (over finished communities) and every node/edge it emits is tagged **`GENERATED`** (G4)
+  — model-authored content that can never be mistaken for an extracted, cited fact and is
+  exempt from provenance re-verification. `graph.json` stays byte-identical whenever the
+  LLM is off.
+- **Grounded synthesis (`l4_llm_optional/synthesize.py`).** For the largest L7
+  communities it sends the LLM *only* the member entities + the relations among them and
+  asks for a 1-2 sentence summary, emitting a `Summary` node + `SUMMARIZES` edges to the
+  most central members. Hard-budgeted (`llm_max_calls`, biggest communities first, G7).
+- **Reproducibility despite non-determinism (`cache.py`).** Responses are cached by a
+  content hash of `(model, system, user, params)`, so a warm `--llm` rebuild re-emits the
+  same summaries for free — the same prompt never costs a second call.
+- **Secret hygiene (`client.py`).** A dependency-free, OpenAI-compatible client (stdlib
+  `urllib`) points at any `/chat/completions` endpoint via `base_url`. The API key is read
+  from the environment only (`API_KEY` / `TEXTGRAPH_LLM_API_KEY` / `OPENAI_API_KEY`); it
+  never touches `Config`, `config_hash`, or any artifact. An unconfigured `--llm` build
+  skips L4 rather than failing.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the
