@@ -32,7 +32,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | 1 | Structural spine (L0+L1) | 3 units | First usable `graph.json`/`graph.html`/`REPORT.md`, zero models. |
 | 2 | Encoder IE (L2+L3) | 4 units | Coref is highest-ROI; pin weights, keep determinism green. |
 | 3 | Entity resolution (L5) | 3 units | Blocking → Splink scoring → non-destructive clustering. |
-| 4 | Retrieval (L6+L7+L8) | 4 units | First real benchmark (LoCoMo/LongMemEval-S) → `BENCHMARKS.md`. |
+| **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
 | 5 | Temporal + incremental | 3 units | Bi-temporal, invalidation-not-deletion, `watch` mode. |
 | 6 | Optional LLM + UI polish + packaging | 3 units | **v1.0 ship point.** |
 | 7 | GQL / standards layer | 2 units | Extension. |
@@ -56,6 +56,26 @@ No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0�
 See Section 5.2 of the build prompt — generated in Phase 0 exactly as specified (`textgraph/` package with `core/`, `l0_ingest/`…`l9_artifacts/`, `store/`, `mcp/`, `cli.py`; `ui/`, `schema/`, `tests/{unit,integration,determinism,fixtures}`, `benchmarks/`, `docs/`, `.github/workflows/`, root docs).
 
 ---
+
+## Phase 4 — Definition of Done (met)
+
+- [x] L6 claim reification: relation edges → citable `Claim` nodes with `t_valid`
+      grounded to the nearest in-sentence `Date` (`t_invalid` deferred to Phase 5);
+      direct edges preserved; reified edges re-verify against raw bytes
+- [x] L7 analytics (pure-Python, deterministic): weighted PageRank + Brandes
+      betweenness + label-propagation communities (c-TF-IDF labels); god nodes,
+      bridges, orphans, contradictions; folded into the graph as node properties +
+      `CONTRADICTS` edges. Leiden behind `[graph]`
+- [x] L8 dual-node retrieval graph (entity + `Chunk` nodes) + eight typed tools:
+      `search` (BM25 + Personalized PageRank + RRF, local/global routing), `neighbors`,
+      `path` (maximum-likelihood k-shortest), `why`, `timeline`, `contradictions`,
+      `communities`, `stats` — every result bounded (token budget) and `[doc:span]`-cited
+- [x] MCP surface (`textgraph.mcp` specs + dispatcher, CI-tested; stdio server behind
+      `[mcp]`) + CLI `query` / `path` / `explain` over the *same* `QueryEngine`
+- [x] First retrieval benchmark with cost: recall@k / MRR + tokens/query + p50/p95
+      latency → `BENCHMARKS.md`; LoCoMo/LongMemEval-S guarded by local data presence
+- [x] Agent-session integration test: answers via tool calls only, every citation
+      re-verified against raw bytes; determinism CI still byte-identical (166 tests)
 
 ## Phase 3 — Definition of Done (met)
 

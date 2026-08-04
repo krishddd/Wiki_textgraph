@@ -85,7 +85,7 @@ def render_report(
     lines += [
         f"- **Documents:** {len(results)}",
         f"- **Nodes:** {len(nodes)}",
-        f"- **Edges:** {len(edges)} (all `STRUCTURAL` in the L0+L1 spine)",
+        f"- **Edges:** {len(edges)}",
         f"- **Config hash:** `{config_hash}`",
         "",
         "## Corpus",
@@ -159,6 +159,32 @@ def render_report(
             lines.append(f"- **{_name(gn) if gn else nid}** ({label}) — degree {deg}")
     else:
         lines.append("_None yet._")
+
+    # Communities (Phase 4, L7): auto-labelled clusters from label propagation.
+    communities: dict[int, tuple[str, list[Node]]] = {}
+    for n in nodes:
+        cid = n.properties.get("community")
+        if cid is None or "Entity" not in n.labels:
+            continue
+        label = str(n.properties.get("community_label", ""))
+        communities.setdefault(int(cid), (label, []))[1].append(n)
+    if communities:
+        lines += ["", "## Communities (L7)", ""]
+        for cid in sorted(communities):
+            label, members = communities[cid]
+            top = sorted(members, key=lambda x: -float(x.properties.get("pagerank", 0.0)))
+            names = ", ".join(_name(m) for m in top[:5])
+            lines.append(f"- **#{cid}** {label} — {len(members)} members: {names}")
+
+    # Contradictions (Phase 4, L7): opposite-polarity claims on the same triple.
+    contradicts = [e for e in edges if e.predicate == "CONTRADICTS"]
+    if contradicts:
+        lines += ["", f"## Contradictions (L7): {len(contradicts)}", ""]
+        for e in sorted(contradicts, key=lambda e: e.edge_id)[:8]:
+            a, b = node_by_id.get(e.subject), node_by_id.get(e.object)
+            an = _name(a) if a else e.subject
+            bn = _name(b) if b else e.object
+            lines.append(f"- `{an}` conflicts with `{bn}`")
 
     rationale = diag.by_label.get("Rationale", [])
     if rationale:

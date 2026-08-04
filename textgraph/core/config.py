@@ -39,6 +39,15 @@ class Config:
     # Default rule backend is deterministic; "splink" requires the [er] extra.
     resolve_entities: bool = True
     er_backend: str = "rules"
+    # L6 claim reification: turn each relation edge into a citable Claim node.
+    reify_claims: bool = True
+    # L7 graph analytics: PageRank/betweenness/communities folded into the graph,
+    # contradictions surfaced as CONTRADICTS edges. Pure-Python deterministic default;
+    # "leiden" (behind the [graph] extra) is the optional higher-quality community pass.
+    analytics: bool = True
+    analytics_backend: str = "builtin"
+    # L8 retrieval: emit Chunk nodes + entity<->chunk links (the dual-node graph).
+    emit_chunks: bool = True
     # Free-form, pinned model ids per layer (filled in as layers are added).
     model_pins: dict[str, str] = field(default_factory=dict)
 

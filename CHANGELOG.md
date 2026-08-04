@@ -6,6 +6,42 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 4: Retrieval (L6 + L7 + L8 + MCP)
+- **The graph is queryable.** Same `QueryEngine` drives the new CLI verbs
+  (`textgraph query|path|explain`) and the MCP tool surface — an agent answers through
+  typed tools alone, never raw Cypher (G6).
+- **L6 claim reification (`l6_graph_model/claims.py`)** — every entity→entity relation
+  edge becomes a first-class, citable `Claim` node (subject/predicate/object/polarity/
+  modality/confidence) with a temporal window; the direct edge is kept. `t_valid` is
+  grounded to the nearest `Date` in the same sentence (byte proximity); `t_invalid`
+  stays null (full bi-temporal invalidation is Phase 5). No wall-clock in the graph.
+- **L7 analytics (`l7_analytics/`)** — deterministic weighted **PageRank** + **Brandes
+  betweenness** (`algorithms.py`), **label-propagation communities** with c-TF-IDF
+  labels (`communities.py`), and diagnostics (`analyze.py`): **god nodes** (central on
+  both measures), **bridges**, orphans, **contradictions**. `enrich.py` writes
+  centrality/community onto entity nodes and emits `CONTRADICTS` edges between
+  conflicting `Claim` nodes.
+- **L8 retrieval (`l8_retrieval/`)** — HippoRAG-style **dual-node graph** (`Chunk`
+  passage nodes + `chunk -[MENTIONS]-> entity` links, `emit_chunks.py`) with eight
+  typed, bounded, cited tools (`engine.py`): `search` (pure-Python **BM25** in
+  `bm25.py` fused with **Personalized PageRank** by **RRF**, local/global routing),
+  `neighbors`, `path` (**maximum-likelihood**, Yen's k-shortest under `-log(confidence)`),
+  `why`, `timeline`, `contradictions`, `communities`, `stats`. Every result is a
+  token-budgeted context pack (`model.py`) with a `[doc:start-end]` citation on each row.
+- **MCP surface (`textgraph/mcp/`)** — `tools.py` (specs + dispatcher, no `mcp`
+  dependency, CI-tested) and `server.py` (stdio adapter behind the `[mcp]` extra).
+- **First retrieval benchmark** (`benchmarks/retrieval.py`, `BENCHMARKS.md`) — recall@k
+  / MRR reported *with* tokens-per-query and p50/p95 latency ("no number without its
+  cost"); external LoCoMo/LongMemEval-S sets run only when data is present locally.
+- **graph.json** now carries `Claim` nodes, `Chunk` nodes (with text), entity
+  centrality/community properties, and `CONTRADICTS` edges — still byte-identical across
+  rebuilds. `manifest.json` gains L6/L7/L8 stages + claim/community/contradiction/chunk
+  coverage; `GRAPH_REPORT.md` gains Communities and Contradictions sections.
+- **Tests:** +30 (L6/L7/L8/MCP unit suites + a tool-only **agent-session** integration
+  test that verifies every answer's byte citations); 166 total. Determinism and 100%
+  edge-provenance re-verification hold with L6–L8 in the loop, including a new
+  opposite-polarity contradiction fixture.
+
 ### Added — Phase 3: Entity Resolution (L5)
 - **Alias entities collapse to a canonical identity.** `Acme Corp` / `Acme
   Corporation` / `ACME` resolve to one canonical **"Acme Corporation"** node;

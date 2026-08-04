@@ -19,6 +19,10 @@ from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l1_structure import parse_corpus
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
+from textgraph.l6_graph_model import reify_claims
+from textgraph.l7_analytics import Analytics, compute_analytics
+from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
+from textgraph.l8_retrieval.emit_chunks import emit_chunks
 from textgraph.l9_artifacts.graph_json import build_graph_document, dump_graph_bytes
 from textgraph.store.base import Edge, Node
 from textgraph.store.memory import InMemoryGraphStore
@@ -64,6 +68,8 @@ class BuildResult:
     skipped: list[str] = field(default_factory=list)
     ie_stats: dict[str, int] = field(default_factory=dict)
     er_stats: dict[str, int] = field(default_factory=dict)
+    graph_stats: dict[str, int] = field(default_factory=dict)
+    analytics: Analytics | None = None
 
     @property
     def config_hash(self) -> str:
@@ -152,6 +158,58 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
             "cross_product": er.cross_product,
         }
 
+    # L6 — reify relation edges into citable Claim nodes (keeps the direct edges).
+    l6_ms = 0.0
+    claim_count = 0
+    if config.reify_claims and config.extract_ie:
+        t4 = time.perf_counter()
+        claim_nodes, claim_edges = reify_claims(nodes, edges)
+        claim_count = len(claim_nodes)
+        nodes = sorted(
+            ({n.node_id: n for n in nodes} | {n.node_id: n for n in claim_nodes}).values(),
+            key=lambda n: n.node_id,
+        )
+        edges = sorted(
+            ({e.edge_id: e for e in edges} | {e.edge_id: e for e in claim_edges}).values(),
+            key=lambda e: e.edge_id,
+        )
+        l6_ms = (time.perf_counter() - t4) * 1000
+
+    # L7 — graph analytics folded back into the graph (node props + CONTRADICTS).
+    l7_ms = 0.0
+    analytics: Analytics | None = None
+    community_count = 0
+    contradiction_count = 0
+    if config.analytics:
+        t5 = time.perf_counter()
+        analytics = compute_analytics(nodes, edges)
+        nodes = sorted(enrich_nodes(nodes, analytics), key=lambda n: n.node_id)
+        contra = contradiction_edges(edges, analytics)
+        contradiction_count = len(contra)
+        edges = sorted(
+            ({e.edge_id: e for e in edges} | {e.edge_id: e for e in contra}).values(),
+            key=lambda e: e.edge_id,
+        )
+        community_count = len(analytics.community_labels)
+        l7_ms = (time.perf_counter() - t5) * 1000
+
+    # L8 — dual-node retrieval graph: emit Chunk nodes + entity<->chunk links.
+    l8_ms = 0.0
+    chunk_count = 0
+    if config.emit_chunks:
+        t6 = time.perf_counter()
+        chunk_nodes, chunk_edges = emit_chunks(results, nodes, edges)
+        chunk_count = len(chunk_nodes)
+        nodes = sorted(
+            ({n.node_id: n for n in nodes} | {n.node_id: n for n in chunk_nodes}).values(),
+            key=lambda n: n.node_id,
+        )
+        edges = sorted(
+            ({e.edge_id: e for e in edges} | {e.edge_id: e for e in chunk_edges}).values(),
+            key=lambda e: e.edge_id,
+        )
+        l8_ms = (time.perf_counter() - t6) * 1000
+
     store = InMemoryGraphStore()
     for n in nodes:
         store.add_node(n)
@@ -164,7 +222,15 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
         store=store,
         nodes=nodes,
         edges=edges,
-        timings_ms={"L0": l0_ms, "L1": l1_ms, "L2_L3": ie_ms, "L5": er_ms},
+        timings_ms={
+            "L0": l0_ms,
+            "L1": l1_ms,
+            "L2_L3": ie_ms,
+            "L5": er_ms,
+            "L6": l6_ms,
+            "L7": l7_ms,
+            "L8": l8_ms,
+        },
         skipped=skipped,
         ie_stats={
             "entities": entity_count,
@@ -173,6 +239,13 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
             "pronouns_resolved": pron_resolved,
         },
         er_stats=er_stats,
+        graph_stats={
+            "claims": claim_count,
+            "communities": community_count,
+            "contradictions": contradiction_count,
+            "chunks": chunk_count,
+        },
+        analytics=analytics,
     )
 
 

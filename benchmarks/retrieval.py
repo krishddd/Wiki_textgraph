@@ -1,0 +1,206 @@
+"""Retrieval benchmark harness — recall@k, MRR, and their cost (G7).
+
+"No number without its cost." For each labelled query this measures retrieval
+*quality* (recall@k, reciprocal rank) alongside retrieval *cost* (estimated tokens
+returned per query, and wall-clock p50/p95 latency), so a quality gain is never
+reported without the token/latency price paid for it.
+
+The default target is the in-repo money-laundering fixture with a hand-labelled gold
+set, so ``python -m benchmarks.retrieval`` runs anywhere with zero downloads (G2).
+LoCoMo / LongMemEval-S are wired the same way but *only* run when their data is
+present locally (``--data DIR``) — CI never downloads a corpus.
+
+Usage:
+    python -m benchmarks.retrieval                 # print the fixture benchmark
+    python -m benchmarks.retrieval --write         # also (re)write BENCHMARKS.md
+    python -m benchmarks.retrieval --data path/    # run an external labelled set
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+from textgraph.l8_retrieval import QueryEngine
+from textgraph.l8_retrieval.model import estimate_tokens
+from textgraph.pipeline import build
+
+REPO = Path(__file__).resolve().parent.parent
+FIXTURE = REPO / "tests" / "fixtures" / "corpora" / "docs"
+
+# Hand-labelled gold set over the docs fixture: query -> entity names that a correct
+# retrieval must surface. Names are matched case-insensitively against hit names.
+FIXTURE_QUERIES: list[dict[str, object]] = [
+    {"query": "who transferred funds to whom", "gold": ["Beta Ltd", "Acme Corp"]},
+    {"query": "who controls gamma holdings", "gold": ["Acme Corp", "Gamma Holdings"]},
+    {"query": "nominee director of beta ltd", "gold": ["John Doe", "Beta Ltd"]},
+    {"query": "beneficial owner", "gold": ["Delta Trust", "Sigma Partners"]},
+    {"query": "which bank was involved", "gold": ["Omega Bank"]},
+]
+
+
+@dataclass
+class QueryScore:
+    query: str
+    recall_at_k: float
+    reciprocal_rank: float
+    tokens: int
+    latency_ms: float
+
+
+def _score_query(engine: QueryEngine, query: str, gold: list[str], k: int) -> QueryScore:
+    gold_lower = {g.lower() for g in gold}
+    t0 = time.perf_counter()
+    result = engine.search(query, k=k)
+    latency_ms = (time.perf_counter() - t0) * 1000
+
+    names = [h.name.lower() for h in result.hits]
+    hit_set = set(names)
+    recall = len(gold_lower & hit_set) / len(gold_lower) if gold_lower else 0.0
+    rr = 0.0
+    for rank, name in enumerate(names, 1):
+        if name in gold_lower:
+            rr = 1.0 / rank
+            break
+    tokens = sum(estimate_tokens(h.snippet or h.name) for h in result.hits)
+    return QueryScore(query, recall, rr, tokens, latency_ms)
+
+
+@dataclass
+class BenchmarkReport:
+    name: str
+    k: int
+    n_queries: int
+    recall_at_k: float
+    mrr: float
+    mean_tokens: float
+    p50_latency_ms: float
+    p95_latency_ms: float
+
+    def as_row(self) -> str:
+        return (
+            f"| {self.name} | {self.n_queries} | {self.k} | {self.recall_at_k:.3f} | "
+            f"{self.mrr:.3f} | {self.mean_tokens:.0f} | {self.p50_latency_ms:.2f} | "
+            f"{self.p95_latency_ms:.2f} |"
+        )
+
+
+def _percentile(values: list[float], pct: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    idx = min(len(ordered) - 1, round((pct / 100.0) * (len(ordered) - 1)))
+    return ordered[idx]
+
+
+def run_benchmark(
+    name: str, corpus: Path, queries: list[dict[str, object]], k: int = 5
+) -> tuple[BenchmarkReport, list[QueryScore]]:
+    result = build(corpus)
+    engine = QueryEngine(result.nodes, result.edges)
+    scores = [
+        _score_query(engine, str(q["query"]), [str(g) for g in q["gold"]], k)  # type: ignore[union-attr]
+        for q in queries
+    ]
+    latencies = [s.latency_ms for s in scores]
+    report = BenchmarkReport(
+        name=name,
+        k=k,
+        n_queries=len(scores),
+        recall_at_k=statistics.mean(s.recall_at_k for s in scores) if scores else 0.0,
+        mrr=statistics.mean(s.reciprocal_rank for s in scores) if scores else 0.0,
+        mean_tokens=statistics.mean(s.tokens for s in scores) if scores else 0.0,
+        p50_latency_ms=_percentile(latencies, 50),
+        p95_latency_ms=_percentile(latencies, 95),
+    )
+    return report, scores
+
+
+def _load_external(data_dir: Path) -> list[dict[str, object]]:
+    """Load a labelled set from ``<data>/queries.json`` (LoCoMo/LongMemEval layout)."""
+    qfile = data_dir / "queries.json"
+    if not qfile.exists():
+        return []
+    loaded: list[dict[str, object]] = json.loads(qfile.read_text(encoding="utf-8"))
+    return loaded
+
+
+def _render_markdown(reports: list[BenchmarkReport]) -> str:
+    lines = [
+        "# TextGraph Retrieval Benchmarks",
+        "",
+        "Quality *and* cost for every run (G7 — no number without its cost). Generated by",
+        "`python -m benchmarks.retrieval --write`; deterministic given the same corpus.",
+        "",
+        "| benchmark | queries | k | recall@k | MRR | mean tokens/query | p50 ms | p95 ms |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    lines += [r.as_row() for r in reports]
+    lines += [
+        "",
+        "## Method",
+        "",
+        "- **Retrieval:** hybrid BM25 (chunk passages) + Personalized PageRank over the",
+        "  dual-node entity+chunk graph, fused with Reciprocal Rank Fusion (L8).",
+        "- **recall@k:** fraction of a query's gold entities appearing in the top-k hits.",
+        "- **MRR:** mean reciprocal rank of the first gold entity.",
+        "- **cost:** estimated tokens returned per query (~4 chars/token) and wall-clock",
+        "  latency percentiles over the query set.",
+        "",
+        "## Reproduce",
+        "",
+        "```bash",
+        "python -m benchmarks.retrieval          # fixture benchmark, zero downloads",
+        "python -m benchmarks.retrieval --write   # regenerate this file",
+        "python -m benchmarks.retrieval --data DIR  # external set (DIR/queries.json)",
+        "```",
+        "",
+        "LoCoMo / LongMemEval-S: place the labelled set at `DIR/queries.json` (each item",
+        '`{"query": ..., "gold": [...]}`) and a corpus at `DIR/corpus/`. Absent data is',
+        "skipped, so CI never downloads.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="TextGraph retrieval benchmark")
+    parser.add_argument("--write", action="store_true", help="write BENCHMARKS.md")
+    parser.add_argument("--data", help="external data dir with queries.json + corpus/")
+    parser.add_argument("-k", type=int, default=5)
+    args = parser.parse_args(argv)
+
+    reports: list[BenchmarkReport] = []
+    report, _ = run_benchmark("fixture:docs", FIXTURE, FIXTURE_QUERIES, k=args.k)
+    reports.append(report)
+
+    if args.data:
+        data_dir = Path(args.data)
+        queries = _load_external(data_dir)
+        corpus = data_dir / "corpus"
+        if queries and corpus.exists():
+            reports.append(run_benchmark(data_dir.name, corpus, queries, k=args.k)[0])
+        else:
+            print(f"skipping {data_dir}: no queries.json / corpus/ present", file=sys.stderr)
+
+    print("benchmark | queries | k | recall@k | MRR | tokens | p50ms | p95ms")
+    for r in reports:
+        print(
+            f"{r.name} | {r.n_queries} | {r.k} | {r.recall_at_k:.3f} | {r.mrr:.3f} | "
+            f"{r.mean_tokens:.0f} | {r.p50_latency_ms:.2f} | {r.p95_latency_ms:.2f}"
+        )
+
+    if args.write:
+        out = REPO / "BENCHMARKS.md"
+        out.write_text(_render_markdown(reports), encoding="utf-8")
+        print(f"wrote {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

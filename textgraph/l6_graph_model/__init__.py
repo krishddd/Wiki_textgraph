@@ -1,4 +1,10 @@
-"""Placeholder package for l6_graph_model.
+"""L6 — graph model / claim reification.
 
-Implemented in a later phase; see ARCHITECTURE.md for the layer contract.
+Turns extracted relation edges into first-class ``Claim`` nodes with a temporal
+validity window, so assertions can be cited, explained, and compared for
+contradiction. Deterministic and model-free; see :mod:`textgraph.l6_graph_model.claims`.
 """
+
+from textgraph.l6_graph_model.claims import claim_id_for, is_relation_edge, reify_claims
+
+__all__ = ["claim_id_for", "is_relation_edge", "reify_claims"]

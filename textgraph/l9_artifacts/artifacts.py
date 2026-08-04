@@ -56,10 +56,12 @@ def _manifest(
     timings_ms: dict[str, float] | None,
     ie_stats: dict[str, int] | None,
     er_stats: dict[str, int] | None,
+    graph_stats: dict[str, int] | None,
 ) -> dict[str, Any]:
     timings_ms = timings_ms or {}
     ie_stats = ie_stats or {}
     er_stats = er_stats or {}
+    graph_stats = graph_stats or {}
     tag_counts = Counter(str(e.tag) for e in edges)
     entity_nodes = sum(1 for n in nodes if "Entity" in n.labels and "Canonical" not in n.labels)
     pron_total = ie_stats.get("pronouns_total", 0)
@@ -105,6 +107,27 @@ def _manifest(
                 "edges_out": er_stats.get("same_as_edges", 0),
                 "model": "rules",
             },
+            {
+                "layer": "L6",
+                "wall_ms": round(timings_ms.get("L6", 0.0), 3),
+                "nodes_out": graph_stats.get("claims", 0),
+                "edges_out": 0,
+                "model": "reify",
+            },
+            {
+                "layer": "L7",
+                "wall_ms": round(timings_ms.get("L7", 0.0), 3),
+                "nodes_out": 0,
+                "edges_out": graph_stats.get("contradictions", 0),
+                "model": "analytics",
+            },
+            {
+                "layer": "L8",
+                "wall_ms": round(timings_ms.get("L8", 0.0), 3),
+                "nodes_out": graph_stats.get("chunks", 0),
+                "edges_out": 0,
+                "model": "bm25+ppr",
+            },
         ],
         "coverage": {
             "doc_count": len(results),
@@ -118,6 +141,10 @@ def _manifest(
             "same_as_edges": er_stats.get("same_as_edges", 0),
             "blocking_candidate_pairs": er_stats.get("candidate_pairs", 0),
             "blocking_cross_product": er_stats.get("cross_product", 0),
+            "claims": graph_stats.get("claims", 0),
+            "communities": graph_stats.get("communities", 0),
+            "contradictions": graph_stats.get("contradictions", 0),
+            "chunks": graph_stats.get("chunks", 0),
         },
     }
 
@@ -132,6 +159,7 @@ def write_artifacts(
     timings_ms: dict[str, float] | None = None,
     ie_stats: dict[str, int] | None = None,
     er_stats: dict[str, int] | None = None,
+    graph_stats: dict[str, int] | None = None,
 ) -> ArtifactPaths:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -170,6 +198,7 @@ def write_artifacts(
                 timings_ms=timings_ms,
                 ie_stats=ie_stats,
                 er_stats=er_stats,
+                graph_stats=graph_stats,
             )
         )
     )

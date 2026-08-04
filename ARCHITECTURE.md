@@ -107,6 +107,55 @@ claim. The `Rationale`/`Requirement` layer (the *why*) and byte-range provenance
 - Note: `"the company"` is resolved earlier by L2 coref; L5 handles the *entity-node*
   aliases (`Acme Corp` / `Acme Corporation` / `ACME`).
 
+## Phase 4 (implemented): L6 + L7 + L8 + MCP
+
+The graph becomes queryable. Every layer here is **pure-Python and deterministic** so
+the analytics fold into a byte-identical `graph.json` (G1) and CI needs no GPU; the
+heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
+`[graph]` upgrades that fall back cleanly.
+
+- **L6 — claim reification (`textgraph/l6_graph_model/claims.py`)** — each
+  entity→entity relation edge is reified into a first-class `Claim` node carrying the
+  full assertion (subject, predicate, object, confidence, polarity, modality) plus a
+  temporal window. The direct edge is *kept*, so traversal is unchanged; the Claim is
+  the thing `why` / `timeline` / `contradictions` point at and cite. `t_valid` is
+  grounded to the nearest `Date` mention in the same sentence (byte proximity over the
+  doc→Date `MENTIONS` spans); `t_invalid` is always null — **full bi-temporal
+  invalidation is Phase 5**. No wall-clock ever enters the graph, and each reified
+  `SUBJECT_OF` / `HAS_OBJECT` edge re-cites the relation's own byte span, so provenance
+  still re-verifies (G3).
+- **L7 — analytics (`textgraph/l7_analytics/`)** — over a weighted entity subgraph
+  (edge weight `confidence · log(1+evidence_count)`): weighted **PageRank** and
+  **Brandes betweenness** (`algorithms.py`), **label-propagation communities** with
+  automatic **c-TF-IDF labels** (`communities.py`), and the diagnostics an investigator
+  reads first (`analyze.py`): **god nodes** (top on *both* centralities — a hub that is
+  also a bottleneck), **bridges** (inter-community edges whose removal disconnects),
+  orphans, and **contradictions** (same triple, opposite polarity). `enrich.py` folds
+  the findings back into the graph: centrality/community become entity-node properties
+  and each contradiction becomes a `CONTRADICTS` edge between the two `Claim` nodes.
+  Centrality floats are rounded to fixed precision before serialization to keep the
+  byte-identical gate safe.
+- **L8 — retrieval (`textgraph/l8_retrieval/`)** — the **dual-node graph**
+  (`emit_chunks.py`) materialises `Chunk` passage nodes carrying their text, linked
+  `doc -[HAS_CHUNK]-> chunk` and `chunk -[MENTIONS]-> entity` (by byte-containment of
+  the mention span in the chunk), so a lexical hit teleports PageRank onto the right
+  entities. `QueryEngine` (`engine.py`) exposes **eight typed tools**: `search`
+  (BM25 in `bm25.py` fused with **Personalized PageRank** by **Reciprocal Rank Fusion**,
+  with local/global routing), `neighbors`, `path` (**maximum-likelihood** — Yen's
+  k-shortest under `-log(confidence)` weights), `why`, `timeline`, `contradictions`,
+  `communities`, `stats`. Every result is a **bounded, cited context pack** from
+  `model.py`: token-budgeted (G7), each row carrying a `[doc:start-end]` byte citation
+  (G3) — an agent never sees raw Cypher (G6).
+- **MCP surface (`textgraph/mcp/`)** — `tools.py` is the single source of truth for the
+  tool specs *and* the dispatcher (no `mcp` dependency, fully CI-tested); `server.py` is
+  the thin stdio adapter behind the `[mcp]` extra. The CLI (`textgraph query|path|
+  explain`) is a second formatter over the *same* `QueryEngine` — never a drifting code
+  path (§6.4).
+- **Benchmark (`benchmarks/retrieval.py`, `BENCHMARKS.md`)** — recall@k and MRR reported
+  *with* their cost (tokens/query, p50/p95 latency): "no number without its cost" (G7).
+  The fixture set runs with zero downloads; LoCoMo / LongMemEval-S run only when their
+  data is present locally, so CI never fetches a corpus.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

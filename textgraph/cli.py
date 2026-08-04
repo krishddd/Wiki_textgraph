@@ -18,12 +18,83 @@ from pathlib import Path
 
 from textgraph import __version__
 from textgraph.l5_entity_resolution import build_records, render_audit, run_er
+from textgraph.l8_retrieval import QueryEngine
 from textgraph.l9_artifacts import write_artifacts
 from textgraph.pipeline import build, build_graph_bytes
 
 
 def _cmd_version(_: argparse.Namespace) -> int:
     print(__version__)
+    return 0
+
+
+def _engine(path: Path) -> QueryEngine:
+    result = build(path)
+    return QueryEngine(result.nodes, result.edges)
+
+
+def _fmt_citation(cit: dict[str, object]) -> str:
+    return f"[{cit['doc_id']}:{cit['start']}-{cit['end']}]"
+
+
+def _cmd_query(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).search(args.query, k=args.k).to_dict()
+    print(f"search: {res['query']}  (routing: {res['routing']})")
+    for i, hit in enumerate(res["hits"], 1):
+        cites = " ".join(_fmt_citation(c) for c in hit["citations"])
+        print(f"  {i}. [{hit['kind']}] {hit['name']}  (score {hit['score']})")
+        if hit["snippet"]:
+            print(f"      {hit['snippet'][:160]}")
+        if cites:
+            print(f"      {cites}")
+    if res["truncated"]:
+        print("  ... (truncated to token budget)")
+    return 0
+
+
+def _cmd_path(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).path(args.source, args.target, k=args.k).to_dict()
+    if not res["paths"]:
+        print(f"no path found from {res['source']} to {res['target']}")
+        return 0
+    for i, p in enumerate(res["paths"], 1):
+        print(f"path {i} (likelihood {p['likelihood']}): " + " -> ".join(p["nodes"]))
+        for step in p["steps"]:
+            cites = " ".join(_fmt_citation(c) for c in step["citations"])
+            print(
+                f"  {step['subject']} -{step['predicate']}-> {step['object']}"
+                f"  [{step['tag']}] {cites}"
+            )
+    return 0
+
+
+def _cmd_explain(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).why(args.node).to_dict()
+    print(f"why: {res['name']}")
+    for c in res["claims"]:
+        cites = " ".join(_fmt_citation(x) for x in c["citations"])
+        neg = " (negated)" if c["polarity"] == "neg" else ""
+        when = f"  t_valid={c['t_valid']}" if c["t_valid"] else ""
+        print(
+            f"  {c['subject']} -{c['predicate']}-> {c['object']}{neg}"
+            f"  [{c['tag']} {c['confidence']}]{when} {cites}"
+        )
+    if res["rationale"]:
+        print("rationale:")
+        for r in res["rationale"]:
+            print(f"  - {r}")
     return 0
 
 
@@ -68,14 +139,18 @@ def _cmd_build(args: argparse.Namespace) -> int:
         timings_ms=result.timings_ms,
         ie_stats=result.ie_stats,
         er_stats=result.er_stats,
+        graph_stats=result.graph_stats,
     )
     ie = result.ie_stats
     er = result.er_stats
+    gs = result.graph_stats
     print(
         f"built graph: {len(result.results)} docs, {len(result.nodes)} nodes, "
         f"{len(result.edges)} edges "
         f"({ie.get('entities', 0)} entities, {ie.get('relations', 0)} relations, "
-        f"{er.get('canonical_entities', 0)} canonical merges)"
+        f"{er.get('canonical_entities', 0)} canonical merges, "
+        f"{gs.get('claims', 0)} claims, {gs.get('communities', 0)} communities, "
+        f"{gs.get('chunks', 0)} chunks)"
     )
     print(f"  {paths.graph_json}")
     print(f"  {paths.report}")
@@ -112,6 +187,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_audit.add_argument("path", help="corpus path to resolve")
     p_audit.add_argument("-o", "--output", help="write the audit markdown to this path")
     p_audit.set_defaults(func=_cmd_er_audit)
+
+    p_query = sub.add_parser("query", help="hybrid search over a corpus (BM25 + graph PPR)")
+    p_query.add_argument("path", help="corpus path to build and query")
+    p_query.add_argument("query", help="natural-language query")
+    p_query.add_argument("-k", type=int, default=5, help="number of hits (default 5)")
+    p_query.set_defaults(func=_cmd_query)
+
+    p_path = sub.add_parser("path", help="maximum-likelihood path(s) between two entities")
+    p_path.add_argument("path", help="corpus path to build")
+    p_path.add_argument("source", help="source entity (id or name)")
+    p_path.add_argument("target", help="target entity (id or name)")
+    p_path.add_argument("-k", type=int, default=1, help="number of paths (default 1)")
+    p_path.set_defaults(func=_cmd_path)
+
+    p_explain = sub.add_parser("explain", help="cited claims explaining an entity")
+    p_explain.add_argument("path", help="corpus path to build")
+    p_explain.add_argument("node", help="entity to explain (id or name)")
+    p_explain.set_defaults(func=_cmd_explain)
 
     return parser
 

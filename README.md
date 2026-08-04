@@ -34,9 +34,14 @@ Unknown extensions fall back to plain text; a format needing a missing extra is 
 uv tool install textgraph        # or: pipx install textgraph
 textgraph build ./case-files -o textgraph-out
 # → textgraph-out/graph.json, GRAPH_REPORT.md, graph.html, schema.yaml, manifest.json
+
+# Then query the graph directly — bounded, byte-cited answers, no LLM required:
+textgraph query   ./case-files "who transferred funds to whom"
+textgraph path    ./case-files "Acme Corp" "Gamma Holdings"
+textgraph explain ./case-files "Acme Corp"
 ```
 
-Open `GRAPH_REPORT.md` for orientation (god nodes, rationale, defined terms, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer.
+Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
 
 ## Why it exists
 
@@ -87,11 +92,11 @@ flowchart TD
         L2 --> L3 --> L4 --> L5
     end
 
-    subgraph RETR["⚪ Graph &amp; retrieval — Phase 4+"]
+    subgraph RETR["🟢 Graph &amp; retrieval — Phase 4 (zero LLM, deterministic)"]
         direction TB
-        L6["L6 · Bi-temporal graph<br/><i>reified Claims + provenance</i>"]
-        L7["L7 · Analytics<br/><i>communities · god nodes · bridges</i>"]
-        L8["L8 · Retrieval<br/><i>hybrid + Personalized PageRank</i>"]
+        L6["L6 · Claim reification<br/><i>reified Claims + t_valid provenance</i>"]
+        L7["L7 · Analytics<br/><i>PageRank · communities · bridges · contradictions</i>"]
+        L8["L8 · Retrieval<br/><i>BM25 + Personalized PageRank + RRF</i>"]
         L6 --> L7 --> L8
     end
 
@@ -106,14 +111,33 @@ flowchart TD
 
 ## Status
 
-🟢 **Phase 3 complete — entities now resolve to canonical identities (L0–L3, L5).**
+🟢 **Phase 4 complete — an agent can now query the graph (L0–L8 + MCP).**
 
 - **L0 ingestion** across markdown, plain text, HTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs, and transcripts (PDF behind the `[ingest]` extra), each producing a `CanonicalDoc` + span-carrying block tree + hierarchical chunks.
 - **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …). Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
 - **L2 + L3 encoder IE** — the build now extracts **entities** (Organization, Person, Money, Account, Date, Email) and **typed relations** (`TRANSFERRED` with amount, `CONTROLS`, `BENEFICIAL_OWNER_OF`, `DIRECTOR_OF`, `ASSOCIATED_WITH`), tagged `EXTRACTED`. Coreference-lite resolves `it`/`the company` to the nearest org (relations so resolved are tagged `INFERRED`), and **negation/modality are preserved** (`did not transfer` → negated; `may be linked` → hedged). The default backend is deterministic and model-free (CPU-only, CI-safe); a GLiNER backend lives behind the `[ie]` extra.
 - **L5 entity resolution** — alias entities collapse to one canonical identity: `Acme Corp` / `Acme Corporation` / `ACME` → **"Acme Corporation"**, linked non-destructively via `SAME_AS` (tagged `INFERRED`, reversible, span-cited). Deterministic blocking (suffix-stripped / acronym / token keys) → Jaro-Winkler + **relational shared-neighbour** scoring → complete-linkage clustering that blocks the over-merge catastrophe. `textgraph er audit` surfaces every proposed merge; B-cubed F1 is gated in CI. Splink (Fellegi-Sunter) is the optional `[er]` backend.
-- **L9 artifacts**: byte-stable `graph.json`, `GRAPH_REPORT.md` (entities, key relationships, resolved SAME_AS clusters, 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml`, and `manifest.json` (per-layer counts + coref coverage + blocking stats).
-- CI gates all of it: lint, strict types, a byte-identical **determinism** gate (models pinned/seeded), 100% edge-provenance re-verification across the full four-tier taxonomy, and a B-cubed ER-quality floor.
+- **L6 claim reification** — every relation edge becomes a first-class, citable **`Claim`** node (subject/predicate/object/polarity/modality/confidence) with a shallow temporal window: `t_valid` is grounded to the nearest `Date` in the same sentence (full bi-temporal invalidation is Phase 5). The direct edge is kept, so traversal is unchanged; the Claim is what makes *why* / *timeline* / *contradictions* answerable.
+- **L7 analytics** (pure-Python, deterministic) — weighted **PageRank** + **Brandes betweenness**, **label-propagation communities** with automatic c-TF-IDF labels, plus diagnostics folded straight into the graph: centrality/community written onto entity nodes, **god nodes** (central on both measures), **bridges**, orphans, and **contradictions** surfaced as `CONTRADICTS` edges. Leiden is the optional `[graph]` upgrade.
+- **L8 retrieval** — the **HippoRAG-style dual-node graph** (entities + `Chunk` passages) powers eight typed, bounded, **cited** tools: `search` (hybrid pure-Python **BM25 + Personalized PageRank fused with RRF**, local/global routing), `neighbors`, `path` (maximum-likelihood, shortest under `-log(confidence)`), `why`, `timeline`, `contradictions`, `communities`, `stats`. Every result is a token-budgeted context pack where each row carries a `[doc:start-end]` byte citation — never raw Cypher (G6).
+- **MCP + CLI** — the same `QueryEngine` drives the MCP tool surface (`textgraph.mcp`, stdio server behind the `[mcp]` extra) and three new CLI verbs: `textgraph query`, `textgraph path`, `textgraph explain`.
+- **L9 artifacts**: byte-stable `graph.json` (now including Claims, Chunks, centrality/community properties, and CONTRADICTS edges), `GRAPH_REPORT.md` (entities, relationships, resolved SAME_AS clusters, **communities**, **contradictions**, 10 grounded questions), a self-contained `graph.html` explorer, `schema.yaml`, and `manifest.json` (per-layer L0–L8 counts + coref/blocking stats). First retrieval **[benchmark](BENCHMARKS.md)** publishes recall@k / MRR *with* tokens-per-query and latency ("no number without its cost").
+- CI gates all of it: lint, strict types, a byte-identical **determinism** gate (models pinned/seeded), 100% edge-provenance re-verification across the full four-tier taxonomy, a B-cubed ER-quality floor, and a tool-only **agent-session** integration test.
+
+```mermaid
+flowchart LR
+    Q["🔎 agent query"] --> ENG["L8 QueryEngine<br/><i>8 typed tools</i>"]
+    subgraph DUAL["Dual-node retrieval graph"]
+        direction TB
+        CH["Chunk passages<br/><i>BM25 lexical</i>"]
+        EN["Entities + Claims<br/><i>Personalized PageRank</i>"]
+        CH -- MENTIONS --> EN
+    end
+    ENG -- lexical --> CH
+    ENG -- associative --> EN
+    CH & EN --> RRF["Reciprocal Rank Fusion<br/>+ local/global routing"]
+    RRF --> OUT["📦 bounded, cited context pack<br/><i>[doc:start-end] on every row</i>"]
+```
 
 ### What Phase 1 does to each file
 
@@ -178,7 +202,15 @@ graph LR
 
 > **Phase 3 update:** `Acme Corp`, `Acme Corporation`, and `ACME` now collapse into one canonical **"Acme Corporation"** node via reversible `SAME_AS` links, while `Alpha Bank` stays separate. Run `textgraph er audit ./case-files` to review every proposed merge with its match score.
 
-Next: **Phase 4** — retrieval (dual-node graph + Personalized PageRank + the MCP tool surface) so an agent can actually query the graph. See [PLAN.md](PLAN.md) for the roadmap.
+> **Phase 4 update:** the graph is now queryable. Ask it directly — every answer comes back bounded and byte-cited:
+>
+> ```bash
+> textgraph query   ./case-files "who transferred funds to whom"
+> textgraph path    ./case-files "Acme Corp" "Gamma Holdings"   # maximum-likelihood chain
+> textgraph explain ./case-files "Acme Corp"                     # cited claims, with t_valid
+> ```
+
+Next: **Phase 5** — full bi-temporal invalidation (claims that supersede each other over time) and the persistent storage backend. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 
