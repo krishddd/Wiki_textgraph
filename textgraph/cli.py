@@ -220,6 +220,19 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_console(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    from textgraph.console import build_engine, serve
+
+    print(f"building graph from {root} ...")
+    engine = build_engine(root)
+    serve(engine, host=args.host, port=args.port)
+    return 0
+
+
 def _cmd_er_audit(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -376,6 +389,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("-o", "--output", default="textgraph-out", help="artifact directory")
     p_watch.add_argument("--interval", type=float, default=2.0, help="poll interval seconds")
     p_watch.set_defaults(func=_cmd_watch)
+
+    p_console = sub.add_parser("console", help="serve the local web console over the graph")
+    p_console.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_console.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
+    p_console.add_argument("--port", type=int, default=8765, help="bind port (default 8765)")
+    p_console.set_defaults(func=_cmd_console)
 
     return parser
 

@@ -44,6 +44,9 @@ textgraph contradictions ./case-files                # conflicting assertions, c
 
 # Keep the graph in sync with a live case folder (incremental, only re-extracts edits):
 textgraph watch ./case-files -o textgraph-out
+
+# ...or explore all eight tools in a local, dependency-free web console:
+textgraph console ./case-files          # -> http://127.0.0.1:8765
 ```
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
@@ -226,7 +229,9 @@ graph LR
 > textgraph build ./case-files --llm     # adds GENERATED community summaries
 > ```
 
-Next: finishing **Phase 6** — a local `textgraph console` UI and packaging polish — the v1.0 ship point. See [PLAN.md](PLAN.md) for the roadmap.
+> **Phase 6 update:** the opt-in LLM pass (L4, `GENERATED`-tagged, off by default) and a dependency-free local **`textgraph console`** web UI have landed — all eight typed tools in the browser, every row cited. Packaging is verified (wheel + `textgraph` entry point).
+
+Next: the v1.0 version bump and release notes — the ship point. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 

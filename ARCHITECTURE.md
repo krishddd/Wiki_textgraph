@@ -204,6 +204,12 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   never touches `Config`, `config_hash`, or any artifact. An unconfigured `--llm` build
   skips L4 rather than failing.
 
+- **Local console (`textgraph/console/`).** `textgraph console` serves a dependency-free,
+  read-only web UI over the same `QueryEngine` + `call_tool` dispatcher the CLI and MCP
+  server use (G6 — one query surface, many formatters). Built on stdlib `http.server`;
+  the page is self-contained (inline CSS/JS, no CDN, G2). The request→response logic is a
+  pure `route()` function, so the whole API is unit-tested without binding a socket.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

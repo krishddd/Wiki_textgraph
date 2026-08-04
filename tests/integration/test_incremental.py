@@ -45,6 +45,25 @@ def test_cache_is_populated_and_reused(tmp_path: Path) -> None:
     assert len(list(cache.dir.glob("*.json"))) == n_files
 
 
+def test_incremental_stays_byte_identical_after_modify_and_delete(tmp_path: Path) -> None:
+    # The G5 guarantee must hold for edits and removals, not just additions: an
+    # incremental rebuild off a warm cache must byte-match a full build every time.
+    work = tmp_path / "corpus"
+    shutil.copytree(DOCS, work)
+    cache = tmp_path / "cache"
+    build(work, cache_dir=cache)  # warm the cache
+
+    edited = sorted(work.glob("*.md"))[0]
+    edited.write_text(
+        edited.read_text(encoding="utf-8") + "\nEcho Ltd controls Foxtrot Inc.\n",
+        encoding="utf-8",
+    )
+    assert _graph_bytes(build(work, cache_dir=cache)) == _graph_bytes(build(work))
+
+    sorted(work.glob("*.md"))[-1].unlink()
+    assert _graph_bytes(build(work, cache_dir=cache)) == _graph_bytes(build(work))
+
+
 def test_editing_one_file_only_reextracts_it(tmp_path: Path) -> None:
     work = tmp_path / "corpus"
     shutil.copytree(DOCS, work)

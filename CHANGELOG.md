@@ -6,6 +6,18 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 6 (in progress): local console + packaging
+- **`textgraph console <path>`** — a dependency-free, read-only web UI over the L8
+  `QueryEngine` (`textgraph/console/`): all eight typed tools (search / neighbors / path
+  / why / timeline / contradictions / communities / stats) in the browser, each result
+  cited, validity windows shown for temporal claims. Built on stdlib `http.server`; the
+  page is self-contained (inline CSS/JS, no CDN, G2) and theme-aware. Serves a corpus or
+  a persisted `.duckdb` snapshot. Routing is a pure `route()` function, unit-tested
+  without a socket (+6 tests).
+- **Packaging verified for ship:** wheel builds cleanly and bundles the new packages
+  (`console`, `l4_llm_optional`, `store/duckdb_store`, `watch`) with the `textgraph`
+  console-script entry point.
+
 ### Added — Phase 6 (in progress): optional LLM pass (L4)
 - **Model-authored community summaries, quarantined by tag.** Opt-in L4
   (`l4_llm_optional/`) asks an LLM to summarize the largest L7 communities using *only*

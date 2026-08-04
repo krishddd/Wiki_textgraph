@@ -74,6 +74,9 @@ ignore = []
 # graph_html.py embeds a self-contained HTML/JS template; long template lines are
 # intentional and not real code lines.
 "textgraph/l9_artifacts/graph_html.py" = ["E501"]
+# console/page.py embeds a self-contained HTML/JS console; long template lines are
+# intentional (inline styles + JS), not real code lines.
+"textgraph/console/page.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -82,6 +85,7 @@ strict = true
 files = [
     "textgraph/core",
     "textgraph/store",
+    "textgraph/console",
     "textgraph/mcp",
     "textgraph/l0_ingest",
     "textgraph/l1_structure",
