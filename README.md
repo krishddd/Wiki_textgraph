@@ -38,7 +38,12 @@ textgraph build ./case-files -o textgraph-out
 # Then query the graph directly — bounded, byte-cited answers, no LLM required:
 textgraph query   ./case-files "who transferred funds to whom"
 textgraph path    ./case-files "Acme Corp" "Gamma Holdings"
-textgraph explain ./case-files "Acme Corp"
+textgraph explain ./case-files "Acme Corp"           # cited claims + validity windows
+textgraph timeline ./case-files "Acme Corp"          # what was true, and when it changed
+textgraph contradictions ./case-files                # conflicting assertions, cited
+
+# Keep the graph in sync with a live case folder (incremental, only re-extracts edits):
+textgraph watch ./case-files -o textgraph-out
 ```
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
@@ -111,7 +116,7 @@ flowchart TD
 
 ## Status
 
-🟢 **Phase 4 complete — an agent can now query the graph (L0–L8 + MCP).**
+🟢 **Phase 5 complete — bi-temporal graph, persistent storage, and incremental `watch` (L0–L8 + MCP).**
 
 - **L0 ingestion** across markdown, plain text, HTML, DOCX, ODT, RTF, EPUB, JSON/YAML/TOML, logs, and transcripts (PDF behind the `[ingest]` extra), each producing a `CanonicalDoc` + span-carrying block tree + hierarchical chunks.
 - **L1 structure parse** (zero models): sections, links, definitions, citations, cross-references, transcript threads, log templates, structured fields, and **Rationale / Requirement nodes** (WHY / DECISION / MUST / SHALL …). Every edge is `STRUCTURAL` with a re-verifiable byte-range citation.
@@ -210,7 +215,9 @@ graph LR
 > textgraph explain ./case-files "Acme Corp"                     # cited claims, with t_valid
 > ```
 
-Next: **Phase 5** — full bi-temporal invalidation (claims that supersede each other over time) and the persistent storage backend. See [PLAN.md](PLAN.md) for the roadmap.
+> **Phase 5 update:** the graph is now bi-temporal and incremental. Corrections *invalidate* rather than delete — `Acme Corp transferred $1M to Beta Ltd` (2026-05-01) is superseded by a dated correction, its window closed to `[2026-05-01, 2026-06-01)` with a cited `SUPERSEDES` edge, and `textgraph timeline` shows both. `textgraph watch ./case-files` keeps artifacts in sync, re-extracting only edited files; `textgraph build --store g.duckdb` persists the graph so it reloads without a rebuild.
+
+Next: **Phase 6** — the opt-in LLM pass (L4, `GENERATED`-tagged), UI/console polish, and packaging — the v1.0 ship point. See [PLAN.md](PLAN.md) for the roadmap.
 
 ## Specification documents
 

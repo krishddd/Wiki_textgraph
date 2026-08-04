@@ -35,3 +35,34 @@ def test_build_json_only(tmp_path: Path) -> None:
 
 def test_build_missing_path_errors(tmp_path: Path) -> None:
     assert main(["build", str(tmp_path / "nope")]) == 2
+
+
+DOCS = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "docs")
+TEMPORAL = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "temporal")
+
+
+@pytest.mark.parametrize(
+    ("argv", "needle"),
+    [
+        (["query", DOCS, "who transferred funds"], "search:"),
+        (["path", DOCS, "Acme Corp", "Gamma Holdings"], "path 1"),
+        (["explain", DOCS, "Acme Corp"], "why: Acme Corp"),
+        (["neighbors", DOCS, "Acme Corp"], "neighbors of Acme Corp"),
+        (["timeline", TEMPORAL, "Acme Corp"], "timeline: Acme Corp"),
+        (["contradictions", TEMPORAL], "contradictions: 1"),
+        (["communities", DOCS], "communities:"),
+        (["stats", DOCS], "stats:"),
+    ],
+)
+def test_query_verbs(argv: list[str], needle: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(argv) == 0
+    assert needle in capsys.readouterr().out
+
+
+def test_explain_shows_superseded_window(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["explain", TEMPORAL, "Acme Corp"]) == 0
+    assert "SUPERSEDED" in capsys.readouterr().out
+
+
+def test_query_verb_missing_path_errors(tmp_path: Path) -> None:
+    assert main(["stats", str(tmp_path / "nope")]) == 2

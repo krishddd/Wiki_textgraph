@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from textgraph.core.config import Config
+from textgraph.core.incremental import DocIECache
 from textgraph.core.layout import IngestResult
 from textgraph.l0_ingest import ingest_path
 from textgraph.l0_ingest.base import UnsupportedFormat
@@ -84,10 +85,19 @@ def _iter_corpus_files(root: Path) -> list[Path]:
     )
 
 
-def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
-    """Run L0 + L1 over a corpus path and return the assembled graph."""
+def build(
+    root: str | Path, *, config: Config | None = None, cache_dir: str | Path | None = None
+) -> BuildResult:
+    """Run the full pipeline over a corpus path and return the assembled graph.
+
+    ``cache_dir`` enables incremental rebuilds (G5): per-document IE is cached by
+    ``(doc_id, config_hash)``, so editing one file only re-extracts that file. The
+    output is byte-identical to a full build.
+    """
     config = config or Config()
     root = Path(root)
+    cache = DocIECache(cache_dir) if cache_dir is not None else None
+    config_hash = config.config_hash()
 
     results: list[IngestResult] = []
     skipped: list[str] = []
@@ -113,11 +123,29 @@ def build(root: str | Path, *, config: Config | None = None) -> BuildResult:
     if config.extract_ie:
         t2 = time.perf_counter()
         for ir in results:
-            ie = run_ie(ir.text, blocks=ir.blocks, backend=config.ie_backend)
-            pron_total += ie.pronouns_total
-            pron_resolved += ie.pronouns_resolved
-            relation_count += len(ie.relations)
-            ie_n, ie_e = emit_ie(ir, ie)
+            cached = cache.get(ir.doc_id, config_hash) if cache else None
+            if cached is not None:
+                ie_n = cached["nodes"]
+                ie_e = cached["edges"]
+                pron_total += int(cached["pronouns_total"])
+                pron_resolved += int(cached["pronouns_resolved"])
+                relation_count += int(cached["relations"])
+            else:
+                ie = run_ie(ir.text, blocks=ir.blocks, backend=config.ie_backend)
+                pron_total += ie.pronouns_total
+                pron_resolved += ie.pronouns_resolved
+                relation_count += len(ie.relations)
+                ie_n, ie_e = emit_ie(ir, ie)
+                if cache:
+                    cache.put(
+                        ir.doc_id,
+                        config_hash,
+                        ie_n,
+                        ie_e,
+                        pronouns_total=ie.pronouns_total,
+                        pronouns_resolved=ie.pronouns_resolved,
+                        relations=len(ie.relations),
+                    )
             for n in ie_n:
                 existing = entity_nodes.get(n.node_id)
                 if existing is None:

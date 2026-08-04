@@ -164,6 +164,25 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   The fixture set runs with zero downloads; LoCoMo / LongMemEval-S run only when their
   data is present locally, so CI never fetches a corpus.
 
+## Phase 5 (implemented): storage + incrementality
+
+- **Persistent store (`store/duckdb_store.py`, `[graph]`/`[er]` extra).** A
+  `DuckDBGraphStore` implements the `GraphStore` ABC over a DuckDB file — labels/
+  properties/spans as JSON, the confidence tag as its enum value — so the round-trip is
+  exact and a graph **reloads from disk without re-running the pipeline**. Import-guarded
+  (raises `UnsupportedFormat`, never a hard failure in the lean install). `textgraph
+  build --store g.duckdb` persists; any query verb given a `.duckdb` path loads it.
+- **Incremental rebuild (`core/incremental.py`, G5).** The expensive layer (per-document
+  IE) is a pure function of `(doc bytes, config)`, so its emitted nodes/edges are cached
+  keyed by `(doc_id, config_hash)` — and `doc_id` *is* the blake3 of the bytes, so an
+  edit changes the key and only that file is re-extracted. The cross-document layers
+  (L5–L8) always re-run; the result is **byte-identical** to a full build (verified in
+  CI). `build(root, cache_dir=…)` opts in.
+- **`textgraph watch <dir>` (`watch.py`).** Content-addressed change detection (blake3,
+  not mtime) triggers an incremental rebuild + artifact re-write on every edit. It
+  refuses an output/cache dir nested inside the watched corpus, which would otherwise
+  re-ingest its own `graph.json`/`.md`/`.html` and loop.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

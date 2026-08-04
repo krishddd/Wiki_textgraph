@@ -6,22 +6,33 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
-### Added — Phase 5 (in progress): bi-temporal claims (L6)
-- **Invalidation, not deletion.** When two claims about the same
-  `(subject, predicate, object)` disagree in polarity, the later-dated one now
+### Added — Phase 5: temporal + incremental
+- **Bi-temporal claims (L6) — invalidation, not deletion.** When two claims about the
+  same `(subject, predicate, object)` disagree in polarity, the later-dated one
   *supersedes* the earlier: the earlier claim's `t_invalid` is closed to the later
   claim's `t_valid`, and a cited `SUPERSEDES` edge records the correction. The
   superseded claim stays in the graph, so an agent can still ask *what was believed
-  true, and when it changed* (`l6_graph_model/temporal.py`).
-- **Deterministic time source (G1).** Ordering uses only **valid-time dates stated in
-  the corpus** (`t_valid`, compared lexically — ISO dates sort chronologically); there
-  is no wall-clock. A conflict whose claims aren't both dated can't be ordered, so it
-  is left open (never invalidated by a guess) and still surfaces via L7 `CONTRADICTS`.
-- **Surfaced everywhere:** `ClaimView` gains `t_invalid` + a `status` (`current` /
-  `superseded`); `timeline` / `why` / `contradictions` show the `[t_valid, t_invalid)`
-  window; `textgraph explain` renders `valid=[…, …) SUPERSEDED`. `manifest.json` reports
-  `supersedes` counts; `graph.json` stays byte-identical. New `invalidate_claims` config
-  flag (default on). +6 tests incl. a `corpora/temporal` fixture; 176 total.
+  true, and when it changed* (`l6_graph_model/temporal.py`). Ordering uses only
+  **valid-time dates stated in the corpus** (compared lexically — ISO dates sort
+  chronologically); no wall-clock (G1). An undated conflict can't be ordered, so it's
+  left open and still surfaces via L7 `CONTRADICTS`. `ClaimView` gains `t_invalid` +
+  `status`; `timeline` / `why` / `contradictions` and `textgraph explain` show the
+  `[t_valid, t_invalid)` window. New `invalidate_claims` config flag.
+- **Persistent `DuckDBGraphStore`** (`store/duckdb_store.py`, behind `[graph]`/`[er]`).
+  Import-guarded; serializes the assembled graph to a DuckDB file with an **exact**
+  Node/Edge round-trip, so a graph **loads from disk without a rebuild**. `textgraph
+  build --store PATH.duckdb` persists; any query verb given a `.duckdb` path loads it.
+- **Incremental rebuild (G5).** `build(..., cache_dir=…)` caches per-document IE keyed
+  by `(doc_id, config_hash)` (`core/incremental.py`), so editing one file re-extracts
+  only that file — and the incremental build is **byte-identical** to a full build.
+- **`textgraph watch <dir>`** (`watch.py`): content-addressed change detection (blake3,
+  not mtime) triggers an incremental rebuild + artifact re-write; refuses an output/cache
+  dir nested inside the watched corpus (would re-ingest its own artifacts).
+- **CLI parity:** all eight L8 tools now have verbs — `neighbors`, `timeline`,
+  `contradictions`, `communities`, `stats` join `query` / `path` / `explain`, over the
+  same `QueryEngine` the MCP server uses.
+- +17 tests (temporal, incremental, watch, DuckDB round-trip, CLI verbs); 193 total,
+  determinism + provenance hold across the new `corpora/temporal` fixture.
 
 ### Added — Phase 4: Retrieval (L6 + L7 + L8 + MCP)
 - **The graph is queryable.** Same `QueryEngine` drives the new CLI verbs

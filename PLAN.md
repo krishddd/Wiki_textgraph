@@ -33,7 +33,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | 2 | Encoder IE (L2+L3) | 4 units | Coref is highest-ROI; pin weights, keep determinism green. |
 | 3 | Entity resolution (L5) | 3 units | Blocking → Splink scoring → non-destructive clustering. |
 | **4** | Retrieval (L6+L7+L8) | 4 units | **Done.** Claims + analytics + dual-node hybrid retrieval + MCP; `BENCHMARKS.md`. |
-| **5** | Temporal + incremental | 3 units | **In progress.** Bi-temporal invalidation (L6) ✅; DuckDB backend + incremental `watch` mode next. |
+| **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
 | 6 | Optional LLM + UI polish + packaging | 3 units | **v1.0 ship point.** |
 | 7 | GQL / standards layer | 2 units | Extension. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
@@ -57,18 +57,21 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
 
 ---
 
-## Phase 5 — Definition of Done (in progress)
+## Phase 5 — Definition of Done (met)
 
 - [x] **Bi-temporal claims (L6)**: later-dated opposite-polarity claims supersede
       earlier ones — `t_invalid` closed + cited `SUPERSEDES` edges (invalidation, not
       deletion). Ordering from in-text dates only (no wall-clock, G1); undated conflicts
       left open and surfaced via `CONTRADICTS`. `timeline`/`why`/`contradictions` +
       `explain` show the `[t_valid, t_invalid)` window. `corpora/temporal` fixture.
-- [ ] Persistent `DuckDBGraphStore` behind the `GraphStore` ABC (`[graph]`/duckdb extra)
-- [ ] Incremental rebuild: content-addressed cache keyed by `(doc blake3, config_hash)`;
-      re-ingest only changed files; `textgraph watch <dir>`
-- [ ] CLI parity: `timeline` / `contradictions` / `communities` / `stats` / `neighbors`
-      verbs (engine + MCP already expose them)
+- [x] Persistent `DuckDBGraphStore` behind the `GraphStore` ABC (`[graph]`/duckdb extra),
+      import-guarded; exact Node/Edge round-trip; `build --store` + `.duckdb` query paths
+      load without a rebuild.
+- [x] Incremental rebuild: per-document IE cache keyed by `(doc_id, config_hash)`;
+      byte-identical to a full build; `textgraph watch <dir>` (content-addressed change
+      detection, refuses nested output dir).
+- [x] CLI parity: `neighbors` / `timeline` / `contradictions` / `communities` / `stats`
+      verbs over the same `QueryEngine`; 193 tests; determinism holds.
 
 ## Phase 4 — Definition of Done (met)
 
