@@ -47,6 +47,9 @@ textgraph watch ./case-files -o textgraph-out
 
 # ...or open the interactive graph console (canvas viewer + all eight tools):
 textgraph console ./case-files          # -> http://127.0.0.1:8765
+
+# ...or query it in standard GQL (ISO/IEC 39075 / Cypher subset):
+textgraph gql ./case-files "MATCH (a:Organization)-[:CONTROLS*1..3]->(b) RETURN a.name, b.name"
 ```
 
 The console draws the graph the way an investigator reads it — nodes coloured by community and sized by PageRank, a communities sidebar with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, click-to-inspect for a node's cited claims and validity windows, and a path mode that traces the maximum-likelihood chain between two entities. Layout is precomputed server-side and deterministic, so the browser only ever *draws* it — no CDN, no physics engine, `graph.json` stays byte-identical.
@@ -233,7 +236,9 @@ graph LR
 
 > **Phase 6 update:** the opt-in LLM pass (L4, `GENERATED`-tagged, off by default) and a dependency-free local **`textgraph console`** web UI have landed — all eight typed tools in the browser, every row cited.
 
-**🎉 v1.0.0 is out** — the full L0–L9 stack, shipped. See the [CHANGELOG](CHANGELOG.md) for the release summary and [PLAN.md](PLAN.md) for the post-v1.0 extension roadmap (Phases 7–10).
+> **Phase 7 update:** TextGraph now speaks **standard GQL** (ISO/IEC 39075 / Cypher subset) — `textgraph gql ./case-files "MATCH (a)-[:CONTROLS*1..3]->(b) RETURN a.name, b.name"` — property-graph pattern matching with quantified paths, over the same graph the typed tools query. Read-only, so determinism and provenance are untouched.
+
+**🎉 v1.0.0 is out** — the full L0–L9 stack, shipped, plus the v1.1 interactive console and the Phase 7 GQL layer. See the [CHANGELOG](CHANGELOG.md) for details and [PLAN.md](PLAN.md) for the remaining extension roadmap (Phases 8–10: vision ingestion, access control, Graph-of-Thoughts).
 
 ## Specification documents
 

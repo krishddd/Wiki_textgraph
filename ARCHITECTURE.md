@@ -210,6 +210,28 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   the page is self-contained (inline CSS/JS, no CDN, G2). The request→response logic is a
   pure `route()` function, so the whole API is unit-tested without binding a socket.
 
+## Phase 7 (implemented): GQL / ISO-GQL standards layer (`textgraph/gql/`)
+
+- **Why.** A knowledge graph that speaks only its own API is a silo. ISO/IEC 39075 (GQL)
+  is the standard declarative language for property graphs; exposing a GQL surface lets any
+  enterprise agent query TextGraph the way it queries Neo4j / Memgraph / Kùzu, so the cited
+  context packs are portable across backends.
+- **What.** A pure-Python, deterministic GQL/Cypher *subset*: a `tokenizer` → recursive-descent
+  `parser` → AST → `GQLEngine` executor that runs against the **same** `(nodes, edges)` the L8
+  `QueryEngine` holds. It **only reads** the graph, so G1/G2/G3 are untouched and byte-stable
+  `graph.json` is unaffected; every result row is stably ordered (deterministic), and
+  provenance (`source_spans`) stays reachable through edge properties.
+- **Coverage.** Node patterns with labels + property maps; relationships in every direction
+  (`->`, `<-`, `-`); **quantified/variable-length paths** `-[:T*min..max]->` (the ISO-GQL
+  feature that expresses multi-hop reachability) — loop-free and depth-capped so they always
+  terminate (G7); `WHERE` (`= <> < <= > >= CONTAINS STARTS WITH ENDS WITH IN`, `AND`/`OR`/`NOT`);
+  `RETURN` with `type()`/`labels()`/`id()`, `count(*)` aggregation, `AS`, `DISTINCT`, `ORDER BY`,
+  `SKIP`, `LIMIT`.
+- **One graph, two surfaces.** The typed L8 tools and the GQL engine read a single property
+  graph — the pattern-based tools (`neighbors`, `path`, `contradictions`) round-trip to
+  equivalent GQL, proving the surface is faithful. Hybrid `search` (BM25+PPR) and aggregate
+  `why` stay tool-only by design — they aren't graph *patterns*.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

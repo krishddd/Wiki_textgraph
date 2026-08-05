@@ -89,6 +89,7 @@ files = [
     "textgraph/core",
     "textgraph/store",
     "textgraph/console",
+    "textgraph/gql",
     "textgraph/mcp",
     "textgraph/l0_ingest",
     "textgraph/l1_structure",

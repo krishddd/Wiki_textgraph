@@ -9,6 +9,8 @@ Build:
 Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``query`` (hybrid search), ``path`` (max-likelihood), ``explain`` (why),
     ``neighbors``, ``timeline``, ``contradictions``, ``communities``, ``stats``.
+  * ``gql`` — a standard GQL (ISO-GQL/Cypher subset) query over the property graph.
+  * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
 
 The human CLI and the MCP tool surface are built off the same underlying result
 objects, formatted two ways — never two drifting code paths (§6.4).
@@ -220,6 +222,40 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_gql(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    from textgraph.gql import GQLEngine, GQLError
+
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+    else:
+        result = build(root)
+        nodes, edges = result.nodes, result.edges
+    engine = GQLEngine(nodes, edges)
+    try:
+        res = engine.query(args.query)
+    except GQLError as exc:
+        print(f"gql error: {exc}", file=sys.stderr)
+        return 2
+
+    def cell(v: object) -> str:
+        if isinstance(v, list):
+            return " -> ".join(str(x) for x in v)
+        return "" if v is None else str(v)
+
+    print(" | ".join(res.columns))
+    print("-" * max(3, len(" | ".join(res.columns))))
+    for row in res.rows:
+        print(" | ".join(cell(v) for v in row))
+    print(f"({len(res.rows)} row{'s' if len(res.rows) != 1 else ''})")
+    return 0
+
+
 def _cmd_console(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -389,6 +425,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("-o", "--output", default="textgraph-out", help="artifact directory")
     p_watch.add_argument("--interval", type=float, default=2.0, help="poll interval seconds")
     p_watch.set_defaults(func=_cmd_watch)
+
+    p_gql = sub.add_parser("gql", help="run a GQL (ISO-GQL/Cypher subset) query over the graph")
+    p_gql.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_gql.add_argument(
+        "query", help='GQL query, e.g. "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.name"'
+    )
+    p_gql.set_defaults(func=_cmd_gql)
 
     p_console = sub.add_parser("console", help="serve the local web console over the graph")
     p_console.add_argument("path", help="corpus path or .duckdb snapshot")

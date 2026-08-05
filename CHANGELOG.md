@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 7: GQL / ISO-GQL standards layer (`textgraph/gql/`)
+- **A standard graph-query surface over the property graph.** A pure-Python,
+  deterministic subset of **GQL (ISO/IEC 39075) / Cypher** — tokenizer + recursive-descent
+  parser + executor — so enterprise agents can query TextGraph the way they query any GQL
+  backend (Neo4j, Memgraph, Kùzu), not through a bespoke API. Runs against the *same*
+  `(nodes, edges)` the L8 tools use; **read-only, so G1/G2/G3 are untouched** and
+  provenance stays reachable via edge properties.
+- **Supported:** property-graph pattern matching `(a:Label {k:v})-[r:TYPE]->(b)` in all
+  directions; **quantified (variable-length) relationships** `-[:T*min..max]->` (loop-free,
+  depth-capped, G7); `WHERE` with `= <> < <= > >= CONTAINS STARTS WITH ENDS WITH IN`,
+  `AND`/`OR`/`NOT`; `RETURN` with properties, `type()`/`labels()`/`id()`, `count(*)`
+  aggregation and `AS`; `DISTINCT`, `ORDER BY … ASC|DESC`, `SKIP`, `LIMIT`. Result rows are
+  stably ordered (deterministic).
+- **CLI:** `textgraph gql <corpus|graph.duckdb> "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.name"`.
+- **DoD met:** the pattern-based tools **round-trip** — `neighbors`, `path` (quantified
+  pattern), and `contradictions` expressed as GQL return results matching the typed tools
+  on a fixture. +17 tests; 233 total, coverage 89%.
+
 ### Changed — v1.1: retrieval quality + wider coverage gate
 - **Hybrid search reranking (`l8_retrieval/rerank.py`).** The raw RRF fusion broke ties
   by node id, which (since `chunk:` < `entity:`) buried every answer-entity beneath every

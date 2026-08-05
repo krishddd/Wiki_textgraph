@@ -36,7 +36,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **5** | Temporal + incremental | 3 units | **Done.** Bi-temporal invalidation (L6), DuckDB persistent store, incremental cache + `watch`, CLI parity. |
 | **6** | Optional LLM + UI polish + packaging | 3 units | **Done — v1.0.0 shipped.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅, version bump + release ✅. |
 | **v1.1** | Interactive console + retrieval quality | 3.5 units | **Done.** Layout, canvas renderer, community sidebar, inspect, search, tag-filter, path mode, temporal slider, shared offline `graph.html` viewer, reranker (recall/MRR up), whole-package coverage gate. |
-| 7 | GQL / standards layer | 2 units | Extension. |
+| **7** | GQL / standards layer | 2 units | **Done.** Pure-Python ISO-GQL/Cypher subset (`textgraph/gql/`) — pattern matching + quantified paths + WHERE/RETURN/aggregation; `textgraph gql` CLI; pattern-tools round-trip. |
 | 8 | Vision-native multimodal ingestion | 2 units | Extension. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
 | 10 | Dynamic agent reasoning (GoT) | 2 units | Extension. |
@@ -89,6 +89,20 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
       duckdb_store, watch) with the `textgraph` console-script entry point
 - [x] **v1.0.0 shipped** (2026-08-04): version bumped, CHANGELOG cut, tagged `v1.0.0`;
       the release workflow re-verifies determinism on the built wheel before publishing
+
+## Phase 7 — Definition of Done (met)
+
+- [x] Pure-Python, deterministic GQL (ISO/IEC 39075 / Cypher) subset over the property
+      graph: tokenizer + recursive-descent parser + executor (`textgraph/gql/`)
+- [x] Property-graph pattern matching in all directions + **quantified/variable-length
+      relationships** (`*min..max`, loop-free + depth-capped, G7)
+- [x] `WHERE` (comparisons, string ops, `IN`, `AND`/`OR`/`NOT`), `RETURN` with
+      `type()`/`labels()`/`id()` + `count(*)` aggregation, `DISTINCT`, `ORDER BY`,
+      `SKIP`, `LIMIT`; stably-ordered deterministic rows
+- [x] `textgraph gql <corpus|.duckdb> "<query>"` CLI (also queries a persisted snapshot)
+- [x] Read-only surface over the same graph the L8 tools use — G1/G2/G3 untouched;
+      pattern-based tools (`neighbors`/`path`/`contradictions`) **round-trip** to GQL
+- [x] 17 tests; whole-package coverage stays ≥ 88% (89%); ruff + strict mypy green
 
 ## Phase 5 — Definition of Done (met)
 
