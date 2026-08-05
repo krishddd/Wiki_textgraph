@@ -66,10 +66,48 @@ class GQLEngine:
         return self.run(parse(text))
 
     def run(self, q: Query) -> QueryResult:
+        self._validate(q)
         bindings = self._match(q.pattern)
         if q.where is not None:
             bindings = [b for b in bindings if self._truth(q.where, b)]
         return self._project(q, bindings)
+
+    @staticmethod
+    def _validate(q: Query) -> None:
+        """Reject references to variables the pattern never declared (typo guard).
+
+        Without this, ``MATCH (:Entity) RETURN n.name`` silently returns rows of NULL
+        instead of telling the user ``n`` was never bound. ORDER BY is *not* checked
+        here — its keys reference RETURN columns/aliases, validated during projection.
+        """
+        declared = set(q.variables)
+        refs: set[str] = set()
+
+        def walk_expr(e: Any) -> None:
+            if isinstance(e, Property):
+                refs.add(e.var)
+            elif isinstance(e, FuncCall) and e.arg:
+                refs.add(e.arg)
+            elif isinstance(e, str):
+                refs.add(e)
+
+        def walk_where(c: Any) -> None:
+            if isinstance(c, BoolOp):
+                for x in c.clauses:
+                    walk_where(x)
+            elif isinstance(c, Not):
+                walk_where(c.clause)
+            elif isinstance(c, Comparison):
+                walk_expr(c.left)
+                walk_expr(c.right)
+
+        if q.where is not None:
+            walk_where(q.where)
+        for it in q.returns:
+            walk_expr(it.expr)
+        unknown = sorted(r for r in refs if r not in declared)
+        if unknown:
+            raise GQLError(f"unknown variable(s) not bound by the pattern: {', '.join(unknown)}")
 
     # -- pattern matching -------------------------------------------------------
 
@@ -150,6 +188,12 @@ class GQLEngine:
         for end, edges in self._expand(current, rp, target, blocked):
             if len(out) >= _MAX_ROWS:
                 return
+            # A reused variable must bind to the SAME element (so `(a)-[*]->(a)` means a
+            # cycle, not "any reachable node"). Skip candidates that violate the join.
+            if target.var and target.var in partial and partial[target.var] != end:
+                continue
+            if rp.var and rp.var in partial and partial[rp.var] != edges:
+                continue
             nb = dict(partial)
             nb["__path__"] = [*partial["__path__"], end]
             if target.var:

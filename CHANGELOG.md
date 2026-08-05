@@ -22,7 +22,20 @@ to Semantic Versioning.
 - **CLI:** `textgraph gql <corpus|graph.duckdb> "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.name"`.
 - **DoD met:** the pattern-based tools **round-trip** — `neighbors`, `path` (quantified
   pattern), and `contradictions` expressed as GQL return results matching the typed tools
-  on a fixture. +17 tests; 233 total, coverage 89%.
+  on a fixture.
+
+### Fixed — Phase 7 review (GQL hardening)
+- **Malformed integer clauses no longer crash.** `LIMIT 2.5`, `SKIP 1.5`, `*1.5..3` raised
+  a raw `ValueError` (an uncaught traceback at the CLI); they now raise a positioned
+  `GQLError`.
+- **Reused variables are a join constraint.** `(a)-[*1..2]->(a)` used to rebind `a` to
+  every reachable node (returning "any path"); it now correctly means a **cycle** — a
+  repeated variable must bind to the same element (proper Cypher/GQL semantics).
+- **Undeclared variables are rejected.** `MATCH (:Entity) RETURN n.name` (or `… IN foo`)
+  silently returned rows of NULL; it now errors with `unknown variable(s) not bound by the
+  pattern`, catching typos instead of hiding them.
+- **Negative number literals** (`WHERE n.x > -1`) now parse.
+- +4 regression tests; 237 total, coverage 89.5%.
 
 ### Changed — v1.1: retrieval quality + wider coverage gate
 - **Hybrid search reranking (`l8_retrieval/rerank.py`).** The raw RRF fusion broke ties

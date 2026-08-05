@@ -65,6 +65,13 @@ class Parser:
             raise GQLError(f"expected {want!r}, found {t.value or t.kind!r}", t.pos)
         return self._next()
 
+    def _int(self) -> int:
+        """Eat a NON-negative integer literal (hop counts, SKIP, LIMIT are integers)."""
+        t = self._eat("number")
+        if "." in t.value:
+            raise GQLError(f"expected an integer, found {t.value!r}", t.pos)
+        return int(t.value)
+
     # -- entry ------------------------------------------------------------------
 
     def parse(self) -> Query:
@@ -88,11 +95,11 @@ class Parser:
         skip = 0
         if self._at("keyword", "SKIP"):
             self._next()
-            skip = int(self._eat("number").value)
+            skip = self._int()
         limit = None
         if self._at("keyword", "LIMIT"):
             self._next()
-            limit = int(self._eat("number").value)
+            limit = self._int()
         if not self._at("eof"):
             t = self._peek()
             raise GQLError(f"unexpected trailing input {t.value!r}", t.pos)
@@ -159,11 +166,11 @@ class Parser:
                 self._next()
                 min_hops, max_hops = 1, _UNBOUNDED
                 if self._at("number"):
-                    min_hops = int(self._next().value)
+                    min_hops = self._int()
                     max_hops = min_hops
                 if self._at("punct", ".."):
                     self._next()
-                    max_hops = int(self._next().value) if self._at("number") else _UNBOUNDED
+                    max_hops = self._int() if self._at("number") else _UNBOUNDED
             self._eat("punct", "]")
         right_out = self._at("punct", "->")
         if not (self._at("punct", "-") or self._at("punct", "->")):
@@ -252,11 +259,18 @@ class Parser:
 
     def _literal(self) -> Literal:
         t = self._peek()
+        sign = 1
+        if t.kind == "punct" and t.value == "-":  # negative number literal
+            self._next()
+            t = self._peek()
+            if t.kind != "number":
+                raise GQLError(f"expected a number after '-', found {t.value or t.kind!r}", t.pos)
+            sign = -1
         if t.kind == "string":
             return Literal(self._next().value)
         if t.kind == "number":
             v = self._next().value
-            return Literal(float(v) if "." in v else int(v))
+            return Literal(sign * (float(v) if "." in v else int(v)))
         if t.kind == "keyword" and t.value in ("TRUE", "FALSE"):
             self._next()
             return Literal(t.value == "TRUE")

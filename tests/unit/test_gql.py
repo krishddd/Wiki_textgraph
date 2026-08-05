@@ -187,6 +187,45 @@ def test_execution_errors_raise_gqlerror() -> None:
         g.query("MATCH (n {name:'oops}) RETURN n")
 
 
+def test_float_where_integer_expected_is_a_clean_error() -> None:
+    # Regression: `LIMIT 2.5` / `*1.5..3` used to crash with a raw ValueError.
+    g = _engine()
+    for bad in (
+        "MATCH (n:Entity) RETURN n.name LIMIT 2.5",
+        "MATCH (n:Entity) RETURN n.name SKIP 1.5",
+        "MATCH (a)-[:R*1.5..3]->(b) RETURN b",
+    ):
+        with pytest.raises(GQLError):
+            g.query(bad)
+
+
+def test_negative_number_literals() -> None:
+    g = _engine()
+    # pagerank is always >= 0, so `> -1` keeps every entity and `< -1` keeps none.
+    assert g.query("MATCH (n:Entity) WHERE n.pagerank > -1 RETURN n.name").rows
+    assert g.query("MATCH (n:Entity) WHERE n.pagerank < -1 RETURN n.name").rows == []
+
+
+def test_unknown_variable_is_rejected() -> None:
+    # Regression: referencing a variable the pattern never bound used to silently
+    # return rows of NULL instead of flagging the typo.
+    g = _engine()
+    with pytest.raises(GQLError, match="unknown variable"):
+        g.query("MATCH (:Entity) RETURN n.name")
+    with pytest.raises(GQLError, match="unknown variable"):
+        g.query("MATCH (n:Entity) WHERE n.name IN foo RETURN n.name")
+
+
+def test_reused_variable_is_a_join_constraint() -> None:
+    # Regression: `(a)...->(a)` must mean a cycle back to the same node, not "any
+    # reachable node". Acme has no short cycle, but reaches others fine.
+    g = _engine()
+    cycle = g.query("MATCH (a {name:'Acme Corp'})-[*1..2]->(a) RETURN a.name").rows
+    reach = g.query("MATCH (a {name:'Acme Corp'})-[*1..2]->(b) RETURN b.name").rows
+    assert cycle == []  # no self-cycle
+    assert len(reach) > 0  # but plenty reachable
+
+
 def test_cli_gql_command(capsys: pytest.CaptureFixture[str]) -> None:
     from textgraph.cli import main
 
