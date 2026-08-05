@@ -39,6 +39,30 @@ def test_search_is_deterministic() -> None:
     assert qe.search("funds").to_dict() == qe.search("funds").to_dict()
 
 
+def test_rerank_surfaces_answer_entities_not_just_passages() -> None:
+    # The reranker interleaves entities with passages so a graph answer-entity isn't
+    # buried beneath every lexically-matching chunk. "who transferred funds" should put
+    # a party (Beta Ltd / Acme Corp) at the very top, not three chunks first.
+    qe = _engine()
+    hits = qe.search("who transferred funds to whom", k=5).hits
+    assert hits[0].kind == "entity"
+    names = [h.name for h in hits]
+    assert "Beta Ltd" in names and "Acme Corp" in names
+
+
+def test_rerank_cross_encoder_falls_back_without_extra() -> None:
+    from textgraph.l8_retrieval.model import SearchHit
+    from textgraph.l8_retrieval.rerank import rerank
+
+    hits = [
+        SearchHit("entity:a", "entity", "Acme", 0.02),
+        SearchHit("chunk:1", "chunk", "c1", 0.03, snippet="acme wired funds"),
+    ]
+    # [rerank] extra isn't installed in CI, so this must fall back, not raise.
+    out = rerank("acme funds", hits, backend="cross-encoder")
+    assert {h.node_id for h in out} == {"entity:a", "chunk:1"}
+
+
 def test_search_no_match_returns_no_hits() -> None:
     # Regression: a query matching nothing lexically and no entity name must not
     # fabricate hits from uniform-PageRank degree centrality.

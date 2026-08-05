@@ -33,6 +33,8 @@ graph = ["networkx>=3.2", "leidenalg>=0.10.0", "python-igraph>=0.11.0", "duckdb>
 # Optional backends / surfaces
 neo4j = ["neo4j>=5.0.0"]
 mcp = ["mcp>=1.0.0"]
+# Cross-encoder reranker for L8 hybrid search (import-guarded; builtin is the default).
+rerank = ["sentence-transformers>=3.0.0"]
 ocr = ["rapidocr-onnxruntime>=1.3.0"]
 vision = ["colpali-engine>=0.3.0"]
 security = ["openfga-sdk>=0.5.0"]
@@ -106,7 +108,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
-    "igraph.*", "leidenalg.*", "duckdb.*",
+    "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*",
 ]
 ignore_missing_imports = true
 
@@ -115,10 +117,21 @@ testpaths = ["tests"]
 addopts = "-ra"
 
 [tool.coverage.run]
-source = ["textgraph/core"]
+# Gate the whole package, not just core/. Omit modules that only execute when their
+# optional extra is installed (import-guarded backends) or that bind a socket — the CI
+# env is lean-by-design, so those run in dedicated/extra jobs, not the default gate.
+source = ["textgraph"]
 branch = true
+omit = [
+    "textgraph/console/server.py",
+    "textgraph/mcp/server.py",
+    "textgraph/store/duckdb_store.py",
+    "textgraph/l3_encoder_ie/gliner_backend.py",
+    "textgraph/l5_entity_resolution/splink_backend.py",
+]
 
 [tool.coverage.report]
-# Phase 0 gate: 80%+ on core/, ratcheted upward per phase.
-fail_under = 80
+# Whole-package floor (was 80% on core/ only through Phase 0). Ratcheted up as the
+# layers landed; current actual is ~92% over the gated modules.
+fail_under = 88
 show_missing = true

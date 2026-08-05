@@ -25,5 +25,5 @@ jobs:
           enable-cache: true
       - name: Sync (core + dev)
         run: uv sync --extra dev
-      - name: Pytest with coverage gate on core/
+      - name: Pytest with whole-package coverage gate (>= 88%)
         run: uv run pytest -q --cov --cov-report=term-missing

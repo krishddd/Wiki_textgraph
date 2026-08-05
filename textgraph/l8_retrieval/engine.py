@@ -41,6 +41,7 @@ from textgraph.l8_retrieval.model import (
     WhyResult,
     budget_items,
 )
+from textgraph.l8_retrieval.rerank import rerank
 from textgraph.store.base import Edge, Node
 
 _RRF_K = 60  # Reciprocal Rank Fusion damping constant (standard default).
@@ -254,8 +255,10 @@ class QueryEngine:
 
     # -- tool 1: search ---------------------------------------------------------
 
-    def search(self, query: str, *, k: int = 5, max_tokens: int = 1500) -> SearchResult:
-        """Hybrid BM25 + Personalized-PageRank search with RRF fusion + routing."""
+    def search(
+        self, query: str, *, k: int = 5, max_tokens: int = 1500, rerank_backend: str = "builtin"
+    ) -> SearchResult:
+        """Hybrid BM25 + Personalized-PageRank search: RRF fusion, rerank, route."""
         bm = self._bm25.search(query, k=max(k * 2, 10))
         chunk_rank = {cid: i for i, (cid, _) in enumerate(bm)}
 
@@ -289,32 +292,31 @@ class QueryEngine:
         routed = self.resolve(query)
         routing = "local" if routed and routed in entity_rank else "global"
 
-        fused = sorted(rrf.items(), key=lambda kv: (-kv[1], kv[0]))
-        hits: list[SearchHit] = []
-        texts: list[str] = []
+        # Build hits for a wide candidate pool, rerank, THEN take the top k — so the
+        # second stage can rescue a relevant entity the raw fusion had buried.
+        fused = sorted(rrf.items(), key=lambda kv: (-kv[1], kv[0]))[: max(k * 4, 24)]
+        candidates: list[SearchHit] = []
         for node_id, score in fused:
             if node_id in self._chunk_ids:
                 snippet = str(self._node[node_id].properties.get("text", ""))[:280]
                 cit = self._chunk_citation.get(node_id)
-                hits.append(
+                candidates.append(
                     SearchHit(
                         node_id, "chunk", self._name(node_id), score, snippet, [cit] if cit else []
                     )
                 )
-                texts.append(snippet)
             elif node_id in self._entity_ids:
                 label = str(self._node[node_id].properties.get("community_label", ""))
                 snippet = f"community: {label}" if routing == "global" and label else ""
                 cit = self._entity_citation.get(node_id)
-                hits.append(
+                candidates.append(
                     SearchHit(
                         node_id, "entity", self._name(node_id), score, snippet, [cit] if cit else []
                     )
                 )
-                texts.append(self._name(node_id) + snippet)
-            if len(hits) >= k:
-                break
-        kept, truncated = budget_items(hits, texts, max_tokens)
+        ranked = rerank(query, candidates, backend=rerank_backend)[:k]
+        texts = [(h.snippet or h.name) for h in ranked]
+        kept, truncated = budget_items(ranked, texts, max_tokens)
         return SearchResult(query=query, routing=routing, hits=kept, truncated=truncated)
 
     # -- tool 2: neighbors ------------------------------------------------------

@@ -6,6 +6,19 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed — v1.1: retrieval quality + wider coverage gate
+- **Hybrid search reranking (`l8_retrieval/rerank.py`).** The raw RRF fusion broke ties
+  by node id, which (since `chunk:` < `entity:`) buried every answer-entity beneath every
+  passage — so "who controls Gamma Holdings" didn't even return Acme Corp in the top 5. A
+  second-stage reranker now scores each kind by fusion score + lexical overlap and
+  **interleaves** entities with passages (the answer node and its evidence, alternating).
+  On the fixture benchmark: **recall@5 0.60 → 0.70, MRR 0.29 → 0.80**, tokens/query 163 →
+  131 — deterministic. A cross-encoder reranker is the opt-in `[rerank]` extra
+  (import-guarded, clean fallback). `BENCHMARKS.md` regenerated.
+- **Coverage gate widened from `core/` to the whole package** (`fail_under` 80 → 88;
+  actual ~90%), omitting only the import-guarded backends and socket-bound servers that
+  run in dedicated jobs. Closes the last v1.1 debt item.
+
 ### Added — interactive graph console (toward v1.1)
 - **`textgraph console` is now a real graph viewer.** A hand-rolled, dependency-free
   HTML5 **canvas** renderer draws the graph the way an investigator expects: nodes
