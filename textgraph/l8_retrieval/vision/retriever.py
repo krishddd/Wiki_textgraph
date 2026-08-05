@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from textgraph.l8_retrieval.model import Citation, SearchHit, budget_items
+from textgraph.l8_retrieval.model import Citation, SearchHit
 from textgraph.l8_retrieval.vision.embed import Embedder, HashEmbedder
 from textgraph.l8_retrieval.vision.maxsim import MultiVector, maxsim
 
@@ -37,12 +37,16 @@ class VisionRetriever:
             p.page_id: self._embedder.embed(p.text) for p in self._pages
         }
 
-    def search(self, query: str, *, k: int = 5, max_tokens: int = 1500) -> list[SearchHit]:
-        """Top-``k`` pages by MaxSim, as bounded, cited :class:`SearchHit`s (score-desc)."""
+    def search(self, query: str, *, k: int = 5) -> list[SearchHit]:
+        """Top-``k`` pages by MaxSim, as cited :class:`SearchHit`s (score-desc).
+
+        Ranking only; the caller applies the shared token budget (G7) so the vision
+        channel reports truncation exactly like the other L8 tools.
+        """
         q = self._embedder.embed(query)
         scored = [(p, maxsim(q, self._embeddings[p.page_id])) for p in self._pages]
         ranked = sorted((ps for ps in scored if ps[1] > 0), key=lambda ps: (-ps[1], ps[0].page_id))
-        hits = [
+        return [
             SearchHit(
                 node_id=p.page_id,
                 kind="page",
@@ -53,6 +57,3 @@ class VisionRetriever:
             )
             for p, score in ranked[:k]
         ]
-        texts = [h.snippet or h.name for h in hits]
-        kept, _ = budget_items(hits, texts, max_tokens)
-        return kept

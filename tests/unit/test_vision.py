@@ -62,6 +62,16 @@ def test_engine_vision_search_over_the_graph() -> None:
     assert qe.vision_search("funds").to_dict() == qe.vision_search("funds").to_dict()
 
 
+def test_vision_search_reports_truncation_under_tight_budget() -> None:
+    # A budget too small for every page must set truncated=True (not silently drop
+    # pages while claiming truncated=False), and must still keep at least the top page.
+    r = build(DOCS)
+    qe = QueryEngine(r.nodes, r.edges)
+    res = qe.vision_search("who transferred funds to whom", k=5, max_tokens=1)
+    assert len(res.hits) >= 1
+    assert res.truncated is True
+
+
 def test_resolve_embedder_falls_back_without_vision_extra() -> None:
     # [vision] isn't installed in CI, so 'colpali' must degrade to the hash embedder.
     got = resolve_embedder(Config(vision_backend="colpali"))

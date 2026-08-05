@@ -366,8 +366,10 @@ class QueryEngine:
             retriever = self._vision
         else:
             retriever = VisionRetriever(self._pages(), embedder)
-        hits = retriever.search(query, k=k, max_tokens=max_tokens)
-        return SearchResult(query=query, routing="vision", hits=hits, truncated=False)
+        hits = retriever.search(query, k=k)
+        texts = [(h.snippet or h.name) for h in hits]
+        kept, truncated = budget_items(hits, texts, max_tokens)
+        return SearchResult(query=query, routing="vision", hits=kept, truncated=truncated)
 
     # -- tool 2: neighbors ------------------------------------------------------
 
