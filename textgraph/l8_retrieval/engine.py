@@ -759,25 +759,42 @@ class QueryEngine:
 
     # -- tool 8: stats ----------------------------------------------------------
 
-    def stats(self, *, top_k: int = 10) -> StatsResult:
+    def stats(self, *, top_k: int = 10, context: SecurityContext | None = None) -> StatsResult:
+        # Security-scoped (Phase 9): under a policy, counts and — critically — the named
+        # top_entities are computed over authorized content only, so stats can't leak the
+        # name of a restricted (e.g. high-PageRank) entity to an unauthorized principal.
+        nodes, ok_docs = self._auth(context)
+
+        def visible(nid: str) -> bool:
+            return nodes is None or nid in nodes
+
         label_counts: dict[str, int] = {}
-        for n in self._node.values():
+        node_total = 0
+        for nid, n in self._node.items():
+            if not visible(nid):
+                continue
+            node_total += 1
             for label in n.labels:
                 label_counts[label] = label_counts.get(label, 0) + 1
         pred_counts: dict[str, int] = {}
+        edge_total = 0
         for e in self._edges:
+            if nodes is not None and not self._edge_ok(e, nodes, ok_docs):
+                continue
+            edge_total += 1
             pred_counts[e.predicate] = pred_counts.get(e.predicate, 0) + 1
+        entities = [nid for nid in self._entity_ids if visible(nid)]
         counts = {
-            "nodes": len(self._node),
-            "edges": len(self._edges),
-            "entities": len(self._entity_ids),
-            "chunks": len(self._chunk_ids),
-            "claims": len(self._claim_ids),
+            "nodes": node_total,
+            "edges": edge_total,
+            "entities": len(entities),
+            "chunks": sum(1 for nid in self._chunk_ids if visible(nid)),
+            "claims": sum(1 for nid in self._claim_ids if visible(nid)),
             **{f"label:{k}": v for k, v in sorted(label_counts.items())},
             **{f"predicate:{k}": v for k, v in sorted(pred_counts.items())},
         }
         top = sorted(
-            (nid for nid in self._entity_ids),
+            entities,
             key=lambda nid: (-float(self._node[nid].properties.get("pagerank", 0.0)), nid),
         )[:top_k]
         top_entities = [

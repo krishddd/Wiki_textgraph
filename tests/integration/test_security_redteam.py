@@ -111,6 +111,19 @@ def test_why_and_timeline_and_contradictions_hide_restricted_claims() -> None:
     assert all("Shadow" not in c.object for c in qe.why("Acme Corp", context=ctx).claims)
 
 
+def test_stats_does_not_leak_unauthorized_entity_names() -> None:
+    qe, ctx, _pub, _secret = _secured()
+    # top_entities (and counts) must be computed over authorized content only — a
+    # restricted high-PageRank entity's NAME must never surface through stats.
+    res = qe.stats(top_k=50, context=ctx)
+    names = {e["name"] for e in res.top_entities}
+    assert names.isdisjoint(SECRET)
+    # The unsecured control does surface the secret entities in stats.
+    r = build(CORPUS)
+    plain_names = {e["name"] for e in QueryEngine(r.nodes, r.edges).stats(top_k=50).top_entities}
+    assert plain_names & SECRET
+
+
 def test_default_path_is_unaffected_and_deterministic() -> None:
     r = build(CORPUS)
     unsecured = QueryEngine(r.nodes, r.edges).search("acme controls", k=5)

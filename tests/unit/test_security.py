@@ -63,6 +63,14 @@ def test_abac_min_clearance() -> None:
     assert rule.allows(SecurityContext("a", clearance=0), {})  # unlabelled => public
 
 
+def test_abac_min_clearance_fails_closed_on_unmapped_label() -> None:
+    # A resource classified with a label not in the map must be DENIED (never silently
+    # treated as public), even for a maximally-cleared principal.
+    rule = MinClearance({"secret": 3})
+    assert not rule.allows(SecurityContext("a", clearance=99), {"classification": "topsecret"})
+    assert rule.allows(SecurityContext("a", clearance=0), {"classification": ""})  # unclassified
+
+
 def test_abac_ip_allowlist() -> None:
     rule = IpAllowlist(("10.0.", "192.168."))
     assert rule.allows(SecurityContext("a", ip="10.0.0.5"), {})

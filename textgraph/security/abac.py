@@ -30,14 +30,20 @@ class MinClearance:
     """Deny unless the principal's clearance meets the resource classification's floor.
 
     ``levels`` maps a classification label (the resource's ``classification`` attribute) to
-    the minimum clearance required. Labels absent from the map require ``0`` (public).
+    the minimum clearance required. An *unclassified* resource (empty/missing label) is
+    public. A resource that carries a classification label **not** in the map fails closed
+    (denied): a misconfigured policy must never silently expose classified content.
     """
 
     levels: Mapping[str, int] = field(default_factory=dict)
 
     def allows(self, context: SecurityContext, resource: Mapping[str, str]) -> bool:
-        required = self.levels.get(resource.get("classification", ""), 0)
-        return context.clearance >= required
+        label = resource.get("classification", "")
+        if not label:
+            return True  # unclassified is public
+        if label not in self.levels:
+            return False  # classified but unmapped -> deny, never default to public
+        return context.clearance >= self.levels[label]
 
 
 @dataclass(frozen=True)

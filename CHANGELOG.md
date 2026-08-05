@@ -36,6 +36,17 @@ to Semantic Versioning.
 - +33 tests (ReBAC reachability incl. nesting/inheritance/usersets/cycles, ABAC rules,
   policy assembly, `[security]` fallback, the red-team suite, CLI); coverage stays ≥ 88%.
 
+#### Phase 9 review — two security fixes
+- **`stats()` no longer leaks unauthorized entity names.** It was the one agent tool left
+  un-scoped, so a restricted (e.g. high-PageRank) entity's name and community label could
+  surface through `top_entities` regardless of the caller's policy. `stats` now takes a
+  `context` and computes its counts and `top_entities` over authorized content only
+  (red-team assertion added; the unsecured control still surfaces them).
+- **ABAC `MinClearance` now fails closed on an unmapped classification.** A document
+  carrying a classification label absent from the `levels` map previously defaulted to
+  level 0 (public) — silent privilege escalation on a misconfigured policy. A classified
+  (non-empty, unmapped) label is now denied; an unclassified (empty) resource stays public.
+
 ### Added — Phase 8: vision-native late-interaction retrieval (`textgraph/l8_retrieval/vision/`)
 - **ColPali-style page retrieval, MaxSim and all.** A query and a document-as-**page** are
   each a **multi-vector**, scored by the late-interaction **MaxSim** operator
