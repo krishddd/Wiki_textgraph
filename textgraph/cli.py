@@ -243,6 +243,52 @@ def _cmd_vision(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_secure(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    policy_path = Path(args.policy)
+    if not policy_path.exists():
+        print(f"error: policy file does not exist: {policy_path}", file=sys.stderr)
+        return 2
+    import json
+
+    from textgraph.security import SecurityContext, policy_from_dict
+
+    policy = policy_from_dict(json.loads(policy_path.read_text(encoding="utf-8")))
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+    else:
+        result = build(root)
+        nodes, edges = result.nodes, result.edges
+    qe = QueryEngine(nodes, edges, policy=policy)
+    ctx = SecurityContext(
+        principal=args.principal,
+        groups=frozenset(args.group),
+        clearance=args.clearance,
+        ip=args.ip,
+        as_of=args.as_of,
+    )
+    res = qe.search(args.query, k=args.k, context=ctx).to_dict()
+    print(
+        f"secure search: {res['query']}  "
+        f"(principal: {args.principal}, routing: {res['routing']}, backend: rebac)"
+    )
+    for i, hit in enumerate(res["hits"], 1):
+        cites = " ".join(_fmt_citation(c) for c in hit["citations"])
+        print(f"  {i}. [{hit['kind']}] {hit['name']}  (score {hit['score']})")
+        if hit["snippet"]:
+            print(f"      {hit['snippet'][:160]}")
+        if cites:
+            print(f"      {cites}")
+    if res["truncated"]:
+        print("  ... (truncated to token budget)")
+    return 0
+
+
 def _cmd_gql(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -467,6 +513,24 @@ def build_parser() -> argparse.ArgumentParser:
         "query", help='GQL query, e.g. "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.name"'
     )
     p_gql.set_defaults(func=_cmd_gql)
+
+    p_secure = sub.add_parser(
+        "secure", help="security-aware search under a policy + principal (enterprise FGAC)"
+    )
+    p_secure.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_secure.add_argument("query", help="natural-language query")
+    p_secure.add_argument("--policy", required=True, help="path to a JSON policy file")
+    p_secure.add_argument("--principal", required=True, help="requesting user id (e.g. alice)")
+    p_secure.add_argument(
+        "--group", action="append", default=[], help="a group the principal belongs to (repeatable)"
+    )
+    p_secure.add_argument("--clearance", type=int, default=0, help="ABAC clearance level")
+    p_secure.add_argument("--ip", default="", help="ABAC request origin IP")
+    p_secure.add_argument(
+        "--as-of", dest="as_of", default=None, help="ABAC ISO date (temporal window)"
+    )
+    p_secure.add_argument("-k", type=int, default=5, help="number of hits (default 5)")
+    p_secure.set_defaults(func=_cmd_secure)
 
     p_console = sub.add_parser("console", help="serve the local web console over the graph")
     p_console.add_argument("path", help="corpus path or .duckdb snapshot")

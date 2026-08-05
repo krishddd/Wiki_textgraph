@@ -38,7 +38,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **v1.1** | Interactive console + retrieval quality | 3.5 units | **Done.** Layout, canvas renderer, community sidebar, inspect, search, tag-filter, path mode, temporal slider, shared offline `graph.html` viewer, reranker (recall/MRR up), whole-package coverage gate. |
 | **7** | GQL / standards layer | 2 units | **Done.** Pure-Python ISO-GQL/Cypher subset (`textgraph/gql/`) — pattern matching + quantified paths + WHERE/RETURN/aggregation; `textgraph gql` CLI; pattern-tools round-trip. |
 | **8** | Vision-native multimodal ingestion | 2 units | **Done.** MaxSim late-interaction page retrieval (`l8_retrieval/vision/`); deterministic hash embedder default, ColPali behind `[vision]`; `textgraph vision` CLI; benchmarked. |
-| 9 | Enterprise fine-grained access control | 3 units | Extension. |
+| **9** | Enterprise fine-grained access control | 3 units | **Done.** ReBAC+ABAC policy engine (`textgraph/security/`); security-aware PPR/path/traversal (unauthorized transition probability → 0); red-team no-bleed suite; `textgraph secure` CLI; OpenFGA behind `[security]`. |
 | 10 | Dynamic agent reasoning (GoT) | 2 units | Extension. |
 
 No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0→L1→L2→L3→L5→L6→L7→L8→L9, with L4 last among core layers). v1.1 (interactive UI) and Phases 7–10 are post-v1.0.
@@ -89,6 +89,26 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
       duckdb_store, watch) with the `textgraph` console-script entry point
 - [x] **v1.0.0 shipped** (2026-08-04): version bumped, CHANGELOG cut, tagged `v1.0.0`;
       the release workflow re-verifies determinism on the built wheel before publishing
+
+## Phase 9 — Definition of Done (met)
+
+- [x] **ReBAC + ABAC policy engine** (`textgraph/security/`), pure-Python & deterministic:
+      Zanzibar/OpenFGA relation tuples (`owner`/`viewer`/`member`/`parent` + usersets,
+      transitive group/folder policy paths) and Cedar-style attribute conditions
+      (`MinClearance`/`IpAllowlist`/`TimeWindow`); depth-bounded, cycle-safe (G1/G7)
+- [x] **Security-aware traversal, not a post-filter** (§3.2): PPR runs on a graph masked to
+      the principal's authorized nodes so an unauthorized node's transition probability is
+      `0`; `path` prunes restricted nodes+edges in Dijkstra/Yen; `neighbors`/`why`/
+      `timeline`/`contradictions`/`communities`/`vision_search` are all context-aware, and
+      an edge is hidden unless its own source document is authorized
+- [x] **Default install unaffected**: with no policy/context every tool is byte-identical to
+      the un-secured engine — access control is query-time only, `graph.json` untouched (G1/G2)
+- [x] **OpenFGA behind `[security]`**, import-guarded with a clean fallback to the built-in
+      `rebac`; `textgraph secure … --policy … --principal …` CLI
+- [x] **Red-team proves zero context-bleed** through PPR/paths/neighbors/summaries/vision
+      (`tests/integration/test_security_redteam.py`, incl. a real-leak control);
+      **overhead measured** (~+14% p50, full access) in `benchmarks/security.py` → `BENCHMARKS.md`
+- [x] +33 tests; whole-package coverage ≥ 88%; ruff + strict mypy green
 
 ## Phase 8 — Definition of Done (met)
 

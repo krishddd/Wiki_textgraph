@@ -6,6 +6,36 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 9: enterprise fine-grained access control (`textgraph/security/`)
+- **ReBAC + ABAC, enforced inside traversal.** A new `[security]`-flagged layer brings
+  Relationship-Based Access Control (Zanzibar/OpenFGA-style relation tuples — `owner`,
+  `viewer`, `member`, `parent`, usersets, with transitive group/folder policy paths) and
+  Attribute-Based Access Control (Cedar-style `MinClearance` / `IpAllowlist` / `TimeWindow`
+  conditions) to the graph engine (gap-analysis §3.1).
+- **Security-aware Personalized PageRank (not a post-filter).** Attach a `SecurityPolicy`
+  to a `QueryEngine` and pass a `SecurityContext` per tool call: retrieval runs on a graph
+  **masked to the principal's authorized nodes**, so an unauthorized node's transition
+  probability is `0` and can never influence centrality, seed a walk, or surface as a hit
+  (§3.2). `path` prunes restricted nodes *and edges* mid-Dijkstra; `neighbors`, `why`,
+  `timeline`, `contradictions`, `communities`, and `vision_search` are all context-aware,
+  and an edge is hidden unless its own source document is authorized (no leaking a
+  restricted relation between two otherwise-visible entities).
+- **Deterministic default, service behind the extra** (the project's upgrade-or-fall-back
+  rule): the built-in `RebacStore` is pure-Python and needs no service; a real OpenFGA /
+  Zanzibar deployment is opt-in behind **`[security]`** via `resolve_policy_engine`,
+  import-guarded with a clean fallback to `rebac`.
+- **`graph.json` is untouched.** Access control is purely query-time — with no policy (or
+  no context) every tool behaves byte-identically to the un-secured engine, so the default
+  install and the deterministic artifact are unaffected (G1/G2).
+- **CLI:** `textgraph secure <corpus|.duckdb> "<query>" --policy policy.json --principal
+  alice [--group G --clearance N --ip … --as-of DATE]` runs a search under a policy.
+- **DoD — red-team + a number:** `tests/integration/test_security_redteam.py` proves
+  **zero context-bleed** through PPR / paths / neighbors / summaries / vision (and that the
+  leak is real without a policy); `benchmarks/security.py` measures the enforcement
+  overhead (~+14% p50, full-access) and confirms transparency — see `BENCHMARKS.md`.
+- +33 tests (ReBAC reachability incl. nesting/inheritance/usersets/cycles, ABAC rules,
+  policy assembly, `[security]` fallback, the red-team suite, CLI); coverage stays ≥ 88%.
+
 ### Added — Phase 8: vision-native late-interaction retrieval (`textgraph/l8_retrieval/vision/`)
 - **ColPali-style page retrieval, MaxSim and all.** A query and a document-as-**page** are
   each a **multi-vector**, scored by the late-interaction **MaxSim** operator

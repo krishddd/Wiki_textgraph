@@ -58,6 +58,11 @@ class Config:
     vision_backend: str = "hash"
     vision_model: str = ""
     vision_dim: int = 48
+    # Phase 9 enterprise FGAC: authorization backend for the (query-time) access guard.
+    # "rebac" is the deterministic, dependency-free default; "openfga" is the opt-in
+    # [security] Zanzibar service (import-guarded, falls back to rebac). Access control is
+    # query-time only, so it never touches graph.json — the default install is unaffected.
+    security_backend: str = "rebac"
     # L4 optional LLM (Phase 6): synthesizes GENERATED community summaries. Off by
     # default (G2) so the determinism gate never sees an LLM. The model id + base URL
     # affect output, so they belong in the config hash; the API key never does — it is

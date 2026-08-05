@@ -255,6 +255,39 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   image-native gains land; the deterministic default proves the plumbing, benchmarked in
   `BENCHMARKS.md`.
 
+## Phase 9 (implemented): enterprise fine-grained access control (`textgraph/security/`)
+
+- **Why.** Unrestricted graph algorithms — PPR, community detection, multi-hop paths —
+  will happily traverse restricted nodes and synthesize context packs from documents the
+  requester may not read (gap-analysis §3, "context-bleeding"). Enterprise use needs
+  authorization enforced *inside* the engine, at every traversal step, not as a
+  post-filter.
+- **Two models (`rebac.py`, `abac.py`).** ReBAC is a small deterministic Zanzibar/OpenFGA:
+  relation tuples `object#relation@subject` with `owner`/`viewer`/`member`/`parent` and
+  userset rewrites, so access flows along transitive policy paths (user → group → folder →
+  document). ABAC adds Cedar-style attribute conditions (`MinClearance`, `IpAllowlist`,
+  `TimeWindow`) evaluated against a resource's own attributes. Both are pure-Python,
+  sorted-iteration, depth-bounded — deterministic and terminating on cyclic policies (G1/G7).
+- **Document-level policy (`policy.py`).** Every node/edge is provenance-linked to its
+  source documents, so authorization is decided per document (ReBAC **and** ABAC), then
+  lifted to nodes: a node is visible iff its provenance touches an authorized document; a
+  node with no known provenance is denied (secure default).
+- **Security-aware traversal (in `l8_retrieval/engine.py`).** Attach a `SecurityPolicy`;
+  pass a `SecurityContext` per call. `search` runs PPR on a graph **masked** to authorized
+  nodes — every edge into an unauthorized node is dropped, so its transition probability is
+  literally `0` (§3.2), and it can neither seed nor be reached by the walk. `path` prunes
+  restricted nodes and edges inside Dijkstra/Yen; `neighbors`/`why`/`timeline`/
+  `contradictions`/`communities`/`vision_search` all filter to authorized content, and an
+  edge is hidden unless its *own* attesting document is authorized. **With no policy or no
+  context, every method is byte-identical to the un-secured engine** — access control is
+  query-time only, so `graph.json` and the default install are untouched (G1/G2).
+- **Upgrade-or-fall-back + proof.** `RebacStore` is the dependency-free default; a real
+  OpenFGA service is opt-in behind **`[security]`** (`resolve_policy_engine`, import-guarded).
+  `textgraph secure … --policy p.json --principal alice` is the CLI. A red-team suite
+  (`tests/integration/test_security_redteam.py`) proves **zero context-bleed** through
+  PPR/paths/summaries/vision — and that the leak is real without a policy — while
+  `benchmarks/security.py` measures the overhead (~+14% p50).
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

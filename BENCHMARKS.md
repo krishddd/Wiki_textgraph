@@ -27,7 +27,29 @@ Quality *and* cost for every run (G7 — no number without its cost). Generated 
 python -m benchmarks.retrieval          # fixture benchmark, zero downloads
 python -m benchmarks.retrieval --write   # regenerate this file
 python -m benchmarks.retrieval --data DIR  # external set (DIR/queries.json)
+python -m benchmarks.security            # FGAC overhead + no-bleed (Phase 9)
 ```
+
+## Enterprise FGAC (Phase 9) - security-aware retrieval
+
+Cost of enforcing access control *inside* traversal (§3.2 — an unauthorized node's
+transition probability drops to 0), measured on `tests/fixtures/corpora/secure`
+(2 docs, 5 queries; a batch of all queries timed per rep, 40 reps):
+
+| Configuration | p50 (ms) | p95 (ms) |
+|---|---|---|
+| baseline (no policy) | 7.19 | 10.13 |
+| security-aware (full access) | 8.18 | 10.69 |
+
+- **Overhead ~ +14% p50** for the security-aware walk under a full-access policy
+  (the guard's per-query cost, isolated from any restriction). Absolute numbers are
+  machine-dependent; reproduce with `python -m benchmarks.security`.
+- **Transparency:** with everything authorized, secured hits are **byte-identical** to
+  the unsecured result — the guard adds nothing but cost when nothing is restricted.
+- **No-bleed:** under a one-document policy, the number of unauthorized hits that leak
+  through PPR/paths/summaries is **0** — proven by the red-team suite
+  `tests/integration/test_security_redteam.py` (which also asserts the leak is *real*
+  without a policy, so the result can't be vacuous).
 
 LoCoMo / LongMemEval-S: place the labelled set at `DIR/queries.json` (each item
 `{"query": ..., "gold": [...]}`) and a corpus at `DIR/corpus/`. Absent data is

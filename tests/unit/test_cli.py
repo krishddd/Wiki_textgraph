@@ -39,6 +39,50 @@ def test_build_missing_path_errors(tmp_path: Path) -> None:
 
 DOCS = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "docs")
 TEMPORAL = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "temporal")
+SECURE = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "secure")
+
+
+def test_secure_command_enforces_policy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json
+
+    from textgraph.l8_retrieval import QueryEngine
+    from textgraph.pipeline import build
+
+    # Grant alice the public document only (transitively, via group + folder).
+    r = build(Path(SECURE))
+    qe = QueryEngine(r.nodes, r.edges)
+    pub = sorted(qe._node_docs[qe.resolve("Gamma Holdings")])[0]
+    policy = tmp_path / "policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "tuples": [
+                    ["group:analysts", "member", "user:alice"],
+                    ["folder:cases", "viewer", "group:analysts"],
+                    [f"doc:{pub}", "parent", "folder:cases"],
+                ]
+            }
+        )
+    )
+    argv = [
+        "secure",
+        SECURE,
+        "shadow phantom transferred funds",
+        "--policy",
+        str(policy),
+        "--principal",
+        "alice",
+        "--group",
+        "analysts",
+    ]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+    assert "principal: alice" in out
+    assert "Shadow" not in out and "Phantom" not in out  # no context-bleed
+
+
+def test_secure_command_missing_policy_errors() -> None:
+    assert main(["secure", SECURE, "q", "--policy", "nope.json", "--principal", "alice"]) == 2
 
 
 @pytest.mark.parametrize(

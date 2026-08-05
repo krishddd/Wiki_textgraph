@@ -101,6 +101,7 @@ files = [
     "textgraph/l7_analytics",
     "textgraph/l8_retrieval",
     "textgraph/l9_artifacts",
+    "textgraph/security",
     "textgraph/pipeline.py",
 ]
 warn_unused_ignores = true
@@ -110,6 +111,7 @@ disallow_untyped_defs = true
 module = [
     "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
     "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*", "colpali_engine.*",
+    "openfga_sdk.*",
 ]
 ignore_missing_imports = true
 

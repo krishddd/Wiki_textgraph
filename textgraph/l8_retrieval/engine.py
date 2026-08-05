@@ -42,6 +42,8 @@ from textgraph.l8_retrieval.model import (
     budget_items,
 )
 from textgraph.l8_retrieval.rerank import rerank
+from textgraph.security.context import SecurityContext
+from textgraph.security.policy import SecurityPolicy
 from textgraph.store.base import Edge, Node
 
 _RRF_K = 60  # Reciprocal Rank Fusion damping constant (standard default).
@@ -60,7 +62,13 @@ def _citations(edge: Edge) -> list[Citation]:
 class QueryEngine:
     """Typed, bounded, cited retrieval over an assembled TextGraph."""
 
-    def __init__(self, nodes: list[Node], edges: list[Edge]) -> None:
+    def __init__(
+        self, nodes: list[Node], edges: list[Edge], *, policy: SecurityPolicy | None = None
+    ) -> None:
+        # Enterprise FGAC (Phase 9): when set, tools accept a per-call SecurityContext and
+        # enforce it inside traversal (unauthorized transition probability -> 0). None =>
+        # every method behaves byte-identically to the un-secured engine (default install).
+        self._policy = policy
         self._node = {n.node_id: n for n in nodes}
         self._edges = sorted(edges, key=lambda e: e.edge_id)
         self._entity_ids = frozenset(n.node_id for n in nodes if "Entity" in n.labels)
@@ -129,6 +137,8 @@ class QueryEngine:
             if docs:
                 self._node_docs.setdefault(e.subject, set()).update(docs)
                 self._node_docs.setdefault(e.object, set()).update(docs)
+        # All documents any node derives from — the universe the access guard filters (G9).
+        self._all_docs = frozenset(d for docs in self._node_docs.values() for d in docs)
 
         # Lazily-built vision (page) retrieval state.
         self._pages_built: list[Any] | None = None
@@ -216,6 +226,42 @@ class QueryEngine:
         n = self._node.get(node_id)
         return str(n.properties.get("name", node_id)) if n else node_id
 
+    # -- enterprise FGAC (Phase 9) ---------------------------------------------
+
+    def _auth(
+        self, context: SecurityContext | None
+    ) -> tuple[frozenset[str] | None, frozenset[str] | None]:
+        """Resolve ``(authorized_node_ids, authorized_docs)`` for a context.
+
+        Returns ``(None, None)`` when no policy is attached or no context is presented —
+        the un-secured fast path (no overhead, byte-identical results). Otherwise every
+        node whose provenance touches an authorized document is authorized; a node with no
+        known provenance is denied (secure default), so restricted content can never seed
+        or be reached by a walk (§3.2).
+        """
+        if self._policy is None or context is None:
+            return None, None
+        ok_docs = self._policy.authorized_docs(context, self._all_docs)
+        nodes = frozenset(nid for nid, docs in self._node_docs.items() if docs & ok_docs)
+        return nodes, ok_docs
+
+    def _edge_ok(
+        self, e: Edge, nodes: frozenset[str] | None, ok_docs: frozenset[str] | None
+    ) -> bool:
+        """An edge is traversable/visible iff both endpoints and its provenance are authorized.
+
+        Requiring the edge's *own* source documents to be authorized (not just its
+        endpoints) stops a restricted relation between two otherwise-visible entities from
+        leaking through neighbors/path — the relation is knowledge from the document that
+        attests it.
+        """
+        if nodes is None:
+            return True
+        if e.subject not in nodes or e.object not in nodes:
+            return False
+        edocs = {s.doc_id for s in e.source_spans}
+        return not edocs or bool(ok_docs and (edocs & ok_docs))
+
     def resolve(self, handle: str) -> str | None:
         """Resolve a node id or free-text name to a node id (deterministic)."""
         if handle in self._node:
@@ -260,26 +306,54 @@ class QueryEngine:
     # -- tool 1: search ---------------------------------------------------------
 
     def search(
-        self, query: str, *, k: int = 5, max_tokens: int = 1500, rerank_backend: str = "builtin"
+        self,
+        query: str,
+        *,
+        k: int = 5,
+        max_tokens: int = 1500,
+        rerank_backend: str = "builtin",
+        context: SecurityContext | None = None,
     ) -> SearchResult:
-        """Hybrid BM25 + Personalized-PageRank search: RRF fusion, rerank, route."""
+        """Hybrid BM25 + Personalized-PageRank search: RRF fusion, rerank, route.
+
+        When a policy is attached and ``context`` is given, retrieval is security-aware:
+        the PPR walk runs on a graph masked to the principal's authorized nodes, so an
+        unauthorized node's transition probability is zero and cannot influence centrality
+        or surface as a hit (§3.2 — enforcement in the walk, not a post-filter).
+        """
+        nodes, _ok_docs = self._auth(context)
         bm = self._bm25.search(query, k=max(k * 2, 10))
+        if nodes is not None:
+            bm = [(cid, s) for cid, s in bm if cid in nodes]
         chunk_rank = {cid: i for i, (cid, _) in enumerate(bm)}
 
         # Seed PPR: query-name entities + entities in the top lexical chunks.
         seed: dict[str, float] = {}
         for nid in sorted(self._entity_ids):
+            if nodes is not None and nid not in nodes:
+                continue
             overlap = len(set(tokenize(query)) & set(tokenize(self._name(nid))))
             if overlap:
                 seed[nid] = seed.get(nid, 0.0) + float(overlap)
         for cid, score in bm:
             seed[cid] = seed.get(cid, 0.0) + max(score, 0.0)
             for ent in self._chunk_entities.get(cid, []):
+                if nodes is not None and ent not in nodes:
+                    continue
                 seed[ent] = seed.get(ent, 0.0) + max(score, 0.0) * 0.5
+        # Security-aware transition matrix: drop every edge into an unauthorized node so
+        # its transition probability is 0 (§3.2). The default path reuses the shared graph.
+        if nodes is not None:
+            ppr_ids = [n for n in self._ppr_ids if n in nodes]
+            ppr_adj = {
+                n: [(m, w) for m, w in self._ppr_adj.get(n, []) if m in nodes] for n in ppr_ids
+            }
+        else:
+            ppr_ids, ppr_adj = self._ppr_ids, self._ppr_adj
         # Only rank entities by PPR when the query actually seeded the walk. With an
         # empty seed the teleport is uniform, so PPR would just re-emit degree
         # centrality — surfacing arbitrary "hits" for a query that matched nothing.
-        ppr = pagerank(self._ppr_ids, self._ppr_adj, personalization=seed) if seed else {}
+        ppr = pagerank(ppr_ids, ppr_adj, personalization=seed) if seed else {}
         ent_ranking = sorted(
             (nid for nid in self._entity_ids if ppr.get(nid, 0.0) > 0),
             key=lambda nid: (-ppr.get(nid, 0.0), nid),
@@ -350,17 +424,28 @@ class QueryEngine:
         return pages
 
     def vision_search(
-        self, query: str, *, k: int = 5, max_tokens: int = 1500, embedder: Any = None
+        self,
+        query: str,
+        *,
+        k: int = 5,
+        max_tokens: int = 1500,
+        embedder: Any = None,
+        context: SecurityContext | None = None,
     ) -> SearchResult:
         """Rank documents-as-pages by MaxSim late interaction (ColPali-style).
 
         Uses the deterministic hash embedder by default; pass a ``[vision]``-backed
         embedder to score real rendered-page images. Query-time only — the graph and
-        ``graph.json`` are untouched.
+        ``graph.json`` are untouched. When a policy + ``context`` are given, only pages
+        whose document is authorized are embedded and scored (§3.2).
         """
         from textgraph.l8_retrieval.vision import HashEmbedder, VisionRetriever
 
-        if embedder is None:
+        _nodes, ok_docs = self._auth(context)
+        if ok_docs is not None:
+            pages = [p for p in self._pages() if p.doc_id in ok_docs]
+            retriever = VisionRetriever(pages, embedder or HashEmbedder())
+        elif embedder is None:
             if self._vision is None:
                 self._vision = VisionRetriever(self._pages(), HashEmbedder())
             retriever = self._vision
@@ -373,13 +458,23 @@ class QueryEngine:
 
     # -- tool 2: neighbors ------------------------------------------------------
 
-    def neighbors(self, handle: str, *, k: int = 20, max_tokens: int = 1500) -> NeighborsResult:
+    def neighbors(
+        self,
+        handle: str,
+        *,
+        k: int = 20,
+        max_tokens: int = 1500,
+        context: SecurityContext | None = None,
+    ) -> NeighborsResult:
         node_id = self.resolve(handle)
-        if node_id is None:
+        nodes, ok_docs = self._auth(context)
+        if node_id is None or (nodes is not None and node_id not in nodes):
             return NeighborsResult(node_id=handle, name=handle)
         out: list[NeighborEdge] = []
         for e in self._edges:
             if e.predicate in _HIDDEN_NEIGHBORS:
+                continue
+            if not self._edge_ok(e, nodes, ok_docs):
                 continue
             if e.subject == node_id:
                 out.append(
@@ -414,11 +509,21 @@ class QueryEngine:
 
     # -- tool 3: path -----------------------------------------------------------
 
-    def path(self, source: str, target: str, *, k: int = 1) -> PathResult:
+    def path(
+        self,
+        source: str,
+        target: str,
+        *,
+        k: int = 1,
+        context: SecurityContext | None = None,
+    ) -> PathResult:
         s, t = self.resolve(source), self.resolve(target)
         if s is None or t is None or s == t:
             return PathResult(source=source, target=target)
-        paths = self._k_shortest(s, t, k)
+        nodes, ok_docs = self._auth(context)
+        if nodes is not None and (s not in nodes or t not in nodes):
+            return PathResult(source=self._name(s), target=self._name(t))
+        paths = self._k_shortest(s, t, k, nodes, ok_docs)
         return PathResult(source=self._name(s), target=self._name(t), paths=paths)
 
     def _edge_weight(self, e: Edge) -> float:
@@ -430,12 +535,15 @@ class QueryEngine:
         t: str,
         banned: set[tuple[str, str]],
         blocked: frozenset[str] = frozenset(),
+        nodes: frozenset[str] | None = None,
+        ok_docs: frozenset[str] | None = None,
     ) -> list[tuple[str, Edge]]:
         """Min ``-log(confidence)`` path as a list of (node, incoming_edge).
 
         ``banned`` removes specific directed edges and ``blocked`` removes nodes
         entirely — the two exclusions Yen's algorithm needs to enumerate loopless
-        alternates.
+        alternates. ``nodes``/``ok_docs`` (when set) additionally prune every edge that
+        fails the access guard, so a path can never route *through* restricted content.
         """
         dist: dict[str, float] = {s: 0.0}
         prev: dict[str, tuple[str, Edge]] = {}
@@ -450,6 +558,8 @@ class QueryEngine:
                 break
             for v, e in sorted(self._rel_adj.get(u, []), key=lambda x: (x[0], x[1].edge_id)):
                 if (u, v) in banned or v in visited or v in blocked:
+                    continue
+                if nodes is not None and not self._edge_ok(e, nodes, ok_docs):
                     continue
                 nd = d + self._edge_weight(e)
                 if nd < dist.get(v, math.inf):
@@ -489,9 +599,16 @@ class QueryEngine:
             nodes=[self._name(n) for n in node_ids], steps=steps, likelihood=likelihood
         )
 
-    def _k_shortest(self, s: str, t: str, k: int) -> list[GraphPath]:
+    def _k_shortest(
+        self,
+        s: str,
+        t: str,
+        k: int,
+        nodes: frozenset[str] | None = None,
+        ok_docs: frozenset[str] | None = None,
+    ) -> list[GraphPath]:
         """Yen's algorithm over ``-log(confidence)`` weights (bounded, deterministic)."""
-        first = self._dijkstra(s, t, set())
+        first = self._dijkstra(s, t, set(), nodes=nodes, ok_docs=ok_docs)
         if not first:
             return []
         accepted: list[list[tuple[str, Edge]]] = [first]
@@ -511,7 +628,7 @@ class QueryEngine:
                 # Block the root's nodes (all before the spur) so the spur path can't
                 # loop back through them — this is what makes k-shortest complete.
                 blocked = frozenset(prev_nodes[:i])
-                spur_chain = self._dijkstra(spur, t, banned, blocked)
+                spur_chain = self._dijkstra(spur, t, banned, blocked, nodes=nodes, ok_docs=ok_docs)
                 if not spur_chain:
                     continue
                 total = root + spur_chain
@@ -530,11 +647,19 @@ class QueryEngine:
 
     # -- tool 4: why ------------------------------------------------------------
 
-    def why(self, handle: str, *, k: int = 10, max_tokens: int = 1500) -> WhyResult:
+    def why(
+        self,
+        handle: str,
+        *,
+        k: int = 10,
+        max_tokens: int = 1500,
+        context: SecurityContext | None = None,
+    ) -> WhyResult:
         node_id = self.resolve(handle)
-        if node_id is None:
+        nodes, ok_docs = self._auth(context)
+        if node_id is None or (nodes is not None and node_id not in nodes):
             return WhyResult(node_id=handle, name=handle)
-        claims = self._claims_about(node_id)
+        claims = self._claims_about(node_id, nodes)
         # Rationale recorded in the same document(s) the node's claims cite — the
         # "why it was decided" context, scoped to where the node actually appears.
         claim_docs = {c.doc_id for cv in claims for c in cv.citations}
@@ -542,8 +667,11 @@ class QueryEngine:
         for n in self._node.values():
             if "Rationale" not in n.labels:
                 continue
-            if claim_docs and not (self._node_docs.get(n.node_id, set()) & claim_docs):
+            node_docs = self._node_docs.get(n.node_id, set())
+            if claim_docs and not (node_docs & claim_docs):
                 continue
+            if ok_docs is not None and not (node_docs & ok_docs):
+                continue  # never surface rationale from a document the principal can't read
             rationale.append(self._name(n.node_id))
         rationale = sorted(set(rationale))[:5]
         texts = [f"{c.subject} {c.predicate} {c.object}" for c in claims]
@@ -556,9 +684,11 @@ class QueryEngine:
             truncated=truncated,
         )
 
-    def _claims_about(self, node_id: str) -> list[ClaimView]:
+    def _claims_about(self, node_id: str, nodes: frozenset[str] | None = None) -> list[ClaimView]:
         views: list[ClaimView] = []
         for cid in sorted(self._claim_ids):
+            if nodes is not None and cid not in nodes:
+                continue  # claim derives only from documents the principal can't read
             p = self._node[cid].properties
             if p.get("subject") == node_id or p.get("object") == node_id:
                 cv = self._claim_view(cid)
@@ -569,21 +699,25 @@ class QueryEngine:
 
     # -- tool 5: timeline -------------------------------------------------------
 
-    def timeline(self, handle: str) -> TimelineResult:
+    def timeline(self, handle: str, *, context: SecurityContext | None = None) -> TimelineResult:
         node_id = self.resolve(handle)
-        if node_id is None:
+        nodes, _ok_docs = self._auth(context)
+        if node_id is None or (nodes is not None and node_id not in nodes):
             return TimelineResult(node_id=handle, name=handle)
-        events = self._claims_about(node_id)
+        events = self._claims_about(node_id, nodes)
         events.sort(key=lambda c: (c.t_valid is None, c.t_valid or "", c.claim_id))
         return TimelineResult(node_id=node_id, name=self._name(node_id), events=events)
 
     # -- tool 6: contradictions -------------------------------------------------
 
-    def contradictions(self) -> ContradictionsResult:
+    def contradictions(self, *, context: SecurityContext | None = None) -> ContradictionsResult:
+        nodes, _ok_docs = self._auth(context)
         pairs: list[ContradictionPair] = []
         for e in self._edges:
             if e.predicate != "CONTRADICTS":
                 continue
+            if nodes is not None and (e.subject not in nodes or e.object not in nodes):
+                continue  # never surface a contradiction touching a restricted claim
             a, b = self._claim_view(e.subject), self._claim_view(e.object)
             if a and b:
                 pairs.append(ContradictionPair(a, b))
@@ -591,10 +725,15 @@ class QueryEngine:
 
     # -- tool 7: communities ----------------------------------------------------
 
-    def communities(self, *, top_members: int = 8) -> CommunitiesResult:
+    def communities(
+        self, *, top_members: int = 8, context: SecurityContext | None = None
+    ) -> CommunitiesResult:
+        nodes, _ok_docs = self._auth(context)
         buckets: dict[int, list[str]] = {}
         labels: dict[int, str] = {}
         for nid in sorted(self._entity_ids):
+            if nodes is not None and nid not in nodes:
+                continue  # community rosters/sizes are computed over authorized members only
             p = self._node[nid].properties
             cid = p.get("community")
             if cid is None:
