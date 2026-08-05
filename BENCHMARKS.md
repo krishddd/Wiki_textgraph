@@ -5,13 +5,18 @@ Quality *and* cost for every run (G7 — no number without its cost). Generated 
 
 | benchmark | queries | k | recall@k | MRR | mean tokens/query | p50 ms | p95 ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| fixture:docs | 5 | 5 | 0.700 | 0.800 | 131 | 2.73 | 8.54 |
+| fixture:docs (text: BM25+PPR+RRF) | 5 | 5 | 0.700 | 0.800 | 131 | 1.04 | 5.20 |
+| fixture:docs (vision: MaxSim/hash) | 5 | 5 | 0.800 | 0.600 | 196 | 26.63 | 42.51 |
 
 ## Method
 
-- **Retrieval:** hybrid BM25 (chunk passages) + Personalized PageRank over the
-  dual-node entity+chunk graph, fused with Reciprocal Rank Fusion (L8).
-- **recall@k:** fraction of a query's gold entities appearing in the top-k hits.
+- **Retrieval (text):** hybrid BM25 (chunk passages) + Personalized PageRank over
+  the dual-node entity+chunk graph, fused with Reciprocal Rank Fusion (L8).
+- **Retrieval (vision, Phase 8):** late-interaction **MaxSim** over multi-vector
+  *pages* (documents). The default embedder is deterministic (hash tokens, CI-safe);
+  the `[vision]` extra swaps in a ColPali/ColQwen model over rendered page images.
+  Its recall@k counts whether a retrieved page names a gold entity (page-level).
+- **recall@k (text):** fraction of a query's gold entities appearing in the top-k hits.
 - **MRR:** mean reciprocal rank of the first gold entity.
 - **cost:** estimated tokens returned per query (~4 chars/token) and wall-clock
   latency percentiles over the query set.

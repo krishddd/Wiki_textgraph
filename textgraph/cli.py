@@ -10,6 +10,7 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``query`` (hybrid search), ``path`` (max-likelihood), ``explain`` (why),
     ``neighbors``, ``timeline``, ``contradictions``, ``communities``, ``stats``.
   * ``gql`` — a standard GQL (ISO-GQL/Cypher subset) query over the property graph.
+  * ``vision`` — late-interaction MaxSim page retrieval (ColPali behind ``[vision]``).
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
 
 The human CLI and the MCP tool surface are built off the same underlying result
@@ -222,6 +223,26 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_vision(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    from textgraph.core.config import Config
+    from textgraph.l8_retrieval.vision import resolve_embedder
+
+    config = Config(vision_backend=args.backend)
+    embedder = resolve_embedder(config)
+    res = _engine(root).vision_search(args.query, k=args.k, embedder=embedder).to_dict()
+    print(f"vision search: {res['query']}  (backend: {args.backend}, MaxSim late interaction)")
+    for i, hit in enumerate(res["hits"], 1):
+        cites = " ".join(_fmt_citation(c) for c in hit["citations"])
+        print(f"  {i}. page {hit['name'][:60]}  (score {hit['score']})")
+        if cites:
+            print(f"      {cites}")
+    return 0
+
+
 def _cmd_gql(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -425,6 +446,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("-o", "--output", default="textgraph-out", help="artifact directory")
     p_watch.add_argument("--interval", type=float, default=2.0, help="poll interval seconds")
     p_watch.set_defaults(func=_cmd_watch)
+
+    p_vision = sub.add_parser(
+        "vision", help="late-interaction page retrieval (MaxSim); ColPali behind [vision]"
+    )
+    p_vision.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_vision.add_argument("query", help="natural-language query")
+    p_vision.add_argument("-k", type=int, default=5, help="number of pages (default 5)")
+    p_vision.add_argument(
+        "--backend",
+        default="hash",
+        choices=["hash", "colpali"],
+        help="embedder: hash (deterministic default) or colpali ([vision] extra)",
+    )
+    p_vision.set_defaults(func=_cmd_vision)
 
     p_gql = sub.add_parser("gql", help="run a GQL (ISO-GQL/Cypher subset) query over the graph")
     p_gql.add_argument("path", help="corpus path or .duckdb snapshot")

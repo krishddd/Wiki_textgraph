@@ -121,6 +121,43 @@ def run_benchmark(
     return report, scores
 
 
+def _score_vision_query(engine: QueryEngine, query: str, gold: list[str], k: int) -> QueryScore:
+    """Page-level MaxSim retrieval: a page is relevant if it names a gold entity."""
+    gold_lower = {g.lower() for g in gold}
+    t0 = time.perf_counter()
+    hits = engine.vision_search(query, k=k).hits
+    latency_ms = (time.perf_counter() - t0) * 1000
+
+    relevant = [any(g in h.snippet.lower() for g in gold_lower) for h in hits]
+    recall = (1.0 if any(relevant) else 0.0) if gold_lower else 0.0
+    rr = next((1.0 / i for i, ok in enumerate(relevant, 1) if ok), 0.0)
+    tokens = sum(estimate_tokens(h.snippet or h.name) for h in hits)
+    return QueryScore(query, recall, rr, tokens, latency_ms)
+
+
+def run_vision_benchmark(
+    name: str, corpus: Path, queries: list[dict[str, object]], k: int = 5
+) -> BenchmarkReport:
+    """Benchmark the Phase-8 vision (MaxSim page) channel with the deterministic embedder."""
+    result = build(corpus)
+    engine = QueryEngine(result.nodes, result.edges)
+    scores = [
+        _score_vision_query(engine, str(q["query"]), [str(g) for g in q["gold"]], k)  # type: ignore[union-attr]
+        for q in queries
+    ]
+    latencies = [s.latency_ms for s in scores]
+    return BenchmarkReport(
+        name=name,
+        k=k,
+        n_queries=len(scores),
+        recall_at_k=statistics.mean(s.recall_at_k for s in scores) if scores else 0.0,
+        mrr=statistics.mean(s.reciprocal_rank for s in scores) if scores else 0.0,
+        mean_tokens=statistics.mean(s.tokens for s in scores) if scores else 0.0,
+        p50_latency_ms=_percentile(latencies, 50),
+        p95_latency_ms=_percentile(latencies, 95),
+    )
+
+
 def _load_external(data_dir: Path) -> list[dict[str, object]]:
     """Load a labelled set from ``<data>/queries.json`` (LoCoMo/LongMemEval layout)."""
     qfile = data_dir / "queries.json"
@@ -145,9 +182,13 @@ def _render_markdown(reports: list[BenchmarkReport]) -> str:
         "",
         "## Method",
         "",
-        "- **Retrieval:** hybrid BM25 (chunk passages) + Personalized PageRank over the",
-        "  dual-node entity+chunk graph, fused with Reciprocal Rank Fusion (L8).",
-        "- **recall@k:** fraction of a query's gold entities appearing in the top-k hits.",
+        "- **Retrieval (text):** hybrid BM25 (chunk passages) + Personalized PageRank over",
+        "  the dual-node entity+chunk graph, fused with Reciprocal Rank Fusion (L8).",
+        "- **Retrieval (vision, Phase 8):** late-interaction **MaxSim** over multi-vector",
+        "  *pages* (documents). The default embedder is deterministic (hash tokens, CI-safe);",
+        "  the `[vision]` extra swaps in a ColPali/ColQwen model over rendered page images.",
+        "  Its recall@k counts whether a retrieved page names a gold entity (page-level).",
+        "- **recall@k (text):** fraction of a query's gold entities appearing in the top-k hits.",
         "- **MRR:** mean reciprocal rank of the first gold entity.",
         "- **cost:** estimated tokens returned per query (~4 chars/token) and wall-clock",
         "  latency percentiles over the query set.",
@@ -176,8 +217,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     reports: list[BenchmarkReport] = []
-    report, _ = run_benchmark("fixture:docs", FIXTURE, FIXTURE_QUERIES, k=args.k)
+    report, _ = run_benchmark(
+        "fixture:docs (text: BM25+PPR+RRF)", FIXTURE, FIXTURE_QUERIES, k=args.k
+    )
     reports.append(report)
+    # Phase 8: the vision (MaxSim page) channel with the deterministic hash embedder.
+    reports.append(
+        run_vision_benchmark(
+            "fixture:docs (vision: MaxSim/hash)", FIXTURE, FIXTURE_QUERIES, k=args.k
+        )
+    )
 
     if args.data:
         data_dir = Path(args.data)

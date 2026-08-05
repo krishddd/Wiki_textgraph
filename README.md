@@ -238,6 +238,8 @@ graph LR
 
 > **Phase 7 update:** TextGraph now speaks **standard GQL** (ISO/IEC 39075 / Cypher subset) — `textgraph gql ./case-files "MATCH (a)-[:CONTROLS*1..3]->(b) RETURN a.name, b.name"` — property-graph pattern matching with quantified paths, over the same graph the typed tools query. Read-only, so determinism and provenance are untouched.
 
+> **Phase 8 update:** **vision-native retrieval** — `textgraph vision ./case-files "who moved the money"` ranks documents-as-pages with the ColPali-style **MaxSim** late-interaction operator. The default embedder is deterministic and CI-safe (zero GPU); a real ColPali/ColQwen model over rendered page images sits behind the `[vision]` extra. Query-time only, so `graph.json` is untouched.
+
 **🎉 v1.0.0 is out** — the full L0–L9 stack, shipped, plus the v1.1 interactive console and the Phase 7 GQL layer. See the [CHANGELOG](CHANGELOG.md) for details and [PLAN.md](PLAN.md) for the remaining extension roadmap (Phases 8–10: vision ingestion, access control, Graph-of-Thoughts).
 
 ## Specification documents

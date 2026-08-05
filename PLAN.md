@@ -37,7 +37,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **6** | Optional LLM + UI polish + packaging | 3 units | **Done — v1.0.0 shipped.** L4 opt-in LLM ✅, `textgraph console` web UI ✅, wheel packaging ✅, version bump + release ✅. |
 | **v1.1** | Interactive console + retrieval quality | 3.5 units | **Done.** Layout, canvas renderer, community sidebar, inspect, search, tag-filter, path mode, temporal slider, shared offline `graph.html` viewer, reranker (recall/MRR up), whole-package coverage gate. |
 | **7** | GQL / standards layer | 2 units | **Done.** Pure-Python ISO-GQL/Cypher subset (`textgraph/gql/`) — pattern matching + quantified paths + WHERE/RETURN/aggregation; `textgraph gql` CLI; pattern-tools round-trip. |
-| 8 | Vision-native multimodal ingestion | 2 units | Extension. |
+| **8** | Vision-native multimodal ingestion | 2 units | **Done.** MaxSim late-interaction page retrieval (`l8_retrieval/vision/`); deterministic hash embedder default, ColPali behind `[vision]`; `textgraph vision` CLI; benchmarked. |
 | 9 | Enterprise fine-grained access control | 3 units | Extension. |
 | 10 | Dynamic agent reasoning (GoT) | 2 units | Extension. |
 
@@ -89,6 +89,21 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
       duckdb_store, watch) with the `textgraph` console-script entry point
 - [x] **v1.0.0 shipped** (2026-08-04): version bumped, CHANGELOG cut, tagged `v1.0.0`;
       the release workflow re-verifies determinism on the built wheel before publishing
+
+## Phase 8 — Definition of Done (met)
+
+- [x] Late-interaction **MaxSim** operator + multi-vector representation
+      (`l8_retrieval/vision/maxsim.py`), pure-Python and deterministic
+- [x] Deterministic **hash embedder** default (SHAKE-256, CI-safe, zero-GPU) so the whole
+      vision pipeline runs/tests reproducibly; **ColPali/ColQwen behind `[vision]`**,
+      import-guarded with clean fallback to `hash`
+- [x] `QueryEngine.vision_search()` ranks documents-as-pages by MaxSim; `textgraph vision`
+      CLI (`--backend hash|colpali`); pages seed PPR via existing entity mentions
+- [x] **Default install unaffected**: embeddings are query-time only, so `graph.json`
+      stays byte-identical (verified) — G1/G2/G3 untouched
+- [x] **Value shown with a benchmarked number** (`BENCHMARKS.md`): vision (MaxSim/hash)
+      recall@5 0.80 vs text 0.70, with its token/latency cost
+- [x] +7 tests; whole-package coverage ≥ 88% (89%); ruff + strict mypy green
 
 ## Phase 7 — Definition of Done (met)
 

@@ -130,6 +130,10 @@ class QueryEngine:
                 self._node_docs.setdefault(e.subject, set()).update(docs)
                 self._node_docs.setdefault(e.object, set()).update(docs)
 
+        # Lazily-built vision (page) retrieval state.
+        self._pages_built: list[Any] | None = None
+        self._vision: Any = None
+
     # -- graph view (for the visual console) ------------------------------------
 
     def graph_view(self, *, max_nodes: int = 600) -> dict[str, Any]:
@@ -318,6 +322,52 @@ class QueryEngine:
         texts = [(h.snippet or h.name) for h in ranked]
         kept, truncated = budget_items(ranked, texts, max_tokens)
         return SearchResult(query=query, routing=routing, hits=kept, truncated=truncated)
+
+    # -- vision: late-interaction page retrieval (Phase 8) ----------------------
+
+    def _pages(self) -> list[Any]:
+        """Build one page per document (chunk texts concatenated in order); cached."""
+        if self._pages_built is not None:
+            return self._pages_built
+        from textgraph.l8_retrieval.vision import VisionPage
+
+        groups: dict[str, list[tuple[int, str, str]]] = {}
+        for cid in self._chunk_ids:
+            p = self._node[cid].properties
+            doc = str(p.get("doc_id", ""))
+            groups.setdefault(doc, []).append((int(p.get("index", 0)), str(p.get("text", "")), cid))
+        pages: list[VisionPage] = []
+        for doc, items in sorted(groups.items()):
+            items.sort()
+            text = "\n".join(t for _, t, _ in items)
+            cit = self._chunk_citation.get(items[0][2])
+            pages.append(
+                VisionPage(
+                    page_id=f"page:{doc}", doc_id=doc, name=text[:60], text=text, citation=cit
+                )
+            )
+        self._pages_built = pages
+        return pages
+
+    def vision_search(
+        self, query: str, *, k: int = 5, max_tokens: int = 1500, embedder: Any = None
+    ) -> SearchResult:
+        """Rank documents-as-pages by MaxSim late interaction (ColPali-style).
+
+        Uses the deterministic hash embedder by default; pass a ``[vision]``-backed
+        embedder to score real rendered-page images. Query-time only — the graph and
+        ``graph.json`` are untouched.
+        """
+        from textgraph.l8_retrieval.vision import HashEmbedder, VisionRetriever
+
+        if embedder is None:
+            if self._vision is None:
+                self._vision = VisionRetriever(self._pages(), HashEmbedder())
+            retriever = self._vision
+        else:
+            retriever = VisionRetriever(self._pages(), embedder)
+        hits = retriever.search(query, k=k, max_tokens=max_tokens)
+        return SearchResult(query=query, routing="vision", hits=hits, truncated=False)
 
     # -- tool 2: neighbors ------------------------------------------------------
 

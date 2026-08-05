@@ -51,6 +51,13 @@ class Config:
     analytics_backend: str = "builtin"
     # L8 retrieval: emit Chunk nodes + entity<->chunk links (the dual-node graph).
     emit_chunks: bool = True
+    # Phase 8 vision-native retrieval: multi-vector page embedder for MaxSim late
+    # interaction. "hash" is the deterministic, CI-safe default; "colpali" is the opt-in
+    # [vision] model (import-guarded, falls back to hash). Query-time only — no effect on
+    # graph.json, so the default install is unaffected.
+    vision_backend: str = "hash"
+    vision_model: str = ""
+    vision_dim: int = 48
     # L4 optional LLM (Phase 6): synthesizes GENERATED community summaries. Off by
     # default (G2) so the determinism gate never sees an LLM. The model id + base URL
     # affect output, so they belong in the config hash; the API key never does — it is

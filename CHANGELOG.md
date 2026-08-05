@@ -6,6 +6,27 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 8: vision-native late-interaction retrieval (`textgraph/l8_retrieval/vision/`)
+- **ColPali-style page retrieval, MaxSim and all.** A query and a document-as-**page** are
+  each a **multi-vector**, scored by the late-interaction **MaxSim** operator
+  `sum_i max_j (q_i · p_j)` (gap-analysis §2.1). The engine gains `vision_search()` /
+  `textgraph gql`-sibling `textgraph vision "<query>"`, ranking pages by MaxSim.
+- **Deterministic default, model behind the extra** (the project's upgrade-or-fall-back
+  rule): the `hash` embedder maps tokens to fixed unit vectors (SHAKE-256, pure stdlib),
+  so the whole late-interaction pipeline runs and is unit-tested reproducibly with **zero
+  GPU** (G1/G2). `vision_backend='colpali'` requests a real ColPali/ColQwen model over
+  rendered page images behind the **`[vision]`** extra — import-guarded, falling back to
+  `hash` if absent.
+- **`graph.json` is untouched.** Embeddings are computed at query time only; pages are
+  documents (already seeding PageRank via their entity mentions), so the default install
+  and the byte-identical artifact are unaffected — verified.
+- **DoD — a benchmarked number:** `BENCHMARKS.md` now reports the vision channel next to
+  text: on the fixture, MaxSim/hash page retrieval scores **recall@5 0.80** (vs 0.70 for
+  text) at higher cost (196 vs 131 tokens/query, ~11 ms) — real quality *and* cost. The
+  `[vision]` model is where image-native gains land (not CI-benchmarkable without a GPU).
+- +7 tests (MaxSim math, deterministic embedder, retriever, engine `vision_search`,
+  `[vision]` fallback); 244 total, coverage 89%.
+
 ### Added — Phase 7: GQL / ISO-GQL standards layer (`textgraph/gql/`)
 - **A standard graph-query surface over the property graph.** A pure-Python,
   deterministic subset of **GQL (ISO/IEC 39075) / Cypher** — tokenizer + recursive-descent

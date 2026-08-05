@@ -109,7 +109,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
-    "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*",
+    "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*", "colpali_engine.*",
 ]
 ignore_missing_imports = true
 

@@ -232,6 +232,29 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   equivalent GQL, proving the surface is faithful. Hybrid `search` (BM25+PPR) and aggregate
   `why` stay tool-only by design — they aren't graph *patterns*.
 
+## Phase 8 (implemented): vision-native late-interaction retrieval (`l8_retrieval/vision/`)
+
+- **Why.** OCR-then-chunk loses layout, tables, stamps, and figures. State-of-the-art
+  visual retrieval (ColPali / ColQwen2 / ColFlor) instead embeds *rendered page images*
+  into multi-vector patch representations and scores them against the query with **MaxSim**
+  late interaction — no text serialization. TextGraph adds that retrieval channel.
+- **The operator (`maxsim.py`).** A query and a page are each a `MultiVector`; relevance is
+  `sum_i max_j (q_i . p_j)` — each query token aligned to its best page patch. This module
+  only ever sees vectors, so it is pure-Python, deterministic (G1), and unit-tested with no
+  GPU.
+- **Embedders (`embed.py`), upgrade-or-fall-back.** The default `hash` embedder maps each
+  token to a fixed unit vector (SHAKE-256, stdlib) — semantics-free but enough to run and
+  test the *whole* late-interaction pipeline reproducibly (G1/G2). `vision_backend='colpali'`
+  loads a real model over page images behind the **`[vision]`** extra; if it's absent,
+  `resolve_embedder` falls back to `hash` (same pattern as GLiNER/Splink/Leiden).
+- **Retriever (`retriever.py`) + engine.** `VisionRetriever` embeds each *document-as-page*
+  once and MaxSim-ranks them; `QueryEngine.vision_search()` exposes it, and `textgraph vision`
+  is the CLI. Crucially, **embeddings are computed at query time only** — pages are the
+  documents that already seed PageRank through their entity mentions — so `graph.json` is
+  byte-identical and the default install is untouched. The `[vision]` model is where
+  image-native gains land; the deterministic default proves the plumbing, benchmarked in
+  `BENCHMARKS.md`.
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the
