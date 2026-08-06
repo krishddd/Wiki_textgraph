@@ -11,6 +11,7 @@ layers (L5 through L8) always re-run over the merged set.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -79,15 +80,24 @@ class DocIECache:
         if not p.exists():
             self.misses += 1
             return None
+        try:
+            payload: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
+            entry = {
+                "nodes": [node_from_dict(n) for n in payload["nodes"]],
+                "edges": [edge_from_dict(e) for e in payload["edges"]],
+                "pronouns_total": payload.get("pronouns_total", 0),
+                "pronouns_resolved": payload.get("pronouns_resolved", 0),
+                "relations": payload.get("relations", 0),
+            }
+        except (ValueError, KeyError, TypeError, OSError):
+            # A corrupt / partially-written cache entry (crash mid-write, truncated JSON) is
+            # treated as a miss and re-extracted, so a bad cache never fails a build (G5).
+            self.misses += 1
+            with contextlib.suppress(OSError):
+                p.unlink()  # drop the poisoned entry so the fresh result can replace it
+            return None
         self.hits += 1
-        payload: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
-        return {
-            "nodes": [node_from_dict(n) for n in payload["nodes"]],
-            "edges": [edge_from_dict(e) for e in payload["edges"]],
-            "pronouns_total": payload.get("pronouns_total", 0),
-            "pronouns_resolved": payload.get("pronouns_resolved", 0),
-            "relations": payload.get("relations", 0),
-        }
+        return entry
 
     def put(
         self,
