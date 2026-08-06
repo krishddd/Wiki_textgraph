@@ -23,6 +23,7 @@ from textgraph.gql.engine import GQLEngine
 from textgraph.gql.errors import GQLError
 from textgraph.l8_retrieval.engine import QueryEngine
 from textgraph.l8_retrieval.model import Citation
+from textgraph.l8_retrieval.routing import TOOLS, classify_query
 
 # One reasoner per engine (identity-keyed); the console builds its engine once, so this
 # avoids rebuilding BM25/PPR indexes on every message.
@@ -66,54 +67,11 @@ class ChatAnswer:
         }
 
 
-# The tools the chat can route to (also the chips/slash-commands the UI offers).
-TOOLS = (
-    "auto",
-    "reason",
-    "search",
-    "path",
-    "why",
-    "neighbors",
-    "timeline",
-    "contradictions",
-    "communities",
-    "stats",
-    "gql",
-)
+# Query→tool routing lives in l8_retrieval.routing (the single source of truth shared with
+# any agent); `classify` is re-exported here for the console's existing callers/tests.
+classify = classify_query
 
-_PATH_CUES = (
-    "connected to",
-    "connects to",
-    "linked to",
-    "link between",
-    "path from",
-    "path between",
-    "between ",
-)
-
-
-def classify(question: str, forced: str = "auto") -> str:
-    """Deterministically pick a tool for a question (or honour an explicit choice)."""
-    if forced and forced != "auto":
-        return forced if forced in TOOLS else "reason"
-    low = question.lower().strip()
-    if low.startswith("match ") or " return " in low:
-        return "gql"
-    if any(cue in low for cue in _PATH_CUES):
-        return "path"
-    if low.startswith("why") or "explain" in low:
-        return "why"
-    if "neighbo" in low or "related to" in low:
-        return "neighbors"
-    if "timeline" in low or "when did" in low or "over time" in low or "history of" in low:
-        return "timeline"
-    if "contradict" in low or "conflict" in low:
-        return "contradictions"
-    if "communit" in low or "cluster" in low or "topic" in low:
-        return "communities"
-    if low.startswith("stats") or "how many" in low or low.startswith("count"):
-        return "stats"
-    return "reason"
+__all__ = ["TOOLS", "ChatAnswer", "answer", "classify", "forget"]
 
 
 def _one_entity(engine: QueryEngine, q: str, focus: str | None) -> str | None:

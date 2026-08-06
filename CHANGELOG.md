@@ -6,6 +6,21 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — documented per-query retrieval routing (Sprint 2.2)
+- **`textgraph/l8_retrieval/routing.py`** — one deterministic, ordered rule set that maps a
+  question to a retrieval *tool* (`classify_query`) and a *strategy family*
+  (`route` → `RoutePlan{tool, strategy, reason}`): structured-graph (GQL), graph-traversal
+  (path/neighbors/why/timeline), graph-analytics (communities/contradictions/stats),
+  hybrid-lexical-graph (`search` = BM25 + Personalized PageRank + RRF), hybrid-multi-tool
+  (`reason` = Graph-of-Thoughts). The console "Ask" chat now shares this single source of
+  truth (its inline `classify` was promoted here), so routing can't drift between surfaces.
+  Rules documented in `docs/retrieval-routing.md`; the `reason` string is surfaced for
+  auditability (G6). +4 tests.
+- *Audit note:* Sprint 2.1 (L6 bi-temporal Claims, L7 analytics — communities/god-nodes/
+  bridges/contradictions, L8 hybrid BM25+PPR+RRF with local/global routing) and Sprint 2.3
+  (multi-hop max-likelihood **k-shortest path ranking**, Yen's algorithm, every step cited)
+  shipped in Phases 4–10 and are covered by existing tests — confirmed complete, not re-done.
+
 ### Changed — PDF ingestion is now a default capability (Sprint 1.1)
 - **`pypdf` moved from the `[ingest]` extra into the core dependencies**, so `textgraph build`
   ingests PDF text out of the box — investigators live in PDFs, and gating that behind an
