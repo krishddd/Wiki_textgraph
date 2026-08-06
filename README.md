@@ -30,8 +30,16 @@ Unknown extensions fall back to plain text; a format needing a missing extra is 
 
 ## Quickstart
 
+> New here? **[docs/RUNNING.md](docs/RUNNING.md)** is the step-by-step guide — which Python,
+> which requirements file, how to install with `pip` **or** `uv`, how to build a graph, and
+> how to open the interactive UI.
+
 ```bash
-uv tool install textgraph        # or: pipx install textgraph
+# Simplest install (plain pip, three small pure-Python packages — no GPU, no network):
+python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt && pip install -e .
+# (or, with uv:  uv sync  — then prefix commands with `uv run`)
+
 textgraph build ./case-files -o textgraph-out
 # → textgraph-out/graph.json, GRAPH_REPORT.md, graph.html, schema.yaml, manifest.json
 
@@ -52,7 +60,7 @@ textgraph console ./case-files          # -> http://127.0.0.1:8765
 textgraph gql ./case-files "MATCH (a:Organization)-[:CONTROLS*1..3]->(b) RETURN a.name, b.name"
 ```
 
-The console draws the graph the way an investigator reads it — nodes coloured by community and sized by PageRank, a communities sidebar with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, click-to-inspect for a node's cited claims and validity windows, and a path mode that traces the maximum-likelihood chain between two entities. Layout is precomputed server-side and deterministic, so the browser only ever *draws* it — no CDN, no physics engine, `graph.json` stays byte-identical.
+The console is a clean, spacious viewer that surfaces your data at a glance: a row of **stat cards** (entities · relations · communities · time points), the force-laid graph with nodes coloured by community and sized by PageRank, a **Top-entities-by-PageRank** list, a communities panel with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, **click-to-inspect** for a node's cited claims and validity windows, a path mode that traces the maximum-likelihood chain between two entities, a time slider that scrubs superseded relations, and a light / dark toggle. Layout is precomputed server-side and deterministic, so the browser only ever *draws* it — no CDN, no framework, no physics engine, `graph.json` stays byte-identical. The offline `graph.html` artifact is the exact same viewer. See **[docs/RUNNING.md](docs/RUNNING.md)** for a walkthrough.
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
 

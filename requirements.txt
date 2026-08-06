@@ -1,0 +1,12 @@
+# TextGraph — core runtime dependencies (the lean, deterministic, local-first default).
+#
+# This is all the interactive UI (`textgraph console`) and the core CLI need — nothing
+# heavy, no GPU, no network. Mirrors [project].dependencies in pyproject.toml.
+#
+#   pip install -r requirements.txt
+#
+# Heavier, optional capabilities (encoder IE, entity resolution, vision, access control,
+# DuckDB storage, MCP) live in requirements-full.txt — install only what you need.
+blake3>=0.4.1
+markdown-it-py>=3.0.0
+pyyaml>=6.0
