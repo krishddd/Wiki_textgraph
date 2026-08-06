@@ -68,3 +68,49 @@ def test_ingest_is_deterministic() -> None:
     b = ingest_bytes(raw, source_name="d.md", extension=".md")
     assert a.doc_id == b.doc_id
     assert [x.chunk_id for x in a.chunks] == [x.chunk_id for x in b.chunks]
+
+
+def _minimal_pdf(text: str) -> bytes:
+    """A valid single-page PDF whose text layer is ``text`` (self-contained, no deps)."""
+    objs = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R"
+        b"/Resources<</Font<</F1 5 0 R>>>>>>",
+    ]
+    stream = b"BT /F1 24 Tf 72 700 Td (" + text.encode() + b") Tj ET"
+    objs.append(b"<</Length " + str(len(stream)).encode() + b">>stream\n" + stream + b"\nendstream")
+    objs.append(b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>")
+    pdf = b"%PDF-1.4\n"
+    offsets = []
+    for i, o in enumerate(objs, 1):
+        offsets.append(len(pdf))
+        pdf += str(i).encode() + b" 0 obj" + o + b"endobj\n"
+    xref_pos = len(pdf)
+    pdf += b"xref\n0 " + str(len(objs) + 1).encode() + b"\n0000000000 65535 f \n"
+    for off in offsets:
+        pdf += f"{off:010d} 00000 n \n".encode()
+    pdf += (
+        b"trailer<</Size "
+        + str(len(objs) + 1).encode()
+        + b"/Root 1 0 R>>\nstartxref\n"
+        + str(xref_pos).encode()
+        + b"\n%%EOF"
+    )
+    return pdf
+
+
+def test_pdf_ingests_by_default() -> None:
+    # PDF text ingestion is a default capability now (pypdf is a core dependency), so it must
+    # work with no extra installed and re-verify its provenance against the extracted text.
+    ir = ingest_bytes(
+        _minimal_pdf("Acme Corp controls Beta Ltd."), source_name="c.pdf", extension=".pdf"
+    )
+    assert ir.format == "pdf"
+    assert "Acme Corp controls Beta Ltd." in ir.text
+    assert ir.chunks  # produced a chunk
+    # Deterministic (G1): same bytes -> same doc id.
+    again = ingest_bytes(
+        _minimal_pdf("Acme Corp controls Beta Ltd."), source_name="c.pdf", extension=".pdf"
+    )
+    assert ir.doc_id == again.doc_id

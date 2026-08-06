@@ -24,7 +24,8 @@ Investigators don't get clean markdown — they get PDFs, Word docs, and exports
 | Structured data | `.json` `.yaml`/`.yml` `.toml` | ✅ built-in |
 | Logs | `.log` (template mining) | ✅ built-in |
 | Conversations | `.chat` `.transcript` (speaker turns) | ✅ built-in |
-| PDF | `.pdf` | `pip install 'textgraph[ingest]'` (pypdf; Docling for layout/OCR) |
+| PDF (text layer) | `.pdf` | ✅ built-in (pypdf) — investigators live in PDFs |
+| PDF layout / tables / OCR | scanned or complex `.pdf` | `pip install 'textgraph[ingest]'` (Docling) |
 
 Unknown extensions fall back to plain text; a format needing a missing extra is **skipped with a warning**, never a crash (G2). For rich formats the *extracted* text becomes the canonical document, and every citation still re-verifies against it.
 

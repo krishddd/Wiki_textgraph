@@ -8,9 +8,10 @@ paragraphs) is recovered deterministically from each format's native markup:
   * HTML/XHTML/EPUB  -> stdlib ``html.parser`` (heading tags, paragraphs, lists)
   * DOCX/ODT         -> stdlib ``zipfile`` + XML (paragraph styles / outline levels)
   * RTF              -> control-word stripping into paragraphs
-  * PDF              -> ``pypdf`` if installed (``textgraph[ingest]``), else skipped
+  * PDF              -> ``pypdf`` (a core dependency; extracts the text layer). Layout/OCR
+                        fidelity for scanned or complex PDFs is the opt-in ``[ingest]`` extra.
 
-All are dependency-free except PDF. Everything is deterministic (G1).
+All use stdlib except PDF (pypdf, a small pure-Python core dep). Everything is deterministic (G1).
 """
 
 from __future__ import annotations
@@ -209,15 +210,13 @@ def ingest_epub(raw: bytes, source_name: str) -> IngestResult:
     return _result_from_blocks(text, blocks, source_name, "epub")
 
 
-# --- PDF (optional extra) ----------------------------------------------------
+# --- PDF (text layer; pypdf is a core dependency) ----------------------------
 @register(".pdf")
 def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
     try:
         from pypdf import PdfReader
-    except ImportError as exc:
-        raise UnsupportedFormat(
-            "PDF ingestion needs an extra: install 'textgraph[ingest]'"
-        ) from exc
+    except ImportError as exc:  # pragma: no cover - pypdf is a core dependency
+        raise UnsupportedFormat("PDF ingestion requires pypdf (a core dependency)") from exc
     reader = PdfReader(_bytes_io(raw))
     lines: list[tuple[str, int]] = []
     for page in reader.pages:

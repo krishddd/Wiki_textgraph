@@ -8,18 +8,21 @@ license = { text = "MIT" }
 authors = [{ name = "krishddd" }]
 keywords = ["knowledge-graph", "provenance", "information-extraction", "mcp", "deterministic", "rag"]
 dependencies = [
-    # Lean core: content addressing + pure-Python structural parsers only.
+    # Lean core: content addressing + pure-Python structural parsers.
     # Everything heavy (Docling, tree-sitter, encoder models) lives behind extras.
     "blake3>=0.4.1",
     "markdown-it-py>=3.0.0",
     "pyyaml>=6.0",
+    # PDF text ingestion in the DEFAULT install — investigators live in PDFs, and pypdf is
+    # pure-Python, BSD-3 licensed, small, and deterministic (no binary deps, no GPU). Layout/
+    # OCR fidelity (Docling) stays opt-in in [ingest]; the default extracts the text layer.
+    "pypdf>=4.0.0",
 ]
 
 [project.optional-dependencies]
-# Rich-document ingestion. PDF text needs pypdf; Docling adds layout/table/OCR
-# fidelity; tree-sitter/Drain3 give deterministic structured-text/log parsing.
+# Higher-fidelity rich-document ingestion. Docling adds layout/table/OCR; tree-sitter/Drain3
+# give deterministic structured-text/log parsing. (PDF text works without this — see core.)
 ingest = [
-    "pypdf>=4.0.0",
     "docling>=2.0.0",
     "tree-sitter>=0.21.0",
     "drain3>=0.9.11",

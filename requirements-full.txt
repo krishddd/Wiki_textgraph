@@ -8,8 +8,8 @@
 #
 -r requirements.txt
 
-# ingest — rich-document ingestion (PDF text, Docling layout/tables/OCR, code, logs)
-pypdf>=4.0.0
+# ingest — higher-fidelity rich-document ingestion (Docling layout/tables/OCR, code, logs).
+# (PDF text ingestion is in the core requirements.txt now — pypdf is a default dependency.)
 docling>=2.0.0
 tree-sitter>=0.21.0
 drain3>=0.9.11

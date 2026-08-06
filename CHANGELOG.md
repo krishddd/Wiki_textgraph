@@ -6,6 +6,15 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed — PDF ingestion is now a default capability (Sprint 1.1)
+- **`pypdf` moved from the `[ingest]` extra into the core dependencies**, so `textgraph build`
+  ingests PDF text out of the box — investigators live in PDFs, and gating that behind an
+  extra was an adoption barrier. `pypdf` is pure-Python, BSD-3 licensed, small, and
+  deterministic (no binary deps, no GPU), so it doesn't compromise the lean, local-first
+  default (G2) or determinism (G1). Higher-fidelity **layout / table / OCR** extraction
+  (Docling) stays opt-in in `[ingest]`. `requirements.txt` gains `pypdf`; README "Supported
+  formats" updated. +1 test (`test_pdf_ingests_by_default`, a self-contained minimal PDF).
+
 ### Added — console "Ask" chat (grounded, deterministic)
 - **A chat dock in `textgraph console`.** Ask a question in plain English; it is *routed* to
   the right graph tool (reason / search / path / why / neighbors / timeline / contradictions /
