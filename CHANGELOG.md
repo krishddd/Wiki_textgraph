@@ -15,6 +15,20 @@ to Semantic Versioning.
   (Docling) stays opt-in in `[ingest]`. `requirements.txt` gains `pypdf`; README "Supported
   formats" updated. +1 test (`test_pdf_ingests_by_default`, a self-contained minimal PDF).
 
+### Confirmed — entity resolution is on by default (Sprint 1.2)
+- **L5 entity resolution already runs in every `build()`** with the deterministic **rules**
+  backend (`Config.resolve_entities=True`, `er_backend="rules"`) — no extra, no flag —
+  collapsing aliases (`Acme Corp` / `Acme Corporation` / `ACME`) to a canonical node via
+  **non-destructive** `SAME_AS` edges. Added a pipeline-level test pinning this default-on
+  contract (default build emits `SAME_AS` + a `Canonical` node; `resolve_entities=False`
+  removes them); `textgraph er audit` verified working.
+- **Flagged (G2 conflict, not implemented):** the backlog asked to make **Splink** the
+  default ER step, described as "no new heavy dependencies." It is not — Splink pulls in
+  `splink` + `duckdb` + `pandas`, which would bloat the lean local-first default and trade
+  away the moat the market review says to protect. The deterministic rules backend already
+  delivers default-on resolution; **Splink stays the opt-in `[er]` backend.** Quality
+  improvements to alias/synonym handling are tracked for Sprint 3.
+
 ### Added — console "Ask" chat (grounded, deterministic)
 - **A chat dock in `textgraph console`.** Ask a question in plain English; it is *routed* to
   the right graph tool (reason / search / path / why / neighbors / timeline / contradictions /

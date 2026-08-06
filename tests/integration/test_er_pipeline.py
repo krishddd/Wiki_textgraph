@@ -63,6 +63,20 @@ def test_resolution_is_non_destructive() -> None:
     assert any("Canonical" in n.labels for n in result.nodes)
 
 
+def test_entity_resolution_is_on_by_default() -> None:
+    # ER runs with the deterministic rules backend in a plain `build()` — no extra, no flag —
+    # so aliases collapse out of the box (Splink stays the opt-in higher-recall [er] backend).
+    assert Config().resolve_entities is True and Config().er_backend == "rules"
+    default = build(ER)  # default config
+    same_as = [e for e in default.edges if e.predicate == "SAME_AS"]
+    assert same_as, "default build should emit SAME_AS edges"
+    assert any("Canonical" in n.labels for n in default.nodes)
+
+    # The flag genuinely controls it: turning ER off removes the SAME_AS layer.
+    off = build(ER, config=Config(resolve_entities=False))
+    assert not [e for e in off.edges if e.predicate == "SAME_AS"]
+
+
 def test_blocking_recall_meets_floor() -> None:
     _result, records = _records()
     pairs = candidate_pairs(records)
