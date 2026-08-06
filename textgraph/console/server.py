@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import json
 import tempfile
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -39,12 +40,20 @@ def build_engine(source: str | Path) -> QueryEngine:
 
 @dataclass
 class _State:
-    """Server-held mutable state: the current engine + ingestion config."""
+    """Server-held mutable state: the current engine + ingestion/auth config.
+
+    Concurrency model: ``ThreadingHTTPServer`` serves each request on its own thread. Reads
+    are safe — swapping ``engine`` is a single atomic reference assignment (GIL), so a reader
+    sees either the old or the new engine, never a torn one. The only mutation, ingestion, is
+    serialized by ``ingest_lock`` so two concurrent uploads can't race the rebuild/swap.
+    """
 
     engine: QueryEngine
     source: str | None
     allow_ingest: bool
     cache_dir: str | None
+    token: str | None = None
+    ingest_lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
@@ -66,14 +75,32 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             status, ctype, body = route(state.engine, parsed.path, merged)
             self._send(status, ctype, body)
 
+        def _authed(self) -> bool:
+            # Optional bearer-token auth (only enforced when --token was given). The page
+            # itself is always served; only /api/* requires the token.
+            if not state.token or not urlparse(self.path).path.startswith("/api/"):
+                return True
+            header = self.headers.get("Authorization", "")
+            supplied = header[7:] if header.startswith("Bearer ") else ""
+            if not supplied:
+                supplied = parse_qs(urlparse(self.path).query).get("token", [""])[0]
+            if supplied == state.token:
+                return True
+            self._json(401, {"error": "unauthorized"})
+            return False
+
         def do_GET(self) -> None:
+            if not self._authed():
+                return
             # /api/config reports server-level flags the read-only route() can't know.
             if urlparse(self.path).path == "/api/config":
-                self._json(200, {"ingest": state.allow_ingest})
+                self._json(200, {"ingest": state.allow_ingest, "auth": bool(state.token)})
                 return
             self._route({})
 
         def do_POST(self) -> None:
+            if not self._authed():
+                return
             parsed = urlparse(self.path)
             length = int(self.headers.get("Content-Length", 0) or 0)
             raw = self.rfile.read(length) if length else b""
@@ -106,17 +133,19 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             if not uploads:
                 self._json(400, {"ok": False, "error": "no files in request"})
                 return
-            before = {state.engine._name(n) for n in state.engine._entity_ids}
-            res = ingest_files(state.source, uploads, cache_dir=state.cache_dir)
-            if not res.ok:
-                self._json(
-                    400, {"ok": False, "error": "no accepted files", "rejected": res.rejected}
-                )
-                return
-            old = state.engine
-            state.engine = QueryEngine(res.nodes, res.edges)
-            forget(old)  # the swapped-out engine's cached reasoner is now stale
-            after = {state.engine._name(n) for n in state.engine._entity_ids}
+            # Serialize ingests so two concurrent uploads can't race the rebuild + swap.
+            with state.ingest_lock:
+                before = {state.engine._name(n) for n in state.engine._entity_ids}
+                res = ingest_files(state.source, uploads, cache_dir=state.cache_dir)
+                if not res.ok:
+                    self._json(
+                        400, {"ok": False, "error": "no accepted files", "rejected": res.rejected}
+                    )
+                    return
+                old = state.engine
+                state.engine = QueryEngine(res.nodes, res.edges)
+                forget(old)  # the swapped-out engine's cached reasoner is now stale
+                after = {state.engine._name(n) for n in state.engine._entity_ids}
             self._json(
                 200,
                 {
@@ -140,16 +169,17 @@ def serve(
     port: int = 8765,
     source: str | Path | None = None,
     allow_ingest: bool = False,
+    token: str | None = None,
 ) -> None:  # pragma: no cover - binds a socket
     """Serve the console until interrupted (Ctrl-C).
 
-    Pass ``source`` + ``allow_ingest=True`` to enable file-attach ingestion (the corpus dir
-    the uploads are written into and incrementally rebuilt from).
+    Pass ``source`` + ``allow_ingest=True`` to enable file-attach ingestion; ``token`` turns
+    on bearer-token auth on ``/api/*`` (recommended before binding a non-localhost host).
     """
     cache_dir = tempfile.mkdtemp(prefix="tg-console-") if (allow_ingest and source) else None
-    state = _State(engine, str(source) if source else None, allow_ingest, cache_dir)
+    state = _State(engine, str(source) if source else None, allow_ingest, cache_dir, token)
     server = ThreadingHTTPServer((host, port), _make_handler(state))
-    extra = "  · ingest ON" if state.allow_ingest else ""
+    extra = ("  · ingest ON" if state.allow_ingest else "") + ("  · auth ON" if token else "")
     print(f"TextGraph console: http://{host}:{port}  (Ctrl-C to stop){extra}")
     try:
         server.serve_forever()

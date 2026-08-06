@@ -6,6 +6,17 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Hardened — console server concurrency + optional auth (Sprint 4.3)
+- **Ingest serialization:** the file-attach rebuild + engine hot-swap is now guarded by a
+  lock, so two concurrent uploads can't race. Reads stay lock-free (an engine swap is a
+  single atomic reference assignment under the GIL — a reader sees the old or new engine,
+  never a torn one); the concurrency model is documented on `_State`.
+- **Optional bearer-token auth:** `textgraph console … --token <T>` requires the token on
+  `/api/*` (via `Authorization: Bearer` or `?token=`) while still serving the page — recommended
+  before binding a non-localhost `--host`. Verified live (401 without, 200 with). *Flagged as
+  future:* async indexing jobs and full multi-user identity are out of scope for this pass
+  (they would need a job queue / user store); the token is basic per-instance auth.
+
 ### Added — graph inspection / provenance admin view (Sprint 4.1)
 - **`QueryEngine.inspect(node)` + `GET /api/inspect`** — the "admin console" detail most
   GraphRAG tools lack: for any node, its re-verifiable **provenance** spans, the **confidence

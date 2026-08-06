@@ -368,6 +368,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
         port=args.port,
         source=root,
         allow_ingest=args.allow_ingest and root.is_dir(),
+        token=args.token or None,
     )
     return 0
 
@@ -589,6 +590,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-ingest",
         action="store_true",
         help="enable file-attach in the Ask chat (writes uploads into the corpus dir)",
+    )
+    p_console.add_argument(
+        "--token",
+        default="",
+        help="require this bearer token on /api/* (recommended before --host 0.0.0.0)",
     )
     p_console.set_defaults(func=_cmd_console)
 
