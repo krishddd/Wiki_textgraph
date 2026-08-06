@@ -6,6 +6,19 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — extraction-quality benchmark + honest peer comparison (Sprint 3.1 / 3.2)
+- **`benchmarks/quality.py`** — measures the extracted graph against a hand-labelled gold set
+  on the `docs` fixture: entity P/R/F1 (**1.0/1.0/1.0**), asserted-relation P/R/F1
+  (**0.833**), **false / hallucinated edge rate (0.167 — reported, not hidden)**, and
+  **citation coverage (1.0)**. It credits the extractor for correctly tagging *negated*
+  relations (`polarity=neg`) and names its one honest weakness (a coreference error). Gated
+  by `tests/integration/test_quality_benchmark.py` so quality can't silently regress.
+- **`BENCHMARKS.md`** gains the quality numbers and an **honest peer comparison** vs Graphiti
+  / LightRAG / HippoRAG / Neo4j GraphRAG Python: a *capability* table on the axes that differ
+  (byte-level provenance, deterministic build, zero-LLM-default, measured hallucination rate,
+  bi-temporal versioning), with an explicit statement that a fair *head-to-head QA* comparison
+  isn't feasible yet (peers are LLM-driven/non-deterministic) — no fabricated numbers.
+
 ### Added — answer-grounding confidence + abstention (Sprint 3.3)
 - **`textgraph/l8_retrieval/grounding.py`** — the "Ask" chat now scores how well each answer
   is supported by citation evidence and **abstains** ("Insufficient evidence in the graph to

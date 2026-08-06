@@ -29,6 +29,7 @@ python -m benchmarks.retrieval --write   # regenerate this file
 python -m benchmarks.retrieval --data DIR  # external set (DIR/queries.json)
 python -m benchmarks.security            # FGAC overhead + no-bleed (Phase 9)
 python -m benchmarks.reasoning           # Graph-of-Thoughts adaptive vs static (Phase 10)
+python -m benchmarks.quality             # extraction quality vs a gold set (Sprint 3.1)
 ```
 
 ## Graph-of-Thoughts (Phase 10) - adaptive vs static reasoning cost
@@ -77,3 +78,31 @@ transition probability drops to 0), measured on `tests/fixtures/corpora/secure`
 LoCoMo / LongMemEval-S: place the labelled set at `DIR/queries.json` (each item
 `{"query": ..., "gold": [...]}`) and a corpus at `DIR/corpus/`. Absent data is
 skipped, so CI never downloads.
+
+## Extraction quality (Sprint 3.1) - vs a hand-labelled gold set
+
+Fixture `tests/fixtures/corpora/docs`, deterministic rules extractor (default install, zero LLM). Every correctness number is deterministic; reproduce with `python -m benchmarks.quality`.
+
+| Metric | Precision | Recall | F1 |
+|---|---|---|---|
+| Entities | 1.000 | 1.000 | 1.000 |
+| Asserted relations | 0.833 | 0.833 | 0.833 |
+
+- **False / hallucinated edge rate: 0.167** (1 of 6 asserted edges). The one false edge is a coreference error (`Beta Ltd → Gamma Holdings` where the source's "the company" refers to Acme Corp) — reported honestly rather than hidden. Negated relations ("did not transfer") are correctly tagged `polarity=neg` and excluded from asserted edges, so the extractor is credited for *not* asserting them.
+- **Citation coverage: 1.000** — every asserted relation edge carries a source span, and byte-level re-verification of those spans is gated at **100%** by `tests/integration/test_edge_provenance.py` (G3). This is the number most GraphRAG systems can't report at all.
+
+## Honest peer comparison
+
+A fair *head-to-head* on a shared benchmark harness against Graphiti / LightRAG / HippoRAG / Neo4j GraphRAG Python is **not yet feasible** here — those systems are LLM-driven and evaluated on QA datasets (e.g. LoCoMo, MultiHop-RAG) with different tasks, and running them requires API keys and non-deterministic pipelines. Rather than fabricate numbers, this is a **capability comparison** on the axes that actually differ; the retrieval numbers above are ours, measured.
+
+| Capability | TextGraph | Typical LLM GraphRAG peer |
+|---|---|---|
+| Byte-level provenance on every edge (re-verifiable span) | ✅ 100% (gated) | ✗ usually chunk-level or none |
+| Deterministic build (byte-identical `graph.json`) | ✅ gated in CI | ✗ LLM extraction is non-deterministic |
+| Works with **zero LLM calls** by default | ✅ | ✗ LLM required to build the graph |
+| Hallucinated-edge rate is *measured and published* | ✅ 0.167, honest | rarely reported |
+| Bi-temporal claim versioning (`[t_valid, t_invalid)`) | ✅ | partial (Graphiti) / none |
+| Local-first, no service required | ✅ DuckDB default | often needs a graph DB service |
+| Recall ceiling on hard multi-hop QA | lower (rules default) | higher (LLM extraction) |
+
+**Honest weaknesses:** the deterministic default trades peak recall for determinism + provenance — an LLM extractor will find edges our rules miss (see the coref error above), which is exactly why the `[ie]` GLiNER and opt-in L4 LLM paths exist. Where we win is *trust*: reproducibility and re-verifiable citations, which the peers largely do not offer. A shared-harness QA comparison is tracked as future work and will be added here only when it can be run fairly.
