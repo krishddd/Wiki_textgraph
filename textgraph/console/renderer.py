@@ -127,6 +127,12 @@ RENDERER_CSS = """
   .fact .cite { font-family:ui-monospace,Menlo,monospace; font-size:10.5px; color:var(--mut);
     word-break:break-all; margin-top:3px; }
   .fact.sup { border-color:var(--sup); }
+  .adm { font-size:11.5px; color:var(--fg2); margin:5px 0; }
+  .adm .k { text-transform:uppercase; letter-spacing:.06em; font-size:10px; color:var(--mut);
+    margin-right:6px; }
+  .adm.sup .k, .adm.sup { color:var(--sup); }
+  .adm .pill { display:inline-block; padding:1px 7px; border-radius:20px; border:1px solid var(--line);
+    font-size:10.5px; }
   .win { color:var(--mut); font-size:11.5px; } .win.sup { color:var(--sup); }
   .empty { color:var(--mut); padding:10px 0; }
 
@@ -345,9 +351,18 @@ function win(c){ if(c.t_valid&&c.t_invalid) return `<span class="win sup">valid 
 async function inspect(n){
   const d=document.getElementById('detail');
   d.innerHTML=`<div class="title">${esc(n.name)}</div><div class="sub">${esc(n.community_label||'')} · pr ${n.pagerank}</div><div class="empty">loading…</div>`;
-  const why=await TG.why(n.id);
+  // Admin view when the live server offers /api/inspect; fall back to why() offline.
+  const data = (typeof TG.inspect==='function') ? await TG.inspect(n.id) : await TG.why(n.id);
   let h=`<div class="title">${esc(n.name)}</div><div class="sub">${esc(n.community_label||'')} · pr ${n.pagerank}</div>`;
-  if((why.claims||[]).length){ for(const c of why.claims){
+  if(data.provenance && data.provenance.length){
+    h+=`<div class="adm"><span class="k">provenance</span> <span class="cite">${esc(citeStr(data.provenance))}</span></div>`; }
+  if(data.confidence_tiers && Object.keys(data.confidence_tiers).length){
+    h+=`<div class="adm"><span class="k">tiers</span> `+Object.entries(data.confidence_tiers).map(([t,c])=>`<span class="pill">${esc(t)} ${c}</span>`).join(' ')+`</div>`; }
+  if(data.same_as && data.same_as.canonical){
+    h+=`<div class="adm"><span class="k">SAME_AS</span> → ${esc(data.same_as.canonical)} <span class="cite">(${(data.same_as.members||[]).map(esc).join(', ')})</span></div>`; }
+  if(data.superseded_claims && data.superseded_claims.length){
+    h+=`<div class="adm sup"><span class="k">invalidated</span> ${data.superseded_claims.length} superseded claim(s)</div>`; }
+  if((data.claims||[]).length){ for(const c of data.claims){
     h+=`<div class="fact ${c.status==='superseded'?'sup':''}">${esc(c.subject)} —${esc(c.predicate)}→ ${esc(c.object)}${c.polarity==='neg'?' (negated)':''}<br>${win(c)}<div class="cite">${esc(citeStr(c.citations))}</div></div>`; }
   } else h+='<div class="empty">no claims</div>';
   d.innerHTML=h;

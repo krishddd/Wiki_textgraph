@@ -55,6 +55,8 @@ def route(engine: QueryEngine, path: str, params: dict[str, str]) -> tuple[int, 
         with contextlib.suppress(TypeError, ValueError):
             max_nodes = int(params.get("max_nodes", "600"))
         return _json(200, engine.graph_view(max_nodes=max_nodes))
+    if path == "/api/inspect":
+        return _json(200, engine.inspect(params.get("node", "")))
     if path == "/api/chat":
         from textgraph.console.chat import answer
 

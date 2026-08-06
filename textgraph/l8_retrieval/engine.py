@@ -711,6 +711,62 @@ class QueryEngine:
         views.sort(key=lambda c: (-c.confidence, c.claim_id))
         return views
 
+    # -- admin inspection (provenance / confidence tier / SAME_AS / invalidation) ----
+
+    def inspect(self, handle: str, *, context: SecurityContext | None = None) -> dict[str, Any]:
+        """Full admin detail for one node: provenance, tier, SAME_AS cluster, claim history.
+
+        The "admin console" view (Sprint 4.1): everything an operator needs to audit a node —
+        its re-verifiable source spans, the confidence tier(s) of its relations, its
+        non-destructive SAME_AS cluster (canonical + members), and each claim's validity
+        window / supersession status. Access-controlled like the other tools.
+        """
+        node_id = self.resolve(handle, context=context)
+        nodes, _ok = self._auth(context)
+        if node_id is None or (nodes is not None and node_id not in nodes):
+            return {"found": False, "node_id": handle, "name": handle}
+        n = self._node[node_id]
+        p = n.properties
+
+        # SAME_AS cluster (non-destructive): node -> canonical, and canonical -> all members.
+        canonical: str | None = None
+        for e in self._edges:
+            if e.predicate == "SAME_AS" and e.subject == node_id:
+                canonical = e.object
+        members: list[str] = []
+        if canonical is not None:
+            members = sorted(
+                self._name(e.subject)
+                for e in self._edges
+                if e.predicate == "SAME_AS" and e.object == canonical
+            )
+
+        # Confidence-tier histogram over this node's relation edges (EXTRACTED/INFERRED/…).
+        tiers: dict[str, int] = {}
+        for e in self._edges:
+            if (e.subject == node_id or e.object == node_id) and e.predicate not in _NON_RELATION:
+                tiers[str(e.tag)] = tiers.get(str(e.tag), 0) + 1
+
+        claims = self._claims_about(node_id, nodes)
+        cit = self._entity_citation.get(node_id)
+        return {
+            "found": True,
+            "node_id": node_id,
+            "name": self._name(node_id),
+            "labels": list(n.labels),
+            "etype": str(p.get("etype", "")),
+            "pagerank": round(float(p.get("pagerank", 0.0)), 6),
+            "community_label": str(p.get("community_label", "")),
+            "provenance": [cit.to_dict()] if cit else [],
+            "confidence_tiers": dict(sorted(tiers.items())),
+            "same_as": {
+                "canonical": self._name(canonical) if canonical else None,
+                "members": members,
+            },
+            "claims": [c.to_dict() for c in claims],
+            "superseded_claims": [c.to_dict() for c in claims if c.status == "superseded"],
+        }
+
     # -- tool 5: timeline -------------------------------------------------------
 
     def timeline(self, handle: str, *, context: SecurityContext | None = None) -> TimelineResult:

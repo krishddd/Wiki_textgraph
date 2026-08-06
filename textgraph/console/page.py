@@ -16,6 +16,7 @@ _API_ADAPTER = r"""
 const TG = {
   graph:  ()    => fetch('/api/graph').then(r=>r.json()),
   why:    (id)  => fetch('/api/call?'+new URLSearchParams({tool:'why',node:id})).then(r=>r.json()),
+  inspect:(id)  => fetch('/api/inspect?'+new URLSearchParams({node:id})).then(r=>r.json()),
   path:   (s,t) => fetch('/api/call?'+new URLSearchParams({tool:'path',source:s,target:t})).then(r=>r.json()),
   search: (q)   => fetch('/api/call?'+new URLSearchParams({tool:'search',query:q,k:'8'})).then(r=>r.json()),
   chat:   (q,o) => fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},

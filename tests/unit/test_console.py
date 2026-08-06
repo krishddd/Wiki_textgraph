@@ -92,3 +92,29 @@ def test_graph_edges_carry_temporal_windows_for_the_slider() -> None:
     windows = {(e["t_valid"], e["t_invalid"]) for e in transfers}
     assert ("2026-05-01", "2026-06-01") in windows  # the superseded assertion
     assert ("2026-06-01", None) in windows  # the current correction
+
+
+def test_inspect_endpoint_returns_admin_detail() -> None:
+    import json as _json
+
+    # A corpus with an alias so SAME_AS clustering shows up in the admin view.
+    import tempfile
+    from pathlib import Path
+
+    from textgraph.l8_retrieval import QueryEngine
+    from textgraph.pipeline import build
+
+    d = Path(tempfile.mkdtemp())
+    (d / "a.md").write_text(
+        "Acme Corporation controls Gamma Holdings. Acme Corp wired funds to Beta Ltd. "
+        "ACME is the parent.",
+        encoding="utf-8",
+    )
+    r = build(d)
+    eng = QueryEngine(r.nodes, r.edges)
+    status, ctype, body = route(eng, "/api/inspect", {"node": "Acme Corp"})
+    assert status == 200 and "application/json" in ctype
+    payload = _json.loads(body)
+    assert payload["found"] is True
+    assert payload["same_as"]["canonical"]  # alias cluster surfaced
+    assert "confidence_tiers" in payload and "provenance" in payload and "claims" in payload

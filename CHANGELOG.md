@@ -6,6 +6,22 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — graph inspection / provenance admin view (Sprint 4.1)
+- **`QueryEngine.inspect(node)` + `GET /api/inspect`** — the "admin console" detail most
+  GraphRAG tools lack: for any node, its re-verifiable **provenance** spans, the **confidence
+  tier** histogram of its relations (`EXTRACTED`/`INFERRED`/…), its non-destructive
+  **SAME_AS** cluster (canonical + members), and each claim's **validity window /
+  supersession** history. Access-controlled like the other tools. The console inspector now
+  renders these sections when a node is clicked; the offline `graph.html` falls back to
+  `why()` gracefully. +1 test.
+
+### Hardened — incremental reindex stress + partial-write recovery (Sprint 4.2)
+- **`DocIECache.get()` now recovers from a corrupt / partially-written cache entry** (a crash
+  mid-write leaving truncated JSON): it's treated as a miss, the poisoned file is dropped, and
+  the document is re-extracted — a bad cache never fails a build (G5). +4 stress tests: after
+  deleting or modifying a document, an incremental rebuild is **byte-identical** to a clean
+  full rebuild; a poisoned cache recovers to the identical graph.
+
 ### Added — extraction-quality benchmark + honest peer comparison (Sprint 3.1 / 3.2)
 - **`benchmarks/quality.py`** — measures the extracted graph against a hand-labelled gold set
   on the `docs` fixture: entity P/R/F1 (**1.0/1.0/1.0**), asserted-relation P/R/F1
