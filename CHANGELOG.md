@@ -6,6 +6,32 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-06
+
+**TextGraph 3.0 — the interactive + investigator-defaults release.** On top of the v2.0.0
+enterprise extensions, 3.0 adds a grounded conversational surface and acts on a competitive
+market review — making the highest-leverage capabilities the *default*, proving quality
+honestly, and hardening for real use. All of it preserves the moat: **deterministic build
+(byte-identical `graph.json`), byte-level provenance, zero-LLM-by-default, local-first**.
+
+Highlights:
+- **Console "Ask" chat** — ask in plain English; routed to the right graph tool, answered
+  **cited**, with the answer highlighted on the graph, a collapsible reasoning chain,
+  multi-turn follow-ups, **grounding confidence + abstention**, and opt-in **file-attach
+  ingestion** into the live graph. Plus a redesigned, spacious, theme-aware UI.
+- **Investigator defaults** — **PDF text ingestion is now built-in** (pypdf → core), entity
+  resolution confirmed on-by-default, and the `[ie]` GLiNER backend runs **int8-quantized
+  ONNX** for usable CPU speed.
+- **Retrieval & integrations** — documented query routing, **LangChain / LlamaIndex adapters**
+  that keep byte-span citations, and a Neo4j scale-out **design** (DuckDB stays default).
+- **Proof & honesty** — an extraction-quality benchmark that **publishes the hallucinated-edge
+  rate (0.167)** and an honest peer comparison; grounding/abstention ("insufficient evidence").
+- **Ops hardening** — a provenance/SAME_AS/invalidation **admin inspector**, incremental
+  reindex stress + partial-write recovery, and optional console **token auth** + ingest lock.
+
+Breaking-ish: `pypdf` is now a core dependency (installs by default). Full per-item detail
+below.
+
 ### Changed — positioning leads with the differentiators (Sprint 4.4)
 - **README** now opens with a **"Why it's different (vs GraphRAG)"** section that leads with
   the real edge — *deterministic* (byte-identical `graph.json`), *byte-level provenance* (100%
