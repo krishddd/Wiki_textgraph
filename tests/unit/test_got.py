@@ -104,3 +104,15 @@ def test_query_with_no_named_entity_returns_grounded_empty() -> None:
     assert res.complexity == 0
     assert res.grounded  # vacuously: only a Plan, no unsupported claims
     assert "No graph evidence" in res.answer
+
+
+def test_entity_less_but_answerable_query_anchors_on_search() -> None:
+    # A question that names no entity but that search can answer must still produce a
+    # grounded chain (anchored on the top hit), not "no evidence" — complexity stays 0,
+    # so it runs the cheap linear chain rather than the expensive branched one.
+    res = _got().reason("who transferred funds to whom")
+    assert res.complexity == 0
+    assert res.grounded
+    assert "No graph evidence" not in res.answer
+    assert res.graph.thoughts[-1].role == Role.SUMMARY
+    assert res.graph.thoughts[-1].evidence  # the summary cites real spans

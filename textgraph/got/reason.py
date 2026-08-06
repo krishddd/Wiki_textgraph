@@ -102,37 +102,42 @@ class GraphOfThoughts:
         self.branch_cap = branch_cap
         self.static_cap = static_cap
         self._calls = 0
+        self._hyp_pred: dict[str, str] = {}  # hypothesis id -> its path's dominant predicate
 
     # -- public -----------------------------------------------------------------
 
     def reason(self, query: str, *, mode: str = "adaptive") -> ReasoningResult:
         """Reason over ``query``; ``mode`` is ``adaptive`` (gated) or ``static`` (full)."""
         self._calls = 0
-        self._hyp_pred: dict[str, str] = {}  # hypothesis id -> its path's dominant predicate
+        self._hyp_pred = {}
         graph = ThoughtGraph()
         focus, material, plan_cites = self._focus_entities(query)
         # Runtime complexity (AGoT): how many entities the query itself names. This — not the
         # breadth of what search happened to surface — is what gates topology expansion.
         complexity = len(focus)
+        # If the query names no entity, still reason: anchor on the single best entity search
+        # surfaced, so an exploratory question ("who transferred funds?") gets a grounded
+        # answer rather than nothing — complexity stays 0, so it runs the cheap linear chain.
+        anchor = focus or material[:1]
         plan = graph.add(
             Role.PLAN,
             f"Plan: resolve the query to focus entities, characterise each, connect them, "
-            f"then verify. Focus = [{', '.join(self.engine._name(f) for f in focus) or 'none'}].",
+            f"then verify. Focus = [{', '.join(self.engine._name(f) for f in anchor) or 'none'}].",
             "root",
             evidence=_dedup(plan_cites),
-            focus=tuple(focus),
+            focus=tuple(anchor),
             score=float(complexity),
         )
-        if not focus:
+        if not anchor:
             return self._finish(query, mode, complexity, graph)
 
-        # Adaptive gates on complexity and reasons only over the query's focus entities;
-        # static always expands the full topology — the focus PLUS the co-mentioned
-        # neighbourhood — regardless of difficulty (the DGoT/AGoT baseline).
+        # Adaptive gates on complexity and reasons only over the query's focus entities (or
+        # the anchor when none are named); static always expands the full topology — the
+        # focus PLUS the co-mentioned neighbourhood — regardless of difficulty (the baseline).
         if mode == "static":
             expansion = (focus + material)[: self.static_cap]
         else:
-            expansion = focus[: self.branch_cap]
+            expansion = (focus or anchor)[: self.branch_cap]
 
         subs: list[Thought] = []
         for f in expansion:
@@ -276,6 +281,9 @@ class GraphOfThoughts:
             for t in graph.thoughts
             if t.role in (Role.HYPOTHESIS, Role.VERIFICATION) and t.score > 0 and t.evidence
         ]
+        if not survivors:
+            # Nothing connected/verified — fall back to the best-grounded sub-problem(s).
+            survivors = [t for t in graph.thoughts if t.role == Role.SUBPROBLEM and t.evidence]
         survivors.sort(key=lambda t: (-t.score, t.id))
         keep = survivors[: self.branch_cap]
         cites = _dedup([c for t in keep for c in t.evidence])
@@ -283,19 +291,12 @@ class GraphOfThoughts:
             body = "; ".join(t.content.split(":", 1)[-1].strip().rstrip(".") for t in keep)
             content = f"Distilled summary: {body}."
         else:
-            # Nothing connected — fall back to the best-grounded sub-problem(s).
-            subs = sorted(
-                (t for t in graph.thoughts if t.role == Role.SUBPROBLEM and t.evidence),
-                key=lambda t: (-t.score, t.id),
-            )[: self.branch_cap]
-            cites = _dedup([c for t in subs for c in t.evidence])
-            body = "; ".join(t.content.split(":", 1)[-1].strip().rstrip(".") for t in subs)
-            content = f"Distilled summary: {body}." if subs else "Distilled summary: no evidence."
+            content = "Distilled summary: no evidence."
         return graph.add(
             Role.SUMMARY,
             content,
             "distill",
-            parents=tuple(t.id for t in keep),
+            parents=tuple(t.id for t in keep),  # link the summary to what it distilled
             evidence=cites,
             score=sum(t.score for t in keep),
         )
