@@ -80,3 +80,29 @@ def test_api_chat_route_returns_grounded_answer() -> None:
     assert payload["tool"] == "path"
     assert payload["highlight"]["nodes"] and payload["highlight"]["edges"]
     assert payload["evidence"]
+
+
+def test_grounding_confidence_and_abstention() -> None:
+    from textgraph.l8_retrieval.grounding import assess
+
+    # Non-factual tools are always confident (empty aggregate is a real answer).
+    assert assess("stats", evidence_count=0).abstain is False
+    # A factual answer with no citations abstains.
+    g0 = assess("why", evidence_count=0)
+    assert g0.abstain is True and g0.confidence == 0.0
+    # More cited spans -> higher confidence, no abstention.
+    assert assess("search", evidence_count=4).confidence > 0.9
+
+
+def test_chat_abstains_on_a_factual_query_with_no_evidence() -> None:
+    ans = answer(_engine(), "qwxzptvbmnk", tool="search")  # matches no token in the corpus
+    assert not ans.evidence  # genuinely unsupported
+    assert ans.abstained is True
+    assert "Insufficient evidence" in ans.text
+    assert not ans.highlight_nodes  # nothing to highlight when we abstain
+
+
+def test_chat_does_not_abstain_on_a_supported_answer() -> None:
+    ans = answer(_engine(), "how is Acme Corp connected to Delta Trust")
+    assert ans.abstained is False
+    assert ans.confidence > 0.5 and ans.evidence

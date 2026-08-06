@@ -6,6 +6,19 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — answer-grounding confidence + abstention (Sprint 3.3)
+- **`textgraph/l8_retrieval/grounding.py`** — the "Ask" chat now scores how well each answer
+  is supported by citation evidence and **abstains** ("Insufficient evidence in the graph to
+  answer that confidently.") instead of surfacing an unsupported guess. Deterministic and
+  pure: non-factual aggregates (stats/communities/contradictions/gql) are always confident;
+  factual answers (search/why/path/neighbors/timeline/reason) with **zero citations** abstain,
+  and confidence rises with the number of distinct cited spans. `ChatAnswer` gains
+  `confidence` + `abstained`, surfaced in the UI as a "N% grounded" / "abstained" badge. +4 tests.
+- *Audit note:* the retrieval PPR is **already query-conditioned** — `search` personalizes the
+  PageRank teleport from the query's named entities + top lexical chunks (`personalization=seed`
+  in `l7_analytics.algorithms.pagerank`), so a query-specific walk was in place since Phase 4;
+  Sprint 3.3's new contribution is the grounding/abstention layer on top.
+
 ### Added — LangChain / LlamaIndex adapters, citations preserved (Sprint 2.5)
 - **`textgraph/integrations/`** — consume the TextGraph graph from LangChain and LlamaIndex
   **without dropping byte-span provenance**. Pure converters (`search_to_documents`,

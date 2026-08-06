@@ -152,7 +152,9 @@ RENDERER_CSS = """
   .msg.bot { align-self:flex-start; background:var(--bg); border:1px solid var(--line);
     border-bottom-left-radius:4px; }
   .msg .tooltag { font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut);
-    margin-bottom:4px; }
+    margin-bottom:4px; display:flex; gap:8px; align-items:center; }
+  .msg .conf { color:var(--acc); font-weight:600; letter-spacing:0; text-transform:none; }
+  .msg .conf.abstain { color:var(--sup); }
   .msg .cites { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
   .cite-chip { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:2px 7px;
     border-radius:6px; background:var(--acc-soft); color:var(--acc); }
@@ -485,7 +487,9 @@ async function ask(){
   try{
     const ans=await TG.chat(q,{tool, focus:S.lastFocus||''});
     S.lastFocus=ans.focus||S.lastFocus;
-    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}</div>${esc(ans.text)}`+chainHtml(ans.detail)+citeChips(ans.evidence);
+    const conf = ans.abstained ? '<span class="conf abstain">abstained</span>'
+      : (typeof ans.confidence==='number' ? `<span class="conf">${Math.round(ans.confidence*100)}% grounded</span>` : '');
+    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`+chainHtml(ans.detail)+citeChips(ans.evidence);
     applyHighlight(ans.highlight);
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
   asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;

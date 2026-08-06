@@ -22,6 +22,7 @@ from textgraph.got.reason import GraphOfThoughts
 from textgraph.gql.engine import GQLEngine
 from textgraph.gql.errors import GQLError
 from textgraph.l8_retrieval.engine import QueryEngine
+from textgraph.l8_retrieval.grounding import ABSTENTION_TEXT, assess
 from textgraph.l8_retrieval.model import Citation
 from textgraph.l8_retrieval.routing import TOOLS, classify_query
 
@@ -55,6 +56,8 @@ class ChatAnswer:
     highlight_nodes: list[str] = field(default_factory=list)
     highlight_edges: list[list[str]] = field(default_factory=list)
     detail: list[dict[str, Any]] = field(default_factory=list)
+    confidence: float = 1.0
+    abstained: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -64,6 +67,8 @@ class ChatAnswer:
             "evidence": [c.to_dict() for c in self.evidence],
             "highlight": {"nodes": self.highlight_nodes, "edges": self.highlight_edges},
             "detail": self.detail,
+            "confidence": round(self.confidence, 3),
+            "abstained": self.abstained,
         }
 
 
@@ -115,12 +120,21 @@ def answer(
     tool: str = "auto",
     focus: str | None = None,
 ) -> ChatAnswer:
-    """Route ``question`` to a graph tool and return a grounded, cited :class:`ChatAnswer`."""
+    """Route ``question`` to a graph tool and return a grounded, cited :class:`ChatAnswer`.
+
+    The reply is scored for grounding: a *factual* answer with no citation evidence **abstains**
+    ("insufficient evidence") rather than surfacing an unsupported guess (Sprint 3.3).
+    """
     q = question.strip()
     if not q:
         return ChatAnswer(text="Ask a question about the graph.", tool="auto")
-    chosen = classify(q, tool)
+    return _grounded(_dispatch(engine, q, mode=mode, tool=tool, focus=focus))
 
+
+def _dispatch(
+    engine: QueryEngine, q: str, *, mode: str, tool: str, focus: str | None
+) -> ChatAnswer:
+    chosen = classify(q, tool)
     if chosen == "gql":
         return _gql(engine, q)
     if chosen == "path":
@@ -146,6 +160,18 @@ def answer(
     if chosen == "search":
         return _search(engine, q)
     return _reason(engine, q, mode)
+
+
+def _grounded(ans: ChatAnswer) -> ChatAnswer:
+    """Attach a grounding confidence + abstain factual answers with no citation support."""
+    g = assess(ans.tool, evidence_count=len(ans.evidence), has_focus=ans.focus is not None)
+    ans.confidence = g.confidence
+    ans.abstained = g.abstain
+    if g.abstain:
+        ans.text = ABSTENTION_TEXT
+        ans.highlight_nodes = []
+        ans.highlight_edges = []
+    return ans
 
 
 # -- per-tool answer builders (each grounded + cited) ------------------------
