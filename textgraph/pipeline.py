@@ -155,7 +155,9 @@ def build(
                 pron_resolved += int(cached["pronouns_resolved"])
                 relation_count += int(cached["relations"])
             else:
-                ie = run_ie(ir.text, blocks=ir.blocks, backend=config.ie_backend)
+                ie = run_ie(
+                    ir.text, blocks=ir.blocks, backend=config.ie_backend, onnx=config.ie_onnx
+                )
                 pron_total += ie.pronouns_total
                 pron_resolved += ie.pronouns_resolved
                 relation_count += len(ie.relations)

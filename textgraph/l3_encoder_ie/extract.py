@@ -233,7 +233,17 @@ def extract_document(text: str, blocks: list[Block] | None = None) -> IEResult:
             existing_spans.append(span)
 
     mentions.sort(key=lambda x: (x.span.start, x.span.end, x.etype))
+    return assemble_ie(text, block_spans, mentions)
 
+
+def assemble_ie(text: str, block_spans: list[Span], mentions: list[Mention]) -> IEResult:
+    """Build entities + relations from already-detected ``mentions`` (backend-agnostic).
+
+    Factored out of :func:`extract_document` so an alternative mention source — the GLiNER
+    encoder backend — can reuse the *same* deterministic relation extractor over its NER
+    output, rather than duplicating the sentence/coref/predicate logic. Byte-identical to
+    the inlined version (the determinism gate proves it), so the default artifact is unchanged.
+    """
     # Canonical entities (merge same type+name), preserving first-seen surface.
     entities: dict[str, Entity] = {}
     for m in mentions:

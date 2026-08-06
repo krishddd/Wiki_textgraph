@@ -15,15 +15,18 @@ from textgraph.l3_encoder_ie.model import IEResult
 __all__ = ["IEResult", "emit_ie", "extract_document", "run_ie"]
 
 
-def run_ie(text: str, *, blocks: list[Block] | None = None, backend: str = "rules") -> IEResult:
+def run_ie(
+    text: str, *, blocks: list[Block] | None = None, backend: str = "rules", onnx: bool = True
+) -> IEResult:
     """Extract entities + relations from ``text`` using the chosen backend.
 
     ``blocks`` (from L0) confine entity/sentence detection to prose blocks so an
     entity never spans a heading→paragraph boundary. ``backend='rules'`` (default)
-    is deterministic and model-free; ``backend='gliner'`` requires ``textgraph[ie]``.
+    is deterministic and model-free; ``backend='gliner'`` requires ``textgraph[ie]``
+    and, with ``onnx=True``, runs the int8-quantized ONNX model for CPU speed.
     """
     if backend == "gliner":
         from textgraph.l3_encoder_ie.gliner_backend import extract_document_gliner
 
-        return extract_document_gliner(text)
+        return extract_document_gliner(text, blocks=blocks, use_onnx=onnx)
     return extract_document(text, blocks)

@@ -35,6 +35,11 @@ class Config:
     # unless "gliner" is selected (requires the [ie] extra).
     extract_ie: bool = True
     ie_backend: str = "rules"
+    # When ie_backend="gliner": prefer the int8-quantized ONNX model for CPU inference (a
+    # large speedup over the fp32 torch path — GLiNER on CPU is otherwise minutes/chunk).
+    # No effect on the default rules backend; quantization can shift GLiNER's logits, so it
+    # is part of the config hash. Falls back to the torch weights if the ONNX file is absent.
+    ie_onnx: bool = True
     # L5 entity resolution: link alias entities to a canonical node via SAME_AS.
     # Default rule backend is deterministic; "splink" requires the [er] extra.
     resolve_entities: bool = True

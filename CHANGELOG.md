@@ -15,6 +15,22 @@ to Semantic Versioning.
   (Docling) stays opt-in in `[ingest]`. `requirements.txt` gains `pypdf`; README "Supported
   formats" updated. +1 test (`test_pdf_ingests_by_default`, a self-contained minimal PDF).
 
+### Changed — GLiNER backend runs int8-quantized ONNX on CPU (Sprint 1.3)
+- **The `[ie]` GLiNER backend now loads the int8-quantized ONNX model by default** (new
+  `Config.ie_onnx=True`), the well-known fix for GLiNER's punishing CPU latency (minutes per
+  handful of chunks on the fp32 torch path). `load_model()` prefers `onnx/model_quantized.onnx`
+  and falls back to the torch weights if that file isn't published for the pinned model — so
+  higher-recall extraction is finally usable without a GPU.
+- **Wired the backend properly** (it was a stub): GLiNER now supplies the NER *mentions*, and
+  relations are built by the **same deterministic extractor the rule backend uses** — the
+  relation/coref/predicate logic was factored into a shared `assemble_ie()` (byte-identical to
+  before; the determinism gate proves it). So recall goes up with **no new nondeterminism**,
+  and the `IEResult` shape is unchanged.
+- CI honesty: `[ie]` + a downloaded model aren't in the lean CI, so the model-load/NER lines
+  are `# pragma: no cover` and must be validated on a machine with the extra; the pure pieces
+  (prediction→mention mapping, availability, fallback) are unit-tested. +3 tests. The default
+  **rules** backend and the byte-identical `graph.json` are untouched.
+
 ### Confirmed — entity resolution is on by default (Sprint 1.2)
 - **L5 entity resolution already runs in every `build()`** with the deterministic **rules**
   backend (`Config.resolve_entities=True`, `er_backend="rules"`) — no extra, no flag —
