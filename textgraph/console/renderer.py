@@ -539,7 +539,7 @@ function initAsk(){
   document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
   // File-attach is available only when the server was started with --allow-ingest.
   if(typeof TG.ingest==='function'){
-    fetch('/api/config').then(r=>r.json()).then(cfg=>{
+    fetch(typeof _u==='function'?_u('/api/config'):'/api/config').then(r=>r.json()).then(cfg=>{
       if(cfg && cfg.ingest){
         const at=document.getElementById('attach'), inp=document.getElementById('attachin');
         at.style.display='inline-block';

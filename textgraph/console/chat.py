@@ -206,7 +206,9 @@ def _search(engine: QueryEngine, q: str) -> ChatAnswer:
     chunks = [h for h in res.hits if h.kind == "chunk"]
     names = ", ".join(h.name for h in ents[:5]) or "no entities"
     text = f'Top matches for "{q}" ({res.routing} routing): {names}.'
-    evidence = [c for h in chunks for c in h.citations]
+    # Ground on ALL hit citations (entities too), not just chunks — otherwise an entity-only
+    # match with no passage chunk would wrongly abstain despite having cited entities.
+    evidence = [c for h in res.hits for c in h.citations]
     return ChatAnswer(
         text=text,
         tool="search",

@@ -106,3 +106,11 @@ def test_chat_does_not_abstain_on_a_supported_answer() -> None:
     ans = answer(_engine(), "how is Acme Corp connected to Delta Trust")
     assert ans.abstained is False
     assert ans.confidence > 0.5 and ans.evidence
+
+
+def test_search_entity_match_is_grounded_not_abstained() -> None:
+    # Regression: an entity-only match must ground on its entity citations, not abstain
+    # just because there was no passage chunk.
+    ans = answer(_engine(), "Acme Corp", tool="search")
+    assert ans.tool == "search"
+    assert ans.abstained is False and ans.evidence and ans.highlight_nodes
