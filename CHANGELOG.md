@@ -6,6 +6,20 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-06
+
+**TextGraph 2.0 — the enterprise-extension release.** The deterministic L0–L9 core shipped
+in v1.0.0; 2.0 adds four optional, flagged extension layers on top, each of which preserves
+the byte-identical `graph.json` guarantee (G1) and the local-first, zero-LLM-by-default
+posture (G2) — with no policy / no query they change nothing about the default install:
+
+- **Phase 7 — GQL / ISO-GQL standards query surface** (`textgraph/gql/`, `textgraph gql`)
+- **Phase 8 — vision-native late-interaction (MaxSim) retrieval** (`[vision]`, `textgraph vision`)
+- **Phase 9 — enterprise fine-grained access control** (`[security]`, `textgraph secure`)
+- **Phase 10 — Graph-of-Thoughts agent reasoning** (`textgraph/got/`, `textgraph reason`)
+
+The full L0–L10 stack is now complete. Per-phase detail follows.
+
 ### Added — Phase 10: Graph-of-Thoughts agent reasoning (`textgraph/got/`)
 - **A KG-grounded reasoner (ESCARGOT-style).** `GraphOfThoughts.reason(query)` builds a
   graph of thought vertices with roles (Plan / SubProblem / Hypothesis / VerificationStep /

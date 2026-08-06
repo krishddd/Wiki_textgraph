@@ -3,4 +3,4 @@
 Local-first, deterministic, zero-LLM-by-default. See ARCHITECTURE.md for the L0-L9 stack.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
