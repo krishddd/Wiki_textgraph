@@ -6,6 +6,29 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — LangChain / LlamaIndex adapters, citations preserved (Sprint 2.5)
+- **`textgraph/integrations/`** — consume the TextGraph graph from LangChain and LlamaIndex
+  **without dropping byte-span provenance**. Pure converters (`search_to_documents`,
+  `search_to_nodes`) map a `SearchResult` to `Document`/`TextNode`-shaped payloads that carry
+  every `[doc:start-end]` citation in `metadata` (G3 preserved). Framework retriever classes
+  (`make_langchain_retriever`, `make_llamaindex_retriever`) subclass each framework's
+  `BaseRetriever`, import-guarded behind the new `[langchain]` / `[llamaindex]` extras (clear
+  `UnsupportedFormat` without them). +4 tests (converters + citation preservation + fallback).
+- **G3 verified, not assumed:** both `Document.metadata` and `TextNode.metadata` are free-form,
+  so neither framework forces dropping citations — the adapters ship. Flagged in the module:
+  if a framework required opaque metadata-less chunks, that would violate G3 and we would not
+  ship its adapter.
+
+### Design — optional Neo4j scale-out backend (Sprint 2.4, `docs/plans/neo4j-backend.md`)
+- Design (no code) for an **opt-in** `textgraph serve --backend neo4j` that *materializes an
+  already-built `graph.json`* into Neo4j for scale — the DB is a downstream query target,
+  never the source of truth or part of the deterministic build, so G1/G2/G3 are preserved and
+  **DuckDB stays the default**. Compared feature-by-feature against Neo4j GraphRAG Python
+  (VectorCypherRetriever, ToolsRetriever, GraphPruner, EntityResolver, schema-guided
+  extraction, lexical graph, Cypher 25 `SEARCH`): adopt the retrieval-shape patterns; reject
+  as *defaults* the ones that push LLMs/non-determinism into the build. Recommends building a
+  read-only Neo4j loader/query backend behind `[neo4j]` first.
+
 ### Added — documented per-query retrieval routing (Sprint 2.2)
 - **`textgraph/l8_retrieval/routing.py`** — one deterministic, ordered rule set that maps a
   question to a retrieval *tool* (`classify_query`) and a *strategy family*
