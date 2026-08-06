@@ -362,7 +362,13 @@ def _cmd_console(args: argparse.Namespace) -> int:
 
     print(f"building graph from {root} ...")
     engine = build_engine(root)
-    serve(engine, host=args.host, port=args.port)
+    serve(
+        engine,
+        host=args.host,
+        port=args.port,
+        source=root,
+        allow_ingest=args.allow_ingest and root.is_dir(),
+    )
     return 0
 
 
@@ -579,6 +585,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_console.add_argument("path", help="corpus path or .duckdb snapshot")
     p_console.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
     p_console.add_argument("--port", type=int, default=8765, help="bind port (default 8765)")
+    p_console.add_argument(
+        "--allow-ingest",
+        action="store_true",
+        help="enable file-attach in the Ask chat (writes uploads into the corpus dir)",
+    )
     p_console.set_defaults(func=_cmd_console)
 
     return parser

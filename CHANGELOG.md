@@ -18,6 +18,14 @@ to Semantic Versioning.
   `textgraph/console/chat.py` (`answer()` + intent `classify()`), a `POST /api/chat` route,
   and `do_POST` on the console server. The offline `graph.html` (no server) hides the dock
   gracefully. +8 tests.
+- **Attach files to the graph** (opt-in `textgraph console --allow-ingest`): drop documents
+  into the chat and they are ingested into the **live** graph — written into the corpus dir
+  (basename-only, extension-allowlisted, size-capped) and **incrementally** rebuilt
+  (`build(root, cache_dir=…)`, byte-identical to a clean rebuild), then the engine is
+  hot-swapped and the canvas + stats refresh. New `textgraph/console/ingest.py` with a
+  stdlib `multipart/form-data` parser (`cgi` was removed in 3.13), `POST /api/ingest`, and
+  `/api/config` gating. Read-only stays the default; the attach control only appears when
+  ingestion is enabled. +6 tests.
 
 ### Fixed — Graph-of-Thoughts access-control + cost (prerequisite for the chat)
 - `GraphOfThoughts` now accepts an **injected engine** instead of always building its own, so

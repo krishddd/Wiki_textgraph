@@ -1,9 +1,11 @@
 # Plan — "Ask" chat panel for the TextGraph console
 
-**Status:** Phase 0 + A + B **shipped** (grounded chat dock, deterministic, no LLM).
-Remaining: C (file-attach ingestion), D (opt-in LLM narration + options), E (polish).
-See §8; the review that reordered the phases (engine-injection prerequisite, multi-turn,
-POST) was applied before implementation.
+**Status:** Phase 0 + A + B + **C shipped** (grounded chat dock + file-attach ingestion,
+deterministic, no LLM). Remaining: D (opt-in LLM narration + options), E (polish). See §8;
+the review that reordered the phases (engine-injection prerequisite, multi-turn, POST) was
+applied before implementation. Phase C landed with the stdlib multipart parser flagged in
+§5 (no `cgi` on 3.13), the `--allow-ingest` guard, basename-only writes, and an
+extension/size allowlist.
 **Goal:** add an Antigravity-style chat dock to the bottom of `textgraph console`. The user
 types a question (and can attach files); the assistant answers in the chat **and** drives
 the graph beside it — highlighting the nodes and paths the answer is about — with every

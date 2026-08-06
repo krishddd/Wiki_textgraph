@@ -95,6 +95,11 @@ What you can do in it:
   to the right graph tool, answers with cited evidence (and, for reasoning questions, a
   collapsible step-by-step chain), and highlights the answer on the graph above. Follow-ups
   work ("why?"). No LLM — the answers are grounded in the graph and fully deterministic.
+- **Attach files** (opt-in): start the console with `textgraph console ./docs --allow-ingest`
+  and a 📎 button appears in the chat. Drop in a document (`.md`, `.txt`, `.html`, `.json`,
+  `.csv`, …) and it is added to the live graph — the file is written into the corpus folder,
+  the graph is incrementally rebuilt, and the canvas + stat cards refresh. Without
+  `--allow-ingest` the console is strictly read-only.
 - **Stat cards** across the top surface the headline numbers (entities, relations,
   communities, time points).
 - **Search** entities & passages (top bar, press Enter) — matches highlight on the graph.

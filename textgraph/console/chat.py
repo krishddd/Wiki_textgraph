@@ -38,6 +38,11 @@ def _reasoner_for(engine: QueryEngine) -> GraphOfThoughts:
     return got
 
 
+def forget(engine: QueryEngine) -> None:
+    """Drop a superseded engine's cached reasoner (called when the graph is rebuilt)."""
+    _REASONERS.pop(id(engine), None)
+
+
 @dataclass
 class ChatAnswer:
     """A grounded reply: text + citations + the graph elements to highlight."""

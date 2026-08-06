@@ -3,13 +3,18 @@
 A thin ``http.server`` wrapper around the pure :func:`textgraph.console.api.route`
 function: it builds a :class:`QueryEngine` from a corpus (or a ``.duckdb`` snapshot),
 binds to localhost, and serves the self-contained console page + JSON API. No external
-frameworks; read-only; all the interesting logic is in :mod:`textgraph.console.api`,
-which is unit-tested without a socket.
+frameworks; read-only by default. The only mutation is optional file ingestion, wired only
+when ``allow_ingest`` is set (``--allow-ingest``): a ``POST /api/ingest`` writes the upload
+into the corpus dir and hot-swaps a freshly-rebuilt engine. All the read logic lives in
+:mod:`textgraph.console.api` and the ingest core in :mod:`textgraph.console.ingest`, both
+unit-tested without a socket.
 """
 
 from __future__ import annotations
 
 import json
+import tempfile
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -32,27 +37,50 @@ def build_engine(source: str | Path) -> QueryEngine:
     return QueryEngine(result.nodes, result.edges)
 
 
-def _make_handler(engine: QueryEngine) -> type[BaseHTTPRequestHandler]:
+@dataclass
+class _State:
+    """Server-held mutable state: the current engine + ingestion config."""
+
+    engine: QueryEngine
+    source: str | None
+    allow_ingest: bool
+    cache_dir: str | None
+
+
+def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        def _respond(self, params: dict[str, str]) -> None:
-            parsed = urlparse(self.path)
-            merged = {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            merged.update(params)
-            status, content_type, body = route(engine, parsed.path, merged)
+        def _send(self, status: int, ctype: str, body: bytes) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
 
+        def _json(self, status: int, payload: object) -> None:
+            self._send(status, "application/json", json.dumps(payload, ensure_ascii=False).encode())
+
+        def _route(self, params: dict[str, str]) -> None:
+            parsed = urlparse(self.path)
+            merged = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            merged.update(params)
+            status, ctype, body = route(state.engine, parsed.path, merged)
+            self._send(status, ctype, body)
+
         def do_GET(self) -> None:
-            self._respond({})
+            # /api/config reports server-level flags the read-only route() can't know.
+            if urlparse(self.path).path == "/api/config":
+                self._json(200, {"ingest": state.allow_ingest})
+                return
+            self._route({})
 
         def do_POST(self) -> None:
-            # POST bodies carry long questions (the chat) — JSON or urlencoded, merged into
-            # the request params so route() stays a pure function of (path, params).
+            parsed = urlparse(self.path)
             length = int(self.headers.get("Content-Length", 0) or 0)
             raw = self.rfile.read(length) if length else b""
+            if parsed.path == "/api/ingest":
+                self._ingest(raw)
+                return
+            # Other POSTs (the chat) carry JSON/urlencoded params merged into route().
             params: dict[str, str] = {}
             if raw:
                 ctype = self.headers.get("Content-Type", "")
@@ -63,7 +91,41 @@ def _make_handler(engine: QueryEngine) -> type[BaseHTTPRequestHandler]:
                         params = {k: v[0] for k, v in parse_qs(raw.decode("utf-8")).items()}
                 except (ValueError, UnicodeDecodeError):
                     params = {}
-            self._respond(params)
+            self._route(params)
+
+        def _ingest(self, raw: bytes) -> None:
+            if not state.allow_ingest or not state.source:
+                self._json(
+                    403, {"ok": False, "error": "ingestion disabled (start with --allow-ingest)"}
+                )
+                return
+            from textgraph.console.chat import forget
+            from textgraph.console.ingest import ingest_files, parse_multipart
+
+            uploads = parse_multipart(self.headers.get("Content-Type", ""), raw)
+            if not uploads:
+                self._json(400, {"ok": False, "error": "no files in request"})
+                return
+            before = {state.engine._name(n) for n in state.engine._entity_ids}
+            res = ingest_files(state.source, uploads, cache_dir=state.cache_dir)
+            if not res.ok:
+                self._json(
+                    400, {"ok": False, "error": "no accepted files", "rejected": res.rejected}
+                )
+                return
+            old = state.engine
+            state.engine = QueryEngine(res.nodes, res.edges)
+            forget(old)  # the swapped-out engine's cached reasoner is now stale
+            after = {state.engine._name(n) for n in state.engine._entity_ids}
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "written": res.written,
+                    "rejected": res.rejected,
+                    "added_entities": sorted(after - before),
+                },
+            )
 
         def log_message(self, *args: object) -> None:
             pass  # keep the console quiet
@@ -72,11 +134,23 @@ def _make_handler(engine: QueryEngine) -> type[BaseHTTPRequestHandler]:
 
 
 def serve(
-    engine: QueryEngine, *, host: str = "127.0.0.1", port: int = 8765
+    engine: QueryEngine,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    source: str | Path | None = None,
+    allow_ingest: bool = False,
 ) -> None:  # pragma: no cover - binds a socket
-    """Serve the console until interrupted (Ctrl-C)."""
-    server = ThreadingHTTPServer((host, port), _make_handler(engine))
-    print(f"TextGraph console: http://{host}:{port}  (Ctrl-C to stop)")
+    """Serve the console until interrupted (Ctrl-C).
+
+    Pass ``source`` + ``allow_ingest=True`` to enable file-attach ingestion (the corpus dir
+    the uploads are written into and incrementally rebuilt from).
+    """
+    cache_dir = tempfile.mkdtemp(prefix="tg-console-") if (allow_ingest and source) else None
+    state = _State(engine, str(source) if source else None, allow_ingest, cache_dir)
+    server = ThreadingHTTPServer((host, port), _make_handler(state))
+    extra = "  · ingest ON" if state.allow_ingest else ""
+    print(f"TextGraph console: http://{host}:{port}  (Ctrl-C to stop){extra}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

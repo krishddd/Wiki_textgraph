@@ -163,6 +163,9 @@ RENDERER_CSS = """
   .chain .step b { color:var(--fg); font-weight:600; }
   #askbar { display:flex; gap:8px; padding:11px 13px; border-top:1px solid var(--line);
     align-items:center; }
+  #attach { display:none; cursor:pointer; font-size:17px; line-height:1; padding:7px 9px;
+    border-radius:9px; border:1px solid var(--line); background:var(--bg); user-select:none; }
+  #attach:hover { border-color:var(--acc); }
   #askbar select { padding:8px 9px; border-radius:9px; border:1px solid var(--line);
     background:var(--bg); color:var(--fg); font-size:12.5px; }
   #askq { flex:1; padding:9px 13px; border-radius:10px; border:1px solid var(--line);
@@ -209,6 +212,7 @@ SKELETON_HTML = """
         <div id="askhead"><span class="dot"></span>Ask the graph<span class="chev">&#9662;</span></div>
         <div id="asklog"><div class="welcome">Ask a question in plain English — e.g. <em>&ldquo;how is Acme Corp connected to Delta Trust?&rdquo;</em> or <em>&ldquo;why does Acme matter?&rdquo;</em>. Answers are grounded in the graph, cited to the source, and highlighted on the canvas above.</div></div>
         <div id="askbar">
+          <label id="attach" title="attach files to the graph">&#128206;<input type="file" id="attachin" multiple hidden></label>
           <select id="asktool" title="which tool to use">
             <option value="auto">Auto</option>
             <option value="reason">Reason</option>
@@ -486,6 +490,26 @@ async function ask(){
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
   asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;
 }
+async function reloadGraph(){
+  S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
+  buildStats(); buildSidebar(); buildTops(); initTime(); draw();
+}
+async function attachFiles(files){
+  if(!files||!files.length) return;
+  addMsg('user','&#128206; '+esc([...files].map(f=>f.name).join(', ')));
+  const bubble=addMsg('bot','<span style="color:var(--mut)">ingesting…</span>');
+  try{
+    const res=await TG.ingest(files);
+    if(!res.ok){ bubble.innerHTML='<span style="color:var(--sup)">'+esc(res.error||'ingest failed')+
+      (res.rejected&&res.rejected.length?' (rejected: '+esc(res.rejected.join(', '))+')':'')+'</span>'; return; }
+    await reloadGraph();
+    const added=res.added_entities||[];
+    bubble.innerHTML=`<div class="tooltag">ingest</div>Added ${esc(res.written.join(', '))} — `+
+      `${added.length} new entit${added.length===1?'y':'ies'}`+
+      (added.length?': '+esc(added.slice(0,8).join(', ')):'')+'.'+
+      (res.rejected&&res.rejected.length?`<div class="cites">rejected: ${esc(res.rejected.join(', '))}</div>`:'');
+  }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
+}
 function initAsk(){
   const dock=document.getElementById('ask');
   if(!dock) return;
@@ -494,6 +518,16 @@ function initAsk(){
   document.getElementById('askhead').onclick=()=>dock.classList.toggle('collapsed');
   document.getElementById('asksend').onclick=ask;
   document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
+  // File-attach is available only when the server was started with --allow-ingest.
+  if(typeof TG.ingest==='function'){
+    fetch('/api/config').then(r=>r.json()).then(cfg=>{
+      if(cfg && cfg.ingest){
+        const at=document.getElementById('attach'), inp=document.getElementById('attachin');
+        at.style.display='inline-block';
+        inp.onchange=()=>{ attachFiles(inp.files); inp.value=''; };
+      }
+    }).catch(()=>{});
+  }
 }
 
 (async function init(){
