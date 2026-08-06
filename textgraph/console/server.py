@@ -9,6 +9,7 @@ which is unit-tested without a socket.
 
 from __future__ import annotations
 
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -33,15 +34,36 @@ def build_engine(source: str | Path) -> QueryEngine:
 
 def _make_handler(engine: QueryEngine) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
+        def _respond(self, params: dict[str, str]) -> None:
             parsed = urlparse(self.path)
-            params = {k: v[0] for k, v in parse_qs(parsed.query).items()}
-            status, content_type, body = route(engine, parsed.path, params)
+            merged = {k: v[0] for k, v in parse_qs(parsed.query).items()}
+            merged.update(params)
+            status, content_type, body = route(engine, parsed.path, merged)
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def do_GET(self) -> None:
+            self._respond({})
+
+        def do_POST(self) -> None:
+            # POST bodies carry long questions (the chat) — JSON or urlencoded, merged into
+            # the request params so route() stays a pure function of (path, params).
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b""
+            params: dict[str, str] = {}
+            if raw:
+                ctype = self.headers.get("Content-Type", "")
+                try:
+                    if "application/json" in ctype:
+                        params = {str(k): str(v) for k, v in json.loads(raw).items()}
+                    else:
+                        params = {k: v[0] for k, v in parse_qs(raw.decode("utf-8")).items()}
+                except (ValueError, UnicodeDecodeError):
+                    params = {}
+            self._respond(params)
 
         def log_message(self, *args: object) -> None:
             pass  # keep the console quiet

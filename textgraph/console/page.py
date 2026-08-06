@@ -18,6 +18,8 @@ const TG = {
   why:    (id)  => fetch('/api/call?'+new URLSearchParams({tool:'why',node:id})).then(r=>r.json()),
   path:   (s,t) => fetch('/api/call?'+new URLSearchParams({tool:'path',source:s,target:t})).then(r=>r.json()),
   search: (q)   => fetch('/api/call?'+new URLSearchParams({tool:'search',query:q,k:'8'})).then(r=>r.json()),
+  chat:   (q,o) => fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(Object.assign({q}, o||{}))}).then(r=>r.json()),
 };
 """
 

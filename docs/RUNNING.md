@@ -90,6 +90,11 @@ Then open **http://127.0.0.1:8765** in your browser. Options: `--port 9000`, `--
 
 What you can do in it:
 
+- **Ask** (chat dock at the bottom): type a question in plain English — "how is Acme
+  connected to Delta Trust?", "why does Acme matter?", "who transferred funds?". It routes
+  to the right graph tool, answers with cited evidence (and, for reasoning questions, a
+  collapsible step-by-step chain), and highlights the answer on the graph above. Follow-ups
+  work ("why?"). No LLM — the answers are grounded in the graph and fully deterministic.
 - **Stat cards** across the top surface the headline numbers (entities, relations,
   communities, time points).
 - **Search** entities & passages (top bar, press Enter) — matches highlight on the graph.

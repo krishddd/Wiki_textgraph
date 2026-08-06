@@ -34,6 +34,7 @@ from textgraph.gql.errors import GQLError
 from textgraph.l8_retrieval.bm25 import tokenize
 from textgraph.l8_retrieval.engine import QueryEngine
 from textgraph.l8_retrieval.model import Citation
+from textgraph.security.context import SecurityContext
 from textgraph.store.base import Edge, Node
 
 _MAX_EVIDENCE = 6  # citations kept per thought (legibility / token budget, G7)
@@ -87,29 +88,52 @@ class GraphOfThoughts:
 
     def __init__(
         self,
-        nodes: list[Node],
-        edges: list[Edge],
+        nodes: list[Node] | None = None,
+        edges: list[Edge] | None = None,
         *,
+        engine: QueryEngine | None = None,
+        gql: GQLEngine | None = None,
         max_tool_calls: int = 16,
         complexity_threshold: int = 2,
         branch_cap: int = 3,
         static_cap: int = 5,
     ) -> None:
-        self.engine = QueryEngine(nodes, edges)
-        self.gql = GQLEngine(nodes, edges)
+        # Prefer an injected engine so the reasoner reuses the caller's already-built (and
+        # possibly access-controlled) QueryEngine — this both avoids rebuilding the BM25/PPR
+        # indexes on every call and, crucially, means a Phase-9 SecurityPolicy attached to
+        # that engine is honoured on the reason() path instead of being silently bypassed.
+        if engine is None:
+            engine = QueryEngine(nodes or [], edges or [])
+        if gql is None:
+            gql = (
+                GQLEngine(nodes, edges or [])
+                if nodes is not None
+                else GQLEngine(list(engine._node.values()), engine._edges)
+            )
+        self.engine = engine
+        self.gql = gql
         self.max_tool_calls = max_tool_calls
         self.complexity_threshold = complexity_threshold
         self.branch_cap = branch_cap
         self.static_cap = static_cap
         self._calls = 0
         self._hyp_pred: dict[str, str] = {}  # hypothesis id -> its path's dominant predicate
+        self._context: SecurityContext | None = None
 
     # -- public -----------------------------------------------------------------
 
-    def reason(self, query: str, *, mode: str = "adaptive") -> ReasoningResult:
-        """Reason over ``query``; ``mode`` is ``adaptive`` (gated) or ``static`` (full)."""
+    def reason(
+        self, query: str, *, mode: str = "adaptive", context: SecurityContext | None = None
+    ) -> ReasoningResult:
+        """Reason over ``query``; ``mode`` is ``adaptive`` (gated) or ``static`` (full).
+
+        When ``context`` is given and the injected engine carries a Phase-9 policy, every
+        tool call the reasoner makes is access-controlled, so restricted content can never
+        enter a thought vertex (the reasoning chain inherits the engine's no-bleed guarantee).
+        """
         self._calls = 0
         self._hyp_pred = {}
+        self._context = context
         graph = ThoughtGraph()
         focus, material, plan_cites = self._focus_entities(query)
         # Runtime complexity (AGoT): how many entities the query itself names. This — not the
@@ -198,7 +222,7 @@ class GraphOfThoughts:
                 focus.append(hit.node_id)
             else:
                 material.append(hit.node_id)
-        routed = self.engine.resolve(query)
+        routed = self.engine.resolve(query, context=self._context)
         if (
             routed
             and routed in self.engine._entity_ids
@@ -258,7 +282,10 @@ class GraphOfThoughts:
         why = self._why(endpoint)
         cites = _dedup([c for cl in why.claims for c in cl.citations] or list(hyp.evidence))
         predicate = self._hyp_pred.get(hyp.id) or None
-        triples = self._gql_count(predicate)
+        # GQL corroboration counts *all* matching triples and is not policy-aware, so under an
+        # access-control context fall back to the (policy-aware) cited-claim count instead —
+        # never let a raw triple total leak restricted structure.
+        triples = len(why.claims) if self._context is not None else self._gql_count(predicate)
         corroborated = triples > 0 and bool(why.claims)
         score = hyp.score * (1.5 if corroborated else 0.5)
         verdict = "corroborated" if corroborated else "unconfirmed"
@@ -344,16 +371,16 @@ class GraphOfThoughts:
 
     def _search(self, query: str, *, k: int) -> Any:
         self._calls += 1
-        return self.engine.search(query, k=k)
+        return self.engine.search(query, k=k, context=self._context)
 
     def _neighbors(self, handle: str, *, k: int) -> Any:
         self._calls += 1
-        return self.engine.neighbors(handle, k=k)
+        return self.engine.neighbors(handle, k=k, context=self._context)
 
     def _path(self, s: str, t: str) -> Any:
         self._calls += 1
-        return self.engine.path(s, t)
+        return self.engine.path(s, t, context=self._context)
 
     def _why(self, handle: str) -> Any:
         self._calls += 1
-        return self.engine.why(handle)
+        return self.engine.why(handle, context=self._context)

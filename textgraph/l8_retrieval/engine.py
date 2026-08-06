@@ -262,19 +262,33 @@ class QueryEngine:
         edocs = {s.doc_id for s in e.source_spans}
         return not edocs or bool(ok_docs and (edocs & ok_docs))
 
-    def resolve(self, handle: str) -> str | None:
-        """Resolve a node id or free-text name to a node id (deterministic)."""
-        if handle in self._node:
+    def resolve(self, handle: str, *, context: SecurityContext | None = None) -> str | None:
+        """Resolve a node id or free-text name to a node id (deterministic).
+
+        When a policy is attached and ``context`` is given, resolution is restricted to
+        authorized nodes, so a caller can never learn that a restricted entity exists (or
+        surface its name) by resolving a handle that happens to match it (§3.2).
+        """
+        nodes, _ = self._auth(context)
+
+        def ok(nid: str) -> bool:
+            return nodes is None or nid in nodes
+
+        if handle in self._node and ok(handle):
             return handle
         key = handle.lower().strip()
         if key in self._by_name:
-            return sorted(self._by_name[key])[0]
+            allowed = sorted(n for n in self._by_name[key] if ok(n))
+            if allowed:
+                return allowed[0]
         # Fall back to best token-overlap entity, tie-broken by PageRank then id.
         q = set(tokenize(handle))
         if not q:
             return None
         best: tuple[int, float, str] | None = None
         for nid in sorted(self._entity_ids):
+            if not ok(nid):
+                continue
             overlap = len(q & set(tokenize(self._name(nid))))
             if overlap == 0:
                 continue

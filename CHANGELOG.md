@@ -6,6 +6,28 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — console "Ask" chat (grounded, deterministic)
+- **A chat dock in `textgraph console`.** Ask a question in plain English; it is *routed* to
+  the right graph tool (reason / search / path / why / neighbors / timeline / contradictions /
+  communities / stats / gql) and answered with a **templated, cited** reply that also
+  **highlights the answer's nodes and path on the graph beside it**. Every reasoning step is
+  shown as a collapsible thought-chain artifact, and each fact carries its `[doc:span]`
+  citation — no LLM, fully deterministic and offline (G1/G2/G3).
+- **Multi-turn, stateless server:** follow-ups ("why?", "who controls it?") resolve their
+  missing entity against the previous answer's focus, passed by the client. New pure
+  `textgraph/console/chat.py` (`answer()` + intent `classify()`), a `POST /api/chat` route,
+  and `do_POST` on the console server. The offline `graph.html` (no server) hides the dock
+  gracefully. +8 tests.
+
+### Fixed — Graph-of-Thoughts access-control + cost (prerequisite for the chat)
+- `GraphOfThoughts` now accepts an **injected engine** instead of always building its own, so
+  it reuses the caller's already-built (and possibly policy-protected) `QueryEngine` — this
+  avoids rebuilding the BM25/PPR indexes on every call **and** closes an access-control gap:
+  `reason(..., context=…)` now threads a `SecurityContext` through every tool call, and
+  `QueryEngine.resolve()` became **policy-aware**, so a restricted entity can no longer leak
+  into a thought (e.g. via the Plan's focus list). The non-policy-aware `gql` corroboration
+  is skipped under a context. +1 red-team test.
+
 ## [2.0.0] - 2026-08-06
 
 **TextGraph 2.0 — the enterprise-extension release.** The deterministic L0–L9 core shipped

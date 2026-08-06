@@ -106,6 +106,34 @@ def test_query_with_no_named_entity_returns_grounded_empty() -> None:
     assert "No graph evidence" in res.answer
 
 
+def test_injected_engine_honours_access_control_on_the_reason_path() -> None:
+    # Phase 0 fix: when a policy-bearing QueryEngine is injected, reason() must reuse it (not
+    # build its own), so restricted content never leaks through Graph-of-Thoughts.
+    from textgraph.l8_retrieval.engine import QueryEngine
+    from textgraph.security import RebacStore, RelationTuple, SecurityContext, SecurityPolicy
+
+    secure = Path(__file__).parent.parent / "fixtures" / "corpora" / "secure"
+    r = build(secure)
+    plain = QueryEngine(r.nodes, r.edges)
+    public_doc = sorted(plain._node_docs[plain.resolve("Gamma Holdings")])[0]
+    policy = SecurityPolicy(
+        rebac=RebacStore([RelationTuple(f"doc:{public_doc}", "viewer", "user:alice")])
+    )
+    engine = QueryEngine(r.nodes, r.edges, policy=policy)
+    got = GraphOfThoughts(engine=engine)
+    assert got.engine is engine  # reused, not rebuilt (no per-call re-index, honours policy)
+    ctx = SecurityContext("alice")
+    # Under alice's context every thought must be about authorised content only: the secret
+    # entities (Shadow LLC / Phantom Bank) must never appear in any thought's text.
+    res = got.reason("how is Acme Corp connected to Shadow LLC and Phantom Bank", context=ctx)
+    assert res.grounded
+    blob = " ".join(t.content for t in res.graph.thoughts) + res.answer
+    assert "Shadow" not in blob and "Phantom" not in blob  # no context-bleed via reason()
+    # Control: with no context the injected engine is unrestricted and the secret surfaces.
+    leak = GraphOfThoughts(engine=QueryEngine(r.nodes, r.edges)).reason("Shadow LLC Phantom Bank")
+    assert "Shadow" in " ".join(t.content for t in leak.graph.thoughts) + leak.answer
+
+
 def test_entity_less_but_answerable_query_anchors_on_search() -> None:
     # A question that names no entity but that search can answer must still produce a
     # grounded chain (anchored on the top hit), not "no evidence" — complexity stays 0,

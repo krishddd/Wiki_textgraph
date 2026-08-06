@@ -85,7 +85,7 @@ RENDERER_CSS = """
   /* Canvas card */
   #stage { position:relative; flex:1; min-height:0; background:var(--card);
     border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow);
-    overflow:hidden; margin-bottom:18px; }
+    overflow:hidden; }
   canvas { display:block; width:100%; height:100%; cursor:grab; }
   canvas.grabbing { cursor:grabbing; }
   #note { position:absolute; bottom:12px; left:16px; color:var(--mut); font-size:12px; z-index:5;
@@ -130,6 +130,48 @@ RENDERER_CSS = """
   .win { color:var(--mut); font-size:11.5px; } .win.sup { color:var(--sup); }
   .empty { color:var(--mut); padding:10px 0; }
 
+  /* Ask — the grounded chat dock */
+  #ask { display:flex; flex-direction:column; height:280px; margin-bottom:18px;
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:var(--shadow); overflow:hidden; transition:height .18s ease; }
+  #ask.collapsed { height:46px; }
+  #askhead { display:flex; align-items:center; gap:8px; padding:11px 16px;
+    border-bottom:1px solid var(--line); cursor:pointer; user-select:none; font-weight:600;
+    font-size:13px; }
+  #askhead .dot { width:8px; height:8px; border-radius:50%; background:var(--acc); }
+  #askhead .chev { margin-left:auto; color:var(--mut); transition:transform .18s; }
+  #ask.collapsed #askhead .chev { transform:rotate(180deg); }
+  #ask.collapsed #asklog, #ask.collapsed #askbar { display:none; }
+  #asklog { flex:1; overflow-y:auto; padding:14px 16px; display:flex; flex-direction:column;
+    gap:11px; }
+  #asklog .welcome { color:var(--mut); font-size:13px; margin:auto; text-align:center;
+    max-width:420px; line-height:1.6; }
+  .msg { max-width:88%; padding:9px 13px; border-radius:13px; font-size:13.5px; line-height:1.5;
+    word-wrap:break-word; }
+  .msg.user { align-self:flex-end; background:var(--acc); color:#fff; border-bottom-right-radius:4px; }
+  .msg.bot { align-self:flex-start; background:var(--bg); border:1px solid var(--line);
+    border-bottom-left-radius:4px; }
+  .msg .tooltag { font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut);
+    margin-bottom:4px; }
+  .msg .cites { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
+  .cite-chip { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:2px 7px;
+    border-radius:6px; background:var(--acc-soft); color:var(--acc); }
+  .chain { margin-top:8px; }
+  .chain summary { cursor:pointer; color:var(--mut); font-size:12px; }
+  .chain .step { font-size:12px; margin:5px 0; padding-left:9px; border-left:2px solid var(--line);
+    color:var(--fg2); }
+  .chain .step b { color:var(--fg); font-weight:600; }
+  #askbar { display:flex; gap:8px; padding:11px 13px; border-top:1px solid var(--line);
+    align-items:center; }
+  #askbar select { padding:8px 9px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg); color:var(--fg); font-size:12.5px; }
+  #askq { flex:1; padding:9px 13px; border-radius:10px; border:1px solid var(--line);
+    background:var(--bg); color:var(--fg); font-size:13.5px; outline:none; }
+  #askq:focus { border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-soft); }
+  #asksend { padding:9px 16px; border-radius:10px; border:none; background:var(--acc); color:#fff;
+    font-weight:600; font-size:13px; cursor:pointer; }
+  #asksend:disabled { opacity:.5; cursor:default; }
+
   @media (max-width:920px) {
     #body { grid-template-columns:1fr; }
     aside { display:none; }
@@ -161,6 +203,27 @@ SKELETON_HTML = """
           <span>&#9201;</span>
           <input type="range" id="tslider" min="0" value="0" step="1">
           <span class="lbl" id="tlabel">all time</span>
+        </div>
+      </div>
+      <div id="ask">
+        <div id="askhead"><span class="dot"></span>Ask the graph<span class="chev">&#9662;</span></div>
+        <div id="asklog"><div class="welcome">Ask a question in plain English — e.g. <em>&ldquo;how is Acme Corp connected to Delta Trust?&rdquo;</em> or <em>&ldquo;why does Acme matter?&rdquo;</em>. Answers are grounded in the graph, cited to the source, and highlighted on the canvas above.</div></div>
+        <div id="askbar">
+          <select id="asktool" title="which tool to use">
+            <option value="auto">Auto</option>
+            <option value="reason">Reason</option>
+            <option value="search">Search</option>
+            <option value="path">Path</option>
+            <option value="why">Why</option>
+            <option value="neighbors">Neighbors</option>
+            <option value="timeline">Timeline</option>
+            <option value="contradictions">Contradictions</option>
+            <option value="communities">Communities</option>
+            <option value="stats">Stats</option>
+            <option value="gql">GQL</option>
+          </select>
+          <input id="askq" placeholder="Ask a question…  (Enter)" autocomplete="off">
+          <button id="asksend">Ask</button>
         </div>
       </div>
     </div>
@@ -384,9 +447,58 @@ document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter')
   if(e.key==='Escape'){ e.target.value=''; S.match=null; draw(); } });
 addEventListener('resize',resize);
 
+// -- Ask dock (grounded chat) ------------------------------------------------
+function citeChips(ev){ return (ev&&ev.length) ? '<div class="cites">'+
+  ev.map(c=>`<span class="cite-chip">[${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]</span>`).join('')+'</div>' : ''; }
+function chainHtml(detail){
+  if(!detail||!detail.length||!detail[0].role) return '';
+  const steps=detail.map(s=>`<div class="step"><b>${esc(s.role)}</b> ${esc(s.content)}</div>`).join('');
+  return `<details class="chain"><summary>reasoning · ${detail.length} steps</summary>${steps}</details>`;
+}
+function addMsg(cls,html){ const log=document.getElementById('asklog');
+  const w=log.querySelector('.welcome'); if(w) w.remove();
+  const d=document.createElement('div'); d.className='msg '+cls; d.innerHTML=html;
+  log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+function fitNodes(ids){ const pts=(ids||[]).map(i=>S.byId[i]).filter(Boolean); if(!pts.length) return;
+  const xs=pts.map(n=>n.x), ys=pts.map(n=>n.y);
+  const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+  const r=c.getBoundingClientRect(), pad=90;
+  const sx=(r.width-2*pad)/((maxx-minx)||1), sy=(r.height-2*pad)/((maxy-miny)||1);
+  S.scale=Math.min(Math.max(Math.min(sx,sy),0.6),2.4);
+  S.tx=r.width/2-((minx+maxx)/2)*S.scale; S.ty=r.height/2-((miny+maxy)/2)*S.scale; }
+function applyHighlight(h){
+  S.match=(h&&h.nodes&&h.nodes.length)?new Set(h.nodes):null;
+  S.pathEdges=new Set(); if(h&&h.edges) h.edges.forEach(e=>{ if(e[0]&&e[1]) S.pathEdges.add(e[0]+'>'+e[1]); });
+  fitNodes(h&&h.nodes); draw();
+}
+let asking=false;
+async function ask(){
+  if(asking) return; const inp=document.getElementById('askq'), q=inp.value.trim(); if(!q) return;
+  const tool=document.getElementById('asktool').value;
+  addMsg('user',esc(q)); inp.value='';
+  const send=document.getElementById('asksend'); asking=true; send.disabled=true;
+  const bubble=addMsg('bot','<span style="color:var(--mut)">thinking…</span>');
+  try{
+    const ans=await TG.chat(q,{tool, focus:S.lastFocus||''});
+    S.lastFocus=ans.focus||S.lastFocus;
+    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}</div>${esc(ans.text)}`+chainHtml(ans.detail)+citeChips(ans.evidence);
+    applyHighlight(ans.highlight);
+  }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
+  asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;
+}
+function initAsk(){
+  const dock=document.getElementById('ask');
+  if(!dock) return;
+  // `const TG` is a lexical global, not a window property — test the binding via typeof.
+  if(typeof TG==='undefined' || typeof TG.chat!=='function'){ dock.style.display='none'; return; } // offline graph.html has no server
+  document.getElementById('askhead').onclick=()=>dock.classList.toggle('collapsed');
+  document.getElementById('asksend').onclick=ask;
+  document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
+}
+
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildStats(); buildSidebar(); buildTops(); initTime(); resize(); fit();
+  buildStats(); buildSidebar(); buildTops(); initTime(); initAsk(); resize(); fit();
 })();
 """
