@@ -6,6 +6,14 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed — positioning leads with the differentiators (Sprint 4.4)
+- **README** now opens with a **"Why it's different (vs GraphRAG)"** section that leads with
+  the real edge — *deterministic* (byte-identical `graph.json`), *byte-level provenance* (100%
+  re-verified), *zero-LLM-by-default*, *bi-temporal versioning*, and a *published
+  hallucination rate* — instead of generic "GraphRAG" framing, and states plainly that
+  local-first/DuckDB is the default with Neo4j only an optional scale-out backend. These are
+  the axes the market scan found TextGraph actually wins on and had been under-selling.
+
 ### Hardened — console server concurrency + optional auth (Sprint 4.3)
 - **Ingest serialization:** the file-attach rebuild + engine hot-swap is now guarded by a
   lock, so two concurrent uploads can't race. Reads stay lock-free (an engine swap is a

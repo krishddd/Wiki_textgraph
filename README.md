@@ -6,6 +6,18 @@ TextGraph is built to help investigators make sense of **financial-crime and tec
 
 It is the natural-language successor to [**llm-wiki**](https://github.com/krishddd/llm-wiki): where `llm-wiki` gave an agent cited, streaming answers over Wikipedia, TextGraph generalizes that to **any textual corpus** and produces a graph an agent can traverse — multi-hop relationship discovery, contradiction detection, temporal reasoning, and provenance-backed retrieval — not just a stream of prose.
 
+## Why it's different (vs "GraphRAG")
+
+Most GraphRAG tools build the graph *with an LLM*: extraction is non-deterministic, edges arrive without verifiable sources, and you can't reproduce or audit the result. TextGraph inverts that. The edge is **trust**, not just recall:
+
+- **🔁 Deterministic by construction.** The same corpus always produces a **byte-identical `graph.json`** — gated in CI. You can diff two runs and reproduce any finding exactly.
+- **🔍 Byte-level provenance on every edge.** Each non-generated claim carries the exact `[doc:start-end]` span that supports it, and **re-hashes against source bytes** — 100% re-verification is gated (`test_edge_provenance`). Most peers offer chunk-level attribution at best.
+- **🚫 Zero LLM calls by default.** The whole pipeline — ingest → IE → resolution → claims → analytics → retrieval — runs **locally, CPU-only, no API key**. LLMs are opt-in, quarantined, and `GENERATED`-tagged so they can never masquerade as ground truth.
+- **🕓 Bi-temporal versioning.** Claims carry `[t_valid, t_invalid)` windows; a later fact **invalidates** an earlier one (with a cited `SUPERSEDES` edge) rather than overwriting it — so history is queryable, not lost.
+- **📏 Honest about quality.** We publish the **hallucinated-edge rate** (0.167 on the fixture, [BENCHMARKS.md](BENCHMARKS.md)) — a number most systems don't report at all.
+
+Local-first / DuckDB stays the default; a graph DB (Neo4j) is an *optional* scale-out backend, never required. The trade is deliberate: the deterministic default caps peak recall vs an LLM extractor, which is exactly why the higher-recall `[ie]` and opt-in LLM paths exist — but the reproducibility and re-verifiable citations are the moat.
+
 ## Who it's for
 
 - **Financial-crime analysts** — trace structuring/layering, link cases through a shared beneficial owner, follow the money across accounts, and answer *why* two cases are related with a cited path.
