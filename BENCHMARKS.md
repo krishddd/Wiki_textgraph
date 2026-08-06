@@ -28,7 +28,30 @@ python -m benchmarks.retrieval          # fixture benchmark, zero downloads
 python -m benchmarks.retrieval --write   # regenerate this file
 python -m benchmarks.retrieval --data DIR  # external set (DIR/queries.json)
 python -m benchmarks.security            # FGAC overhead + no-bleed (Phase 9)
+python -m benchmarks.reasoning           # Graph-of-Thoughts adaptive vs static (Phase 10)
 ```
+
+## Graph-of-Thoughts (Phase 10) - adaptive vs static reasoning cost
+
+The reasoner answers a query by building a graph of thoughts, each bound to real graph
+evidence (§4.2). Cost is the number of graph tool calls (search/neighbors/path/why/gql) it
+makes — a deterministic, machine-independent count. Adaptive gates topology expansion on
+runtime complexity; static always expands the full topology (the DGoT/AGoT baseline).
+
+| Question | complexity | adaptive calls | static calls | grounded |
+|---|---|---|---|---|
+| who is John Doe | 1 | 4 | 16 | True |
+| which bank was involved | 1 | 4 | 16 | True |
+| how is Acme Corp connected to Delta Trust | 2 | 6 | 16 | True |
+| what is the link between Beta Ltd and Gamma Holdings | 2 | 6 | 16 | True |
+| who controls Gamma Holdings | 1 | 4 | 16 | True |
+
+- **Total: adaptive 24 vs static 80 tool calls -> 70% cheaper**, and adaptive is never more
+  expensive than static on any query. Reproduce with `python -m benchmarks.reasoning`.
+- **Every reasoning step cites real graph spans (ESCARGOT): True** — a thought that gathers
+  no graph evidence is pruned, so the finished chain is verifiable end to end.
+- Adaptive spends where difficulty is: a single-entity question runs a cheap linear chain;
+  a connection question spawns the Aggregation/Refinement branches.
 
 ## Enterprise FGAC (Phase 9) - security-aware retrieval
 

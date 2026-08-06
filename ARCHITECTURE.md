@@ -288,6 +288,31 @@ heavy alternatives (Leiden, DuckDB, cross-encoder rerankers) are import-guarded
   PPR/paths/summaries/vision — and that the leak is real without a policy — while
   `benchmarks/security.py` measures the overhead (~+14% p50).
 
+## Phase 10 (implemented): Graph-of-Thoughts agent reasoning (`textgraph/got/`)
+
+- **Why.** A static knowledge graph is domain *memory*; agentic problem-solving also needs
+  a *cognitive* structure. Chain- and Tree-of-Thought are linear/branching; the
+  Graph-of-Thoughts framework (gap-analysis §4) generalises reasoning to an arbitrary graph
+  of thought vertices with backtracking, aggregation, and refinement — and, crucially
+  (ESCARGOT), grounds every thought in retrieved KG evidence to fight hallucination.
+- **The model (`thought.py`).** A GoT process is a tuple of thought vertices `V`, dependency
+  edges `E`, a role function `sigma` (Plan / SubProblem / Hypothesis / VerificationStep /
+  DistilledSummary), and four operators. `Thought`/`ThoughtGraph` implement exactly that,
+  with one invariant: a *substantive* thought must carry real `[doc:span]` evidence, or it
+  is not grounded and gets pruned.
+- **The reasoner (`reason.py`).** `reason(query)` runs the four operators over the real
+  tools an agent would call: **Generation** = `neighbors` of a focus entity, **Aggregation**
+  = a `path` connecting two focuses, **Refinement** = `why` claims + a `gql` triple check,
+  **Distillation** = score, prune, and summarise under a token/tool budget. Each operator
+  binds its tool result's citations onto the thought it creates, so the trace is verifiable
+  end to end (G3).
+- **Adaptive, not static (DGoT/AGoT).** Complexity — how many entities the *query* names —
+  is measured at runtime. A single-entity question runs a cheap linear chain; only when
+  complexity crosses a threshold does the loop spawn the (expensive) Aggregation/Refinement
+  branches. A `static` mode expands the full topology regardless, so `benchmarks/reasoning.py`
+  can show the adaptive path is ~70% cheaper at equal grounding. `textgraph reason` is the
+  CLI. Deterministic and read-only — `graph.json` is untouched (G1).
+
 ### Why the default backend is model-free
 
 Determinism (G1) must survive in CI, which can't download model weights, and the

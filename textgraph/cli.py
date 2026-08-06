@@ -11,6 +11,8 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
     ``neighbors``, ``timeline``, ``contradictions``, ``communities``, ``stats``.
   * ``gql`` — a standard GQL (ISO-GQL/Cypher subset) query over the property graph.
   * ``vision`` — late-interaction MaxSim page retrieval (ColPali behind ``[vision]``).
+  * ``secure`` — security-aware search under a ReBAC/ABAC policy (enterprise FGAC).
+  * ``reason`` — Graph-of-Thoughts reasoning: a KG-grounded, complexity-gated chain.
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
 
 The human CLI and the MCP tool surface are built off the same underlying result
@@ -289,6 +291,34 @@ def _cmd_secure(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reason(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    from textgraph.got import GraphOfThoughts
+
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+    else:
+        result = build(root)
+        nodes, edges = result.nodes, result.edges
+    res = GraphOfThoughts(nodes, edges).reason(args.query, mode=args.mode).to_dict()
+    print(
+        f"reason: {res['query']}  (mode: {res['mode']}, complexity: {res['complexity']}, "
+        f"tool calls: {res['tool_calls']}, grounded: {res['grounded']})"
+    )
+    for v in res["graph"]["vertices"]:
+        print(f"  [{v['role']}] {v['content']}")
+        cites = " ".join(_fmt_citation(c) for c in v["evidence"])
+        if cites:
+            print(f"      {cites}")
+    print(f"answer: {res['answer']}")
+    return 0
+
+
 def _cmd_gql(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -506,6 +536,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="embedder: hash (deterministic default) or colpali ([vision] extra)",
     )
     p_vision.set_defaults(func=_cmd_vision)
+
+    p_reason = sub.add_parser(
+        "reason", help="Graph-of-Thoughts reasoning: a KG-grounded, complexity-gated chain"
+    )
+    p_reason.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_reason.add_argument("query", help="natural-language question")
+    p_reason.add_argument(
+        "--mode",
+        default="adaptive",
+        choices=["adaptive", "static"],
+        help="adaptive (complexity-gated, cheaper) or static (full topology baseline)",
+    )
+    p_reason.set_defaults(func=_cmd_reason)
 
     p_gql = sub.add_parser("gql", help="run a GQL (ISO-GQL/Cypher subset) query over the graph")
     p_gql.add_argument("path", help="corpus path or .duckdb snapshot")

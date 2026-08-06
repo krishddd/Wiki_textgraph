@@ -242,7 +242,9 @@ graph LR
 
 > **Phase 9 update:** **enterprise fine-grained access control** — attach a policy and query as a principal: `textgraph secure ./case-files "who moved the money" --policy policy.json --principal alice`. ReBAC (Zanzibar/OpenFGA relation tuples) + ABAC (clearance / IP / time window) are enforced *inside* traversal — an unauthorized document's nodes get a **zero** PPR transition probability, so they can't leak through search, paths, or summaries. Pure-Python default; a real OpenFGA service sits behind the `[security]` extra. With no policy the engine is byte-identical, so `graph.json` and the default install are untouched.
 
-**🎉 v1.0.0 is out** — the full L0–L9 stack, shipped, plus the v1.1 interactive console and the Phase 7 GQL layer. See the [CHANGELOG](CHANGELOG.md) for details and [PLAN.md](PLAN.md) for the remaining extension roadmap (Phases 8–10: vision ingestion, access control, Graph-of-Thoughts).
+> **Phase 10 update:** **Graph-of-Thoughts reasoning** — `textgraph reason ./case-files "how is Acme Corp connected to Delta Trust"` builds a graph of thought vertices (Plan → SubProblem → Hypothesis → VerificationStep → DistilledSummary) whose every step is **bound to real graph evidence** via `neighbors`/`path`/`why`/`gql` and cites re-verifiable `[doc:span]` bytes (ESCARGOT). It's **complexity-gated** (DGoT/AGoT): simple questions run a cheap linear chain, hard ones spawn the Aggregation/Refinement branches — ~70% fewer tool calls than a static-topology baseline at equal grounding. Deterministic and read-only.
+
+**🎉 v1.0.0 is out** — the full L0–L9 stack, shipped, plus the v1.1 interactive console and Phases 7–10 (GQL, vision retrieval, access control, Graph-of-Thoughts). See the [CHANGELOG](CHANGELOG.md) for details and [PLAN.md](PLAN.md) for the full roadmap.
 
 ## Specification documents
 

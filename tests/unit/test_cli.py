@@ -81,6 +81,19 @@ def test_secure_command_enforces_policy(tmp_path: Path, capsys: pytest.CaptureFi
     assert "Shadow" not in out and "Phantom" not in out  # no context-bleed
 
 
+def test_reason_command_prints_a_grounded_chain(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["reason", DOCS, "how is Acme Corp connected to Delta Trust"]) == 0
+    out = capsys.readouterr().out
+    assert "grounded: True" in out
+    assert "[Plan]" in out and "[Hypothesis]" in out and "[DistilledSummary]" in out
+    assert "answer:" in out
+
+
+def test_reason_command_static_mode_is_bounded(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["reason", DOCS, "who is John Doe", "--mode", "static"]) == 0
+    assert "mode: static" in capsys.readouterr().out
+
+
 def test_secure_command_missing_policy_errors() -> None:
     assert main(["secure", SECURE, "q", "--policy", "nope.json", "--principal", "alice"]) == 2
 

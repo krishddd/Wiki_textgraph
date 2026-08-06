@@ -39,7 +39,7 @@ The answer this architecture commits to is *stratification*. Rather than throwin
 | **7** | GQL / standards layer | 2 units | **Done.** Pure-Python ISO-GQL/Cypher subset (`textgraph/gql/`) — pattern matching + quantified paths + WHERE/RETURN/aggregation; `textgraph gql` CLI; pattern-tools round-trip. |
 | **8** | Vision-native multimodal ingestion | 2 units | **Done.** MaxSim late-interaction page retrieval (`l8_retrieval/vision/`); deterministic hash embedder default, ColPali behind `[vision]`; `textgraph vision` CLI; benchmarked. |
 | **9** | Enterprise fine-grained access control | 3 units | **Done.** ReBAC+ABAC policy engine (`textgraph/security/`); security-aware PPR/path/traversal (unauthorized transition probability → 0); red-team no-bleed suite; `textgraph secure` CLI; OpenFGA behind `[security]`. |
-| 10 | Dynamic agent reasoning (GoT) | 2 units | Extension. |
+| **10** | Dynamic agent reasoning (GoT) | 2 units | **Done.** Complexity-gated Graph-of-Thoughts reasoner (`textgraph/got/`); four operators bound to real `neighbors`/`path`/`why`/`gql` evidence; every step cited; `textgraph reason` CLI; adaptive ~70% cheaper than static baseline. |
 
 No reordering proposed. Phases 0–6 are strictly sequential and bottom-up (L0→L1→L2→L3→L5→L6→L7→L8→L9, with L4 last among core layers). v1.1 (interactive UI) and Phases 7–10 are post-v1.0.
 
@@ -89,6 +89,24 @@ See Section 5.2 of the build prompt — generated in Phase 0 exactly as specifie
       duckdb_store, watch) with the `textgraph` console-script entry point
 - [x] **v1.0.0 shipped** (2026-08-04): version bumped, CHANGELOG cut, tagged `v1.0.0`;
       the release workflow re-verifies determinism on the built wheel before publishing
+
+## Phase 10 — Definition of Done (met)
+
+- [x] **Graph-of-Thoughts reasoner** (`textgraph/got/`), pure-Python & deterministic: thought
+      vertices with roles (Plan/SubProblem/Hypothesis/VerificationStep/DistilledSummary) and
+      the four operators — Generation/Aggregation/Refinement/Distillation (§4.1)
+- [x] **Every operator binds a real graph query as evidence** (ESCARGOT): Generation=`neighbors`,
+      Aggregation=`path`, Refinement=`why`+`gql` triple check; every substantive thought cites
+      re-verifiable `[doc:span]` bytes, and an un-grounded thought is pruned
+- [x] **Complexity-gated / adaptive** (DGoT/AGoT): runtime complexity (entities the query names)
+      gates topology expansion; a `static` full-topology mode is the baseline; tool-call budget
+      hard-bounded (G7)
+- [x] **Adaptive cost < static baseline, shown empirically**: `benchmarks/reasoning.py` → ~70%
+      fewer tool calls (24 vs 80) at equal grounding; `BENCHMARKS.md`
+- [x] **Read-only**: reasoning is query-time over the assembled graph — `graph.json` byte-identical
+      (G1); `textgraph reason` CLI
+- [x] +11 tests (model, four operators end-to-end, gating, adaptive<static, grounding invariant,
+      determinism, CLI); whole-package coverage ≥ 88%; ruff + strict mypy green
 
 ## Phase 9 — Definition of Done (met)
 

@@ -90,6 +90,7 @@ files = [
     "textgraph/store",
     "textgraph/console",
     "textgraph/gql",
+    "textgraph/got",
     "textgraph/mcp",
     "textgraph/l0_ingest",
     "textgraph/l1_structure",

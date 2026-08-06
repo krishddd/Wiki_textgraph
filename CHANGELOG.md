@@ -6,6 +6,30 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added — Phase 10: Graph-of-Thoughts agent reasoning (`textgraph/got/`)
+- **A KG-grounded reasoner (ESCARGOT-style).** `GraphOfThoughts.reason(query)` builds a
+  graph of thought vertices with roles (Plan / SubProblem / Hypothesis / VerificationStep /
+  DistilledSummary, §4.1) using the four GoT operators — **Generation** (`neighbors`),
+  **Aggregation** (`path`), **Refinement** (`why` + a `gql` triple check), **Distillation**
+  (prune + summarise). Every substantive thought is **bound to real graph evidence**: its
+  `[doc:start-end]` citations come from the tool that produced it, and a thought that
+  gathered none is dropped — so the finished chain is verifiable end to end (G3).
+- **Adaptive cost (DGoT/AGoT).** Task complexity — how many entities the query itself names
+  — is measured at runtime. A simple query runs a cheap linear chain; only when complexity
+  crosses a threshold does the loop spawn the parallel Aggregation/Refinement branches. A
+  `static` mode expands the full topology regardless, as a baseline. The tool-call budget
+  is hard-bounded (G7).
+- **Deterministic and read-only.** Every tool it calls is deterministic and sorted, thought
+  ids are sequential, and there is no wall-clock or randomness — reasoning is reproducible
+  (G1) and never touches `graph.json`.
+- **CLI:** `textgraph reason <corpus|.duckdb> "<question>" [--mode adaptive|static]` prints
+  the whole cited reasoning chain, its tool-call cost, and the grounded answer.
+- **DoD — cited steps + a number:** `benchmarks/reasoning.py` shows the adaptive reasoner is
+  **70% cheaper** than the static-topology baseline (24 vs 80 tool calls over the fixture)
+  while **every reasoning step cites real graph spans** — see `BENCHMARKS.md`.
+- +11 tests (thought model, the four operators end to end, complexity gating, adaptive <
+  static, grounding invariant, determinism, CLI); coverage stays ≥ 88%.
+
 ### Added — Phase 9: enterprise fine-grained access control (`textgraph/security/`)
 - **ReBAC + ABAC, enforced inside traversal.** A new `[security]`-flagged layer brings
   Relationship-Based Access Control (Zanzibar/OpenFGA-style relation tuples — `owner`,
