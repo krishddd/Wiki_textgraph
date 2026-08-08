@@ -15,7 +15,8 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``reason`` — Graph-of-Thoughts reasoning: a KG-grounded, complexity-gated chain.
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
   * ``doctor`` — read-only environment health check (extras + on-machine determinism).
-  * ``export`` — export an interoperable view (PROV-O JSON-LD decision-provenance trail).
+  * ``export`` — interoperable exports: RDF/Turtle triple store, OWL vocabulary, SHACL
+    shapes, or a PROV-O JSON-LD decision-provenance trail.
   * ``trace-decision`` / ``find-decisions`` — walk a decision's causal chain; search decisions.
 
 The human CLI and the MCP tool surface are built off the same underlying result
@@ -539,6 +540,18 @@ def _cmd_export(args: argparse.Namespace) -> int:
         from textgraph.l9_artifacts.prov import export_prov_bytes
 
         body = export_prov_bytes(nodes, edges)
+    elif args.format == "rdf":
+        from textgraph.l9_artifacts.rdf import export_rdf_bytes
+
+        body = export_rdf_bytes(nodes, edges)
+    elif args.format == "owl":
+        from textgraph.l9_artifacts.ontology import export_owl_bytes
+
+        body = export_owl_bytes(nodes, edges)
+    elif args.format == "shacl":
+        from textgraph.l9_artifacts.ontology import export_shacl_bytes
+
+        body = export_shacl_bytes(nodes, edges)
     else:  # pragma: no cover - argparse choices guard this
         print(f"error: unknown format: {args.format}", file=sys.stderr)
         return 2
@@ -664,14 +677,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_version.set_defaults(func=_cmd_version)
 
     p_export = sub.add_parser(
-        "export", help="export the graph in an interoperable format (PROV-O decision trail)"
+        "export", help="export the graph in an interoperable format (RDF/OWL/SHACL/PROV-O)"
     )
     p_export.add_argument("path", help="corpus path or .duckdb snapshot")
     p_export.add_argument(
         "--format",
         default="prov-o",
-        choices=["prov-o"],
-        help="export format (default: prov-o, a W3C PROV-O JSON-LD decision provenance trail)",
+        choices=["prov-o", "rdf", "owl", "shacl"],
+        help="export format: prov-o (PROV-O JSON-LD decision trail), rdf (Turtle triple store "
+        "with reified provenance), owl (OWL vocabulary), shacl (SHACL shapes). Default: prov-o.",
     )
     p_export.add_argument("-o", "--output", help="write to this file instead of stdout")
     p_export.set_defaults(func=_cmd_export)

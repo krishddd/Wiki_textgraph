@@ -36,13 +36,14 @@ Local-first / DuckDB stays the default; a graph DB (Neo4j) is an *optional* scal
 - **Byte-identical builds, gated in CI** — diff two runs, reproduce any finding. (Semantica guarantees deterministic *reasoning*, not a byte-identical *build*.)
 - **Re-hashable byte-span citations** — every non-generated edge re-verifies against source bytes; 100% re-verify is gated. (Stronger than document/field-level provenance.)
 - **Zero-LLM, dependency-free core** — the whole default pipeline runs CPU-only, no API key, no vector DB. LLM/embeddings are opt-in and `GENERATED`-quarantined.
+- **Interop with provenance intact** — `textgraph export` emits **RDF/Turtle** (loads into Oxigraph/Jena/any SPARQL store, with cited spans as reified `rdf:Statement`s), an **OWL** vocabulary, a **SHACL** shapes graph, and a **PROV-O** decision trail — all deterministic.
 
 **🧭 Where to improve (roadmap)**
 
-- **Storage breadth** — Semantica is polyglot (RDF *and* LPG: Oxigraph/Jena/Neo4j/Neptune). TextGraph is DuckDB-default with a Neo4j design; native RDF triple-store export is next.
-- **Formal ontology & reasoning** — Semantica has OWL/SHACL/SPARQL + Datalog/Rete. TextGraph has typed labels + Graph-of-Thoughts; SHACL validation and a rule engine are on the roadmap.
-- **Provider & vector-store breadth** — Semantica spans LiteLLM providers and FAISS/Qdrant/Weaviate/Milvus. TextGraph ships one OpenAI-compatible client + a cosine index; more backends welcome.
-- **Ecosystem polish** — Semantica has a hosted docs site, MCP/REST surface, and published benchmarks; TextGraph has an MCP server + honest fixture benchmarks and is growing the rest.
+- **LPG storage backends** — Semantica is polyglot (RDF *and* labeled-property graphs: Neo4j/Neptune/AGE). TextGraph now exports RDF and has a Neo4j design; a live LPG driver is next.
+- **Rule reasoning** — Semantica has Datalog/Rete/SPARQL. TextGraph has typed labels, Graph-of-Thoughts, GQL, and now OWL/SHACL export for external validators; an embedded forward-chaining rule engine is on the roadmap.
+- **Provider & vector-store breadth** — Semantica spans LiteLLM providers and FAISS/Qdrant/Weaviate/Milvus. TextGraph ships one OpenAI-compatible client (chat + embeddings) + a cosine index; more backends welcome.
+- **Ecosystem polish** — Semantica has a hosted docs site and published benchmarks. TextGraph has an **MCP server**, a **REST API** (the console's `/api/*`), a **live demo**, and honest fixture benchmarks ([BENCHMARKS.md](BENCHMARKS.md)) — and is growing the rest.
 
 The design rule that keeps the moat while closing the gap: **the LLM augments, it never becomes ground truth** — anything model-authored is `GENERATED`-tagged next to its re-verifiable citations.
 

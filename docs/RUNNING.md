@@ -180,13 +180,19 @@ never deleted. Strategies: `most_recent`, `voting`, `credibility_weighted` (the 
 a `--credibility source_name.json` map). Bake a resolution into `graph.json` with
 `textgraph build ./docs --resolve-conflicts voting`.
 
-Export an interoperable **decision-provenance trail** (W3C PROV-O JSON-LD) — each
-decision as a `prov:Activity`, cited to its source span, with `CAUSED`/`INFLUENCED`/
-`PRECEDENT_FOR` links rendered as `prov:wasInformedBy`:
+**Interoperable exports** — the graph as standard semantic-web artifacts, all deterministic:
 
 ```bash
-textgraph export ./my-documents --format prov-o -o decisions.prov.jsonld
+textgraph export ./my-documents --format rdf    -o graph.ttl      # RDF/Turtle triple store
+textgraph export ./my-documents --format owl    -o ontology.ttl   # OWL vocabulary
+textgraph export ./my-documents --format shacl  -o shapes.ttl     # SHACL shapes
+textgraph export ./my-documents --format prov-o -o decisions.jsonld  # PROV-O decision trail
 ```
+
+The **RDF/Turtle** export loads straight into Oxigraph, Apache Jena, RDF4J, or any SPARQL
+store — and cited edges become reified `rdf:Statement`s carrying the re-verifiable byte span,
+so provenance survives the round-trip. **PROV-O** renders each decision as a `prov:Activity`
+with `CAUSED`/`INFLUENCED`/`PRECEDENT_FOR` as `prov:wasInformedBy`.
 
 Run `textgraph --help` for the full list.
 

@@ -6,6 +6,28 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-08-08
+
+**Semantic-web interop — closing the RDF / ontology gap with polyglot peers.** New
+deterministic, dependency-free exports so the graph loads into any triple store and
+validates in any semantic-web toolchain.
+
+### Added
+- **RDF/Turtle export** — `textgraph export --format rdf` emits the whole graph as Turtle
+  (loads into Oxigraph / Apache Jena / RDF4J / any SPARQL store): nodes typed by their
+  labels, relations as `tgr:` predicates, and **every cited edge reified as an
+  `rdf:Statement`** carrying the `ConfidenceTag` + the re-verifiable byte span
+  (`prov:wasDerivedFrom`, `tgo:sourceStart/End/Hash`) — provenance survives the round-trip
+  (G3). Validated with rdflib; pure-string, no RDF dependency.
+- **OWL vocabulary export** — `--format owl` emits `owl:Class` per node label,
+  `owl:ObjectProperty` per relation predicate (with induced `rdfs:domain`/`range`), and
+  `owl:DatatypeProperty` per scalar key.
+- **SHACL shapes export** — `--format shacl` emits a `sh:NodeShape` per class with
+  constraints (label cardinality, per-predicate `sh:class`) **induced from the actual data**
+  — validate the graph in pySHACL / TopBraid / Jena.
+
+All four export formats (`rdf`, `owl`, `shacl`, `prov-o`) are byte-deterministic (G1).
+
 ## [3.2.1] - 2026-08-08
 
 **Packaging & presentation polish** (no code/API changes). Makes the PyPI page and repo

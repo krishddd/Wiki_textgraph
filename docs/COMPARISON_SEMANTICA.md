@@ -23,8 +23,9 @@ for compliance-grade AI.
 | **Extraction** | Rule + GLiNER (deterministic); **opt-in LLM relation enrichment** (v3.2). | NER/relation/event/triplet backends, LLM-assisted. |
 | **Retrieval** | BM25 + Personalized-PageRank + **dense embeddings** (v3.2), RRF-fused. | Hybrid dense+sparse over FAISS/Qdrant/Weaviate/Milvus/… |
 | **Answers** | Templated + cited by default; **opt-in grounded LLM synthesis** (v3.2). | Rule-engine justifications; explicitly avoids LLM prose for answers. |
-| **Graph store** | DuckDB default; Neo4j design (optional). | Polyglot: RDF (Oxigraph/Jena/…) **and** LPG (Neo4j/Neptune/…). |
-| **Ontology** | Typed labels + PROV-O export. | OWL generation, SHACL validation, SKOS. |
+| **Graph store** | DuckDB default; **RDF/Turtle export** (loads into Oxigraph/Jena/any SPARQL store); Neo4j design. | Polyglot: RDF (Oxigraph/Jena/…) **and** LPG (Neo4j/Neptune/…), live. |
+| **Ontology** | **OWL vocabulary + SHACL shapes export** (induced from the graph) + PROV-O. | OWL generation, SHACL validation, SKOS. |
+| **Export formats** | `graph.json`, **RDF/Turtle**, **OWL**, **SHACL**, **PROV-O JSON-LD**, RDF-reified provenance. | RDF, OWL, Parquet, Cypher, JSON-LD, PROV-O. |
 | **Reasoning** | Graph-of-Thoughts (complexity-gated), GQL. | Forward chaining, Rete, Datalog, SPARQL. |
 | **Footprint** | Dependency-free core (stdlib); everything heavy behind extras. | Broader dependency surface (many backends/providers). |
 | **Access control** | Built-in ReBAC/ABAC, security-aware retrieval. | Self-hosted; enterprise data-platform integrations. |
