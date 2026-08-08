@@ -640,6 +640,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
         f"{gs.get('claims', 0)} claims, {gs.get('communities', 0)} communities, "
         f"{gs.get('chunks', 0)} chunks)"
     )
+    if gs.get("llm_relations"):
+        print(f"  + {gs['llm_relations']} LLM relations (GENERATED, cited, quarantined)")
     print(f"  {paths.graph_json}")
     print(f"  {paths.report}")
     print(f"  {paths.graph_html}")
