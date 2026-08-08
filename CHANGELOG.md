@@ -6,6 +6,28 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-08
+
+**TextGraph 3.1 — the decision-provenance & conflict release.** On top of v3.0's interactive
+surface, 3.1 makes the graph *accountable*: it models **decisions** as a first-class causal
+layer, detects and (optionally) resolves **conflicting claims** without ever silently merging
+them, exports an interoperable **PROV-O** audit trail, and adds a first-run **doctor**. All of
+it preserves the moat: **deterministic build (byte-identical `graph.json`), byte-level
+provenance, zero-LLM-by-default, local-first.**
+
+Highlights:
+- **Decision objects + causal chains** — `WHY`/`DECISION`/`RATIONALE`/`ADR-N` become
+  `Decision` nodes with `CAUSED`/`INFLUENCED`/`PRECEDENT_FOR` edges; `trace-decision` walks a
+  decision's lineage (what led to it, what it led to) and `find-decisions` searches them —
+  all cited.
+- **Conflict detection & resolution** — single-truth disagreements are surfaced as
+  `Conflict` nodes (never a silent merge); opt-in `most_recent`/`voting`/`credibility_weighted`
+  resolution demotes losers non-destructively (`SUPERSEDED_BY`, keeping citations).
+- **PROV-O export** — `textgraph export --format prov-o` emits a W3C PROV-O JSON-LD trail.
+- **`textgraph doctor`** — read-only environment + on-machine determinism health check.
+- **Console** — a `graph.json` "Save snapshot" export, and the Ask chat now routes to the
+  conflicts / trace / find-decisions tools with inline cited detail.
+
 ### Added
 - **Console "Ask" chat routes to the decision/conflict tools.** Natural-language questions
   now reach `conflicts`, `trace` (decision chain), and `find-decisions`: "are there
