@@ -17,8 +17,18 @@ to Semantic Versioning.
   sequential change (director of Beta in 2019, of Gamma in 2021) is *not* flagged, while
   genuinely contemporaneous claims are. New `textgraph conflicts` CLI verb,
   `QueryEngine.conflicts()`, a **Conflicts** section in `GRAPH_REPORT.md`, and
-  `Config.detect_conflicts` / `Config.single_truth_predicates`. (Opt-in *resolution*
-  strategies remain future work — detection ships first, by design.)
+  `Config.detect_conflicts` / `Config.single_truth_predicates`.
+- **Conflict resolution (opt-in, pluggable, never destructive).** With
+  `build --resolve-conflicts <strategy>` (or `conflicts --resolve <strategy>`), TextGraph
+  picks a winning object per conflict and **demotes** the losing claims — they gain
+  `superseded_by` / `resolved_by` properties and a cited `SUPERSEDED_BY` edge to the
+  winner, but are **never deleted** (G3). Three deterministic strategies: `most_recent`
+  (latest in-text validity date; undated ⇒ honestly left unresolved), `voting` (most
+  distinct sources, ties broken by earliest source), and `credibility_weighted` (summed
+  per-source `Config.source_credibility`, defaulting to 1.0 so it degrades to voting).
+  `SUPERSEDED` is an orthogonal marker, **not** a fifth `ConfidenceTag` tier — the four-tier
+  taxonomy and the provenance gate are untouched. Resolution is config-pinned, so
+  `graph.json` stays byte-identical.
 - **Decision objects — a queryable causal layer over `Rationale`.** Decision-worthy L1
   markers (`WHY`/`DECISION`/`RATIONALE`/`ADR-N`) are promoted into first-class `Decision`
   nodes (category, statement, byte-span citation), each linked back to its rationale via a

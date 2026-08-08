@@ -24,7 +24,7 @@ its claim's byte span, so provenance still re-verifies (G3) and nothing is ``GEN
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from textgraph.core.content_address import hash_text
 from textgraph.store.base import ConfidenceTag, Edge, Node, SourceSpan
@@ -193,4 +193,147 @@ def detect_conflicts(
 
     nodes_out = sorted(conflict_nodes.values(), key=lambda n: n.node_id)
     edges_out = sorted(conflict_edges.values(), key=lambda e: e.edge_id)
+    return nodes_out, edges_out
+
+
+# --- resolution (opt-in, pluggable, never destructive) -----------------------
+
+STRATEGIES: tuple[str, ...] = ("most_recent", "voting", "credibility_weighted")
+
+
+def _docs_of_claim(claim_id: str, spans_of: dict[str, tuple[SourceSpan, ...]]) -> list[str]:
+    """Distinct source documents that assert a claim (from its citing spans)."""
+    return sorted({s.doc_id for s in spans_of.get(claim_id, ())})
+
+
+def _score_object(
+    strategy: str,
+    claim_ids: list[str],
+    t_valid_of: dict[str, str | None],
+    docs_of: dict[str, list[str]],
+    credibility_by_doc: dict[str, float],
+) -> tuple[float, str] | None:
+    """Rank key for an object's claims under ``strategy`` (higher wins). ``None`` = unrankable.
+
+    The second tuple element is a *deterministic* tie-break: the lexically-earliest source
+    document backing the object (so equal-weight objects still resolve reproducibly). For
+    ``most_recent`` the primary key is the latest in-text validity date; an object with no
+    dated claim is unrankable and cannot win.
+    """
+    docs = sorted({d for cid in claim_ids for d in docs_of[cid]})
+    tie = docs[0] if docs else ""
+    if strategy == "most_recent":
+        dates = [d for cid in claim_ids if (d := t_valid_of[cid]) is not None]
+        if not dates:
+            return None
+        # Encode the max ISO date as a float-free ordinal via its own value in the tie slot;
+        # primary stays 0.0 so the date (compared lexically) decides — packed into ``tie``.
+        return (0.0, max(dates))
+    if strategy == "voting":
+        return (float(len(docs)), _neg(tie))
+    # credibility_weighted: sum source credibility (default 1.0 -> degrades to voting).
+    weight = sum(credibility_by_doc.get(d, 1.0) for d in docs)
+    return (round(weight, 6), _neg(tie))
+
+
+def _neg(s: str) -> str:
+    """A tie-break helper so the lexically-*earliest* document wins a ``max`` comparison."""
+    # Invert each char so that a smaller string yields a larger inverted string under max().
+    return "".join(chr(0x10FFFF - ord(c)) for c in s)
+
+
+def resolve_conflicts(
+    nodes: list[Node],
+    edges: list[Edge],
+    *,
+    strategy: str,
+    credibility_by_doc: dict[str, float] | None = None,
+) -> tuple[list[Node], list[Edge]]:
+    """Resolve detected ``Conflict`` nodes under ``strategy`` — non-destructively.
+
+    Picks a winning *object* per conflict, then demotes every claim asserting a *losing*
+    object: the claim keeps its identity and citation but gains ``superseded_by`` /
+    ``resolved_by`` properties and a ``SUPERSEDED_BY`` edge pointing at the winning claim.
+    Nothing is deleted (G3), and the four-tier ``ConfidenceTag`` taxonomy is untouched —
+    ``SUPERSEDED`` is an orthogonal marker, not a fifth tier (plan open question #1).
+
+    Returns ``(changed_nodes, new_edges)``: the updated ``Conflict`` nodes + demoted claim
+    nodes, and the new ``SUPERSEDED_BY`` edges. Deterministic for a fixed strategy + config.
+    """
+    if strategy not in STRATEGIES:
+        raise ValueError(f"unknown resolution strategy: {strategy!r} (choose from {STRATEGIES})")
+    credibility_by_doc = credibility_by_doc or {}
+    canon = _canonical_map(edges)
+    spans_of = _claim_spans(edges)
+    claim_by_id = {n.node_id: n for n in nodes if "Claim" in n.labels}
+
+    def canon_obj(cid: str) -> str:
+        obj = str(claim_by_id[cid].properties.get("object", "")) if cid in claim_by_id else ""
+        return canon.get(obj, obj)
+
+    t_valid_of: dict[str, str | None] = {
+        cid: (n.properties.get("t_valid") if isinstance(n.properties.get("t_valid"), str) else None)
+        for cid, n in claim_by_id.items()
+    }
+    docs_of = {cid: _docs_of_claim(cid, spans_of) for cid in claim_by_id}
+
+    changed: dict[str, Node] = {}
+    new_edges: dict[str, Edge] = {}
+    for cnode in sorted((n for n in nodes if "Conflict" in n.labels), key=lambda n: n.node_id):
+        contending = [
+            c for c in cnode.properties.get("contending_claim_ids", []) if c in claim_by_id
+        ]
+        if len(contending) < 2:
+            continue
+        by_object: dict[str, list[str]] = {}
+        for cid in contending:
+            by_object.setdefault(canon_obj(cid), []).append(cid)
+
+        ranked: list[tuple[tuple[float, str], str]] = []
+        for obj, cids in by_object.items():
+            key = _score_object(strategy, cids, t_valid_of, docs_of, credibility_by_doc)
+            if key is not None:
+                ranked.append((key, obj))
+        props = dict(cnode.properties)
+        props["resolution_strategy"] = strategy
+        if not ranked:
+            props["resolved_claim_id"] = None
+            props["resolved_object"] = None
+            props["resolution_note"] = "unresolved: no orderable claim under strategy"
+            props["superseded_claim_ids"] = []
+            changed[cnode.node_id] = replace(cnode, properties=props)
+            continue
+
+        winner_object = max(ranked)[1]
+        winner_claims = sorted(by_object[winner_object])
+        resolved_claim_id = winner_claims[0]
+        losers = sorted(cid for cid in contending if canon_obj(cid) != winner_object)
+
+        props["resolved_object"] = winner_object
+        props["resolved_claim_id"] = resolved_claim_id
+        props["superseded_claim_ids"] = losers
+        changed[cnode.node_id] = replace(cnode, properties=props)
+
+        for loser in losers:
+            lprops = dict(claim_by_id[loser].properties)
+            lprops["superseded_by"] = resolved_claim_id
+            lprops["resolved_by"] = strategy
+            changed[loser] = replace(claim_by_id[loser], properties=lprops)
+            spans = spans_of.get(loser, ())
+            e = Edge(
+                edge_id="edge:"
+                + hash_text(f"{loser}|SUPERSEDED_BY|{resolved_claim_id}|{cnode.node_id}"),
+                subject=loser,
+                predicate="SUPERSEDED_BY",
+                object=resolved_claim_id,
+                tag=ConfidenceTag.INFERRED,
+                confidence=float(claim_by_id[loser].properties.get("confidence", 0.0)),
+                evidence_count=len(spans),
+                source_spans=spans,
+                properties={"strategy": strategy, "conflict_id": cnode.node_id},
+            )
+            new_edges[e.edge_id] = e
+
+    nodes_out = sorted(changed.values(), key=lambda n: n.node_id)
+    edges_out = sorted(new_edges.values(), key=lambda e: e.edge_id)
     return nodes_out, edges_out

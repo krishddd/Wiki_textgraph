@@ -819,6 +819,7 @@ class QueryEngine:
             if len(claims) < 2:
                 continue
             p = cnode.properties
+            resolved_obj = p.get("resolved_object")
             views.append(
                 ConflictView(
                     conflict_id=cid,
@@ -827,6 +828,9 @@ class QueryEngine:
                     severity=str(p.get("severity", "")),
                     objects=[self._name(str(o)) for o in p.get("objects", [])],
                     claims=claims,
+                    resolution_strategy=str(p.get("resolution_strategy", "")),
+                    resolved_object=self._name(str(resolved_obj)) if resolved_obj else None,
+                    resolution_note=str(p.get("resolution_note", "")),
                 )
             )
         # Most severe first (HIGH < MEDIUM < LOW), then by subject for stable order.

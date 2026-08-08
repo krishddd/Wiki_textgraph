@@ -60,6 +60,13 @@ class Config:
     # Predicates treated as single-truth (only one object correct at a time) for conflict
     # detection. Multi-truth predicates (a company's several directors) are excluded.
     single_truth_predicates: tuple[str, ...] = ("BENEFICIAL_OWNER_OF", "CONTROLS", "DIRECTOR_OF")
+    # Conflict resolution strategy (opt-in; "" = detection only, never resolve). One of
+    # "most_recent" / "voting" / "credibility_weighted". Non-destructive: losing claims are
+    # demoted (superseded_by + SUPERSEDED_BY edge), never deleted (G3).
+    resolve_conflicts_strategy: str = ""
+    # Per-source credibility (keyed by source_name) for the credibility_weighted strategy;
+    # unset sources default to 1.0, so the strategy degrades gracefully to unweighted voting.
+    source_credibility: dict[str, float] = field(default_factory=dict)
     # L7 graph analytics: PageRank/betweenness/communities folded into the graph,
     # contradictions surfaced as CONTRADICTS edges. Pure-Python deterministic default;
     # "leiden" (behind the [graph] extra) is the optional higher-quality community pass.

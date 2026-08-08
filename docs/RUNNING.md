@@ -140,7 +140,14 @@ textgraph gql     ./my-documents "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.na
 textgraph reason  ./my-documents "how is Acme Corp connected to Delta Trust"
 textgraph secure  ./my-documents "who moved the money" --policy policy.json --principal alice
 textgraph conflicts ./my-documents   # single-truth disagreements, surfaced not merged
+textgraph conflicts ./my-documents --resolve voting   # opt-in: pick a winner, supersede losers
 ```
+
+Conflicts are **surfaced, never silently merged**. Resolution is opt-in and
+non-destructive — losing claims are demoted (`SUPERSEDED_BY`, keeping their citation),
+never deleted. Strategies: `most_recent`, `voting`, `credibility_weighted` (the last reads
+a `--credibility source_name.json` map). Bake a resolution into `graph.json` with
+`textgraph build ./docs --resolve-conflicts voting`.
 
 Export an interoperable **decision-provenance trail** (W3C PROV-O JSON-LD) — each
 decision as a `prov:Activity`, cited to its source span, with `CAUSED`/`INFLUENCED`/

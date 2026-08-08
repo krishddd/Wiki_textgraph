@@ -274,6 +274,13 @@ class ConflictView:
     severity: str
     objects: list[str]
     claims: list[ClaimView] = field(default_factory=list)
+    resolution_strategy: str = ""  # "" until an opt-in strategy resolved it
+    resolved_object: str | None = None  # the winning object's name (None if unresolved)
+    resolution_note: str = ""  # why it stayed unresolved, if applicable
+
+    @property
+    def resolved(self) -> bool:
+        return self.resolved_object is not None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -283,6 +290,10 @@ class ConflictView:
             "severity": self.severity,
             "objects": self.objects,
             "claims": [c.to_dict() for c in self.claims],
+            "resolution_strategy": self.resolution_strategy,
+            "resolved_object": self.resolved_object,
+            "resolved": self.resolved,
+            "resolution_note": self.resolution_note,
         }
 
 

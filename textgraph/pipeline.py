@@ -22,7 +22,7 @@ from textgraph.l1_structure.decisions import derive_decisions
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
 from textgraph.l6_graph_model import apply_temporal, reify_claims
-from textgraph.l6_graph_model.conflicts import detect_conflicts
+from textgraph.l6_graph_model.conflicts import detect_conflicts, resolve_conflicts
 from textgraph.l7_analytics import Analytics, compute_analytics
 from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
 from textgraph.l8_retrieval.emit_chunks import emit_chunks
@@ -274,6 +274,28 @@ def build(
             ({e.edge_id: e for e in edges} | {e.edge_id: e for e in conflict_edges}).values(),
             key=lambda e: e.edge_id,
         )
+        # Opt-in resolution (never silent): pick a winner per conflict and demote losing
+        # claims non-destructively. Off unless a strategy is configured.
+        if conflict_count and config.resolve_conflicts_strategy:
+            credibility = {
+                ir.doc_id: config.source_credibility[ir.source_name]
+                for ir in results
+                if ir.source_name in config.source_credibility
+            }
+            resolved_nodes, resolved_edges = resolve_conflicts(
+                nodes,
+                edges,
+                strategy=config.resolve_conflicts_strategy,
+                credibility_by_doc=credibility,
+            )
+            nodes = sorted(
+                ({n.node_id: n for n in nodes} | {n.node_id: n for n in resolved_nodes}).values(),
+                key=lambda n: n.node_id,
+            )
+            edges = sorted(
+                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in resolved_edges}).values(),
+                key=lambda e: e.edge_id,
+            )
 
     # L7 — graph analytics folded back into the graph (node props + CONTRADICTS).
     l7_ms = 0.0

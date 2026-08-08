@@ -177,20 +177,50 @@ def _cmd_contradictions(args: argparse.Namespace) -> int:
     return 0
 
 
+def _engine_with_resolution(root: Path, strategy: str, credibility_path: str | None) -> QueryEngine:
+    """Build a QueryEngine, optionally applying an opt-in conflict-resolution strategy."""
+    if not strategy:
+        return _engine(root)
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.l6_graph_model.conflicts import resolve_conflicts
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+        rn, re_ = resolve_conflicts(nodes, edges, strategy=strategy)
+        nmap = {n.node_id: n for n in nodes} | {n.node_id: n for n in rn}
+        emap = {e.edge_id: e for e in edges} | {e.edge_id: e for e in re_}
+        return QueryEngine(list(nmap.values()), list(emap.values()))
+    import json
+
+    from textgraph.core.config import Config
+
+    cred = json.loads(Path(credibility_path).read_text("utf-8")) if credibility_path else {}
+    cfg = Config(resolve_conflicts_strategy=strategy, source_credibility=cred)
+    result = build(root, config=cfg)
+    return QueryEngine(result.nodes, result.edges)
+
+
 def _cmd_conflicts(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
-    res = _engine(root).conflicts().to_dict()
+    res = _engine_with_resolution(root, args.resolve, args.credibility).conflicts().to_dict()
     if not res["conflicts"]:
         print("no conflicts found")
         return 0
-    print(f"conflicts: {len(res['conflicts'])} (single-truth; not resolved -- review each)")
+    if args.resolve:
+        print(f"conflicts: {len(res['conflicts'])} (resolved by {args.resolve}; losers superseded)")
+    else:
+        print(f"conflicts: {len(res['conflicts'])} (single-truth; not resolved -- review each)")
     for c in res["conflicts"]:
         print(
             f"  [{c['severity']}] {c['subject']} -{c['predicate']}-> {{{', '.join(c['objects'])}}}"
         )
+        if c["resolved"]:
+            print(f"      => winner: {c['resolved_object']} (by {c['resolution_strategy']})")
+        elif c["resolution_note"]:
+            print(f"      => {c['resolution_note']}")
         for claim in c["claims"]:
             cites = " ".join(_fmt_citation(x) for x in claim["citations"])
             when = (
@@ -474,17 +504,25 @@ def _cmd_build(args: argparse.Namespace) -> int:
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
 
+    import json
+
+    from textgraph.core.config import Config
+
+    cred = json.loads(Path(args.credibility).read_text("utf-8")) if args.credibility else {}
+    config = Config(
+        llm_enabled=bool(args.llm),
+        resolve_conflicts_strategy=args.resolve_conflicts or "",
+        source_credibility=cred,
+    )
+
     if args.json_only:
-        data = build_graph_bytes(root)
+        data = build_graph_bytes(root, config=config)
         out = Path(args.json_only)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(data)
         print(f"wrote {out} ({len(data)} bytes)")
         return 0
 
-    from textgraph.core.config import Config
-
-    config = Config(llm_enabled=True) if args.llm else None
     result = build(root, config=config)
     paths = write_artifacts(
         args.output,
@@ -576,6 +614,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="run the opt-in L4 LLM pass (GENERATED community summaries); reads "
         "API_KEY/MODEL_BASE_URL/MODEL_NAME from the environment",
     )
+    p_build.add_argument(
+        "--resolve-conflicts",
+        dest="resolve_conflicts",
+        default="",
+        choices=["", "most_recent", "voting", "credibility_weighted"],
+        help="opt-in: resolve single-truth conflicts into the graph (losers superseded, "
+        "never deleted). Default: detection only.",
+    )
+    p_build.add_argument(
+        "--credibility",
+        metavar="PATH.json",
+        help="JSON map source_name -> credibility, for --resolve-conflicts credibility_weighted",
+    )
     p_build.set_defaults(func=_cmd_build)
 
     p_er = sub.add_parser("er", help="entity-resolution utilities")
@@ -626,6 +677,17 @@ def build_parser() -> argparse.ArgumentParser:
         "conflicts", help="single-truth conflicts (same subject/predicate, different objects)"
     )
     p_conf.add_argument("path", help="corpus path to build")
+    p_conf.add_argument(
+        "--resolve",
+        default="",
+        choices=["", "most_recent", "voting", "credibility_weighted"],
+        help="opt-in resolution strategy (default: none -- just surface each conflict)",
+    )
+    p_conf.add_argument(
+        "--credibility",
+        metavar="PATH.json",
+        help="JSON map of source_name -> credibility for --resolve credibility_weighted",
+    )
     p_conf.set_defaults(func=_cmd_conflicts)
 
     p_stats = sub.add_parser("stats", help="graph counts and most central entities")

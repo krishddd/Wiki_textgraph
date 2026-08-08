@@ -212,6 +212,15 @@ def render_report(
                 f"- **[{p.get('severity')}]** `{subj}` has competing "
                 f"`{p.get('predicate')}` claims: {', '.join(f'`{o}`' for o in objs)}"
             )
+            winner = p.get("resolved_object")
+            if winner:
+                wname = _name(node_by_id[winner]) if winner in node_by_id else str(winner)
+                lines.append(
+                    f"  - resolved by `{p.get('resolution_strategy')}` → **{wname}** "
+                    f"(others superseded, not deleted)"
+                )
+            elif p.get("resolution_strategy"):
+                lines.append(f"  - {p.get('resolution_note', 'unresolved')}")
 
     rationale = diag.by_label.get("Rationale", [])
     if rationale:
