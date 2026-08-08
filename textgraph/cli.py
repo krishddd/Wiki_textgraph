@@ -14,6 +14,7 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``secure`` — security-aware search under a ReBAC/ABAC policy (enterprise FGAC).
   * ``reason`` — Graph-of-Thoughts reasoning: a KG-grounded, complexity-gated chain.
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
+  * ``doctor`` — read-only environment health check (extras + on-machine determinism).
 
 The human CLI and the MCP tool surface are built off the same underlying result
 objects, formatted two ways — never two drifting code paths (§6.4).
@@ -373,6 +374,26 @@ def _cmd_console(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    import json
+
+    from textgraph.doctor import FAIL, format_text, run_checks
+
+    names = [args.check] if args.check else None
+    try:
+        checks = run_checks(names)
+    except KeyError as exc:
+        from textgraph.doctor import check_names
+
+        print(f"error: unknown check {exc}; valid: {', '.join(check_names())}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps([c.to_dict() for c in checks], ensure_ascii=False))
+    else:
+        print(format_text(checks))
+    return 1 if any(c.status == FAIL for c in checks) else 0
+
+
 def _cmd_er_audit(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -451,6 +472,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_version = sub.add_parser("version", help="print the TextGraph version")
     p_version.set_defaults(func=_cmd_version)
+
+    p_doctor = sub.add_parser(
+        "doctor", help="read-only environment health check (Python, extras, determinism)"
+    )
+    p_doctor.add_argument(
+        "--json", action="store_true", help="machine-readable output for CI preflight gates"
+    )
+    p_doctor.add_argument(
+        "--check", metavar="NAME", help="run only one named check (see docs for the list)"
+    )
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     p_build = sub.add_parser("build", help="build a knowledge graph from a corpus path")
     p_build.add_argument("path", help="file or directory to ingest")

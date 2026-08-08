@@ -56,8 +56,20 @@ uv sync --extra dev       # + the dev toolchain (to run tests)
 Verify the install:
 
 ```bash
-textgraph version         # prints 2.0.0
+textgraph version         # prints the version
 ```
+
+If anything looks off, run the read-only environment health check before filing an issue.
+It confirms your Python version, which optional extras are installed, and — the key one —
+that this machine produces a **byte-identical `graph.json`** on a tiny build (the same
+determinism guarantee CI enforces):
+
+```bash
+textgraph doctor
+```
+
+`doctor` is read-only (no repairs or writes). Use `--json` as a CI/preflight gate, or
+`--check <name>` to run a single check (e.g. `textgraph doctor --check determinism`).
 
 ## 4. Build a graph from your documents
 

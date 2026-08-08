@@ -111,6 +111,7 @@ files = [
     "textgraph/l9_artifacts",
     "textgraph/security",
     "textgraph/pipeline.py",
+    "textgraph/doctor.py",
 ]
 warn_unused_ignores = true
 disallow_untyped_defs = true

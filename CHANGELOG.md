@@ -7,6 +7,12 @@ to Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **`textgraph doctor`** — a read-only environment health check for first-time triage.
+  Checks Python version, temp-dir writability, core/optional extras (`[ingest]`, `[ie]`,
+  `[er]`, `[graph]`, DuckDB), and — the marquee check — **on-machine determinism**: it
+  builds a tiny corpus twice and asserts a byte-identical `graph.json`, confirming the
+  exact guarantee CI enforces. Human-readable by default; `--json` for CI preflight gates;
+  `--check <name>` runs one named check in isolation. No `--fix` (read-only by design).
 - **Console graph.json export** — a read-only "Save snapshot" button in the console
   downloads a canonical `graph.json` of the current graph (reflecting any in-UI ingest).
   A corpus-directory console rebuilds from source for a complete artifact (with the `docs`
