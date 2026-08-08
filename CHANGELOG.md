@@ -6,6 +6,15 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.3.1] - 2026-08-08
+
+### Changed
+- **Positioning/description refreshed** across PyPI summary, `README`, `__init__`, and the
+  demo landing page: leads with **deterministic & local-first by default**, now explicitly
+  naming the **opt-in LLM extraction, grounded answer synthesis, and semantic (embedding)
+  search** added in 3.2 (all `GENERATED`-quarantined). Replaces the outdated
+  "zero-LLM-by-default" phrasing that under-sold the LLM capabilities. No code changes.
+
 ## [3.3.0] - 2026-08-08
 
 **Semantic-web interop — closing the RDF / ontology gap with polyglot peers.** New

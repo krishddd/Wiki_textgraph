@@ -1,7 +1,7 @@
 [project]
 name = "textgraph-kg"
-version = "3.3.0"
-description = "Turn any textual corpus into a queryable knowledge graph with byte-level provenance on every claim. Local-first, deterministic, zero-LLM-by-default."
+version = "3.3.1"
+description = "Turn any textual corpus into a queryable, byte-cited knowledge graph. Deterministic & local-first by default, with opt-in LLM extraction, grounded answer synthesis, and semantic (embedding) search."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
