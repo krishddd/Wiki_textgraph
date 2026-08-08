@@ -614,8 +614,11 @@ def _cmd_build(args: argparse.Namespace) -> int:
     from textgraph.core.config import Config
 
     cred = json.loads(Path(args.credibility).read_text("utf-8")) if args.credibility else {}
+    # `--llm` drives L4 community summaries; `--llm-extract` drives relation extraction.
+    # They are independent — extraction reads the LLM env directly, so it doesn't need the
+    # summaries switch (and enabling it would silently add summary edges to the count).
     config = Config(
-        llm_enabled=bool(args.llm) or bool(args.llm_extract),
+        llm_enabled=bool(args.llm),
         llm_extract=bool(args.llm_extract),
         resolve_conflicts_strategy=args.resolve_conflicts or "",
         source_credibility=cred,
@@ -655,6 +658,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
     )
     if gs.get("llm_relations"):
         print(f"  + {gs['llm_relations']} LLM relations (GENERATED, cited, quarantined)")
+    if gs.get("summaries"):
+        print(f"  + {gs['summaries']} LLM community summaries (GENERATED)")
     print(f"  {paths.graph_json}")
     print(f"  {paths.report}")
     print(f"  {paths.graph_html}")

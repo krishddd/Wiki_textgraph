@@ -6,6 +6,15 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+- **`--llm-extract` no longer silently runs L4 community summaries.** It was coupled to
+  `llm_enabled`, so `build --llm-extract` also produced `SUMMARIZES` (GENERATED) edges — the
+  build summary reported only the extraction count (e.g. "24 LLM relations") while the graph
+  held more GENERATED edges (e.g. 33), which read as a miscount. Extraction is now gated on
+  `llm_extract` alone (independent of the summaries switch), so `--llm-extract` adds only
+  cited extraction relations and the reported count **equals** the GENERATED edges it added.
+  Community summaries stay on `--llm`; the build summary now reports both counts separately.
+
 ## [3.3.1] - 2026-08-08
 
 ### Changed

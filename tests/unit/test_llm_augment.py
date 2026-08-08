@@ -7,6 +7,8 @@ separately.
 
 from pathlib import Path
 
+import pytest
+from textgraph.core.config import Config
 from textgraph.l4_llm_optional.cache import PromptCache
 from textgraph.l4_llm_optional.extract import _parse_triples, extract_llm_relations
 from textgraph.l8_retrieval.model import Citation
@@ -96,6 +98,40 @@ def test_llm_extract_off_by_default() -> None:
     r = build(DOCS)
     assert r.graph_stats.get("llm_relations", 0) == 0
     assert all(str(e.tag) != "GENERATED" for e in r.edges)  # no GENERATED edges by default
+
+
+class _TripleClient:
+    """Stub whose completion parses as one extraction triple (and doubles as summary text)."""
+
+    model = "stub-model"
+    temperature = 0.0
+    max_tokens = 256
+
+    def complete(self, system: str, user: str) -> str:
+        return '[{"subject":"Alpha","predicate":"relates to","object":"Beta"}]'
+
+
+def test_llm_extract_count_matches_generated_edges(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The reported `llm_relations` must equal the GENERATED edges added — no hidden summary
+    # edges inflating the graph (the count-bug fix): --llm-extract does extraction ONLY.
+    import textgraph.l4_llm_optional as l4
+
+    monkeypatch.setattr(l4, "resolve_client", lambda config: _TripleClient())
+    r = build(DOCS, config=Config(llm_extract=True))  # llm_enabled defaults False
+    generated = [e for e in r.edges if str(e.tag) == "GENERATED"]
+    assert r.graph_stats["llm_relations"] == len(generated) > 0  # count is exact
+    assert r.graph_stats.get("summaries", 0) == 0  # extraction did NOT trigger summaries
+    assert not [n for n in r.nodes if "Summary" in n.labels]
+    assert all(e.properties.get("source") == "llm" for e in generated)
+
+
+def test_summaries_are_decoupled_from_extraction(monkeypatch: pytest.MonkeyPatch) -> None:
+    import textgraph.l4_llm_optional as l4
+
+    monkeypatch.setattr(l4, "resolve_client", lambda config: _TripleClient())
+    r = build(DOCS, config=Config(llm_enabled=True))  # summaries switch only
+    assert r.graph_stats["summaries"] >= 1
+    assert r.graph_stats.get("llm_relations", 0) == 0  # extraction did NOT run
 
 
 # --- synthesis (output) ------------------------------------------------------

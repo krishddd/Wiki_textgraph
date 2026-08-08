@@ -370,9 +370,11 @@ def build(
         l8_ms = (time.perf_counter() - t6) * 1000
 
     # LLM relation enrichment (opt-in, GENERATED). Runs the LLM over chunks to add relations
-    # the deterministic extractors missed; quarantined by tag, bounded by budget (G7).
+    # the deterministic extractors missed; quarantined by tag, bounded by budget (G7). Gated
+    # on `llm_extract` alone (independent of `llm_enabled`, which drives L4 summaries) so
+    # `--llm-extract` adds only extraction relations — not community summaries.
     gen_relation_count = 0
-    if config.llm_enabled and config.llm_extract and config.emit_chunks:
+    if config.llm_extract and config.emit_chunks:
         gen_nodes, gen_edges = _run_llm_extract(nodes, edges, config, cache_dir)
         gen_relation_count = len(gen_edges)
         if gen_edges:
