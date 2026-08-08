@@ -1,0 +1,55 @@
+name: pages
+
+# Builds a small demo graph with `textgraph build` and deploys a static site to
+# GitHub Pages: a landing page plus the fully-offline interactive graph.html viewer.
+# Enable in repo Settings → Pages → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One concurrent Pages deploy; don't cancel an in-flight publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Sync (core)
+        run: uv sync
+      - name: Build the demo graph (self-contained graph.html)
+        run: uv run textgraph build tests/fixtures/corpora/docs -o _demo
+      - name: Assemble the site
+        run: |
+          mkdir -p site
+          cp docs/site/index.html site/index.html
+          cp _demo/graph.html site/graph.html
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

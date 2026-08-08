@@ -1,0 +1,41 @@
+name: publish-pypi
+
+# Publishes the built sdist + wheel to PyPI on a version tag, using PyPI Trusted
+# Publishing (OpenID Connect) — no API token or password is stored anywhere. The
+# `pypi` environment below must match the one configured on the PyPI project's
+# Trusted Publisher. The artifact is re-verified byte-deterministic before publish (G1).
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC / trusted publishing
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/textgraph
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Verify the built wheel is importable and deterministic (G1)
+        shell: bash
+        run: |
+          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs --json-only /tmp/pub-a.json
+          uv run --no-project --with dist/*.whl textgraph build tests/fixtures/corpus_docs --json-only /tmp/pub-b.json
+          cmp -s /tmp/pub-a.json /tmp/pub-b.json || { echo "::error::released artifact is non-deterministic"; exit 1; }
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `password:` — authentication is via OIDC against the Trusted Publisher.

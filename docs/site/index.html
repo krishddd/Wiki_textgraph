@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TextGraph — deterministic, cited knowledge graphs</title>
+<meta name="description" content="TextGraph builds deterministic, local-first, byte-cited knowledge graphs from your documents. No LLM required.">
+<style>
+  :root{
+    --bg:#fbfbfd; --fg:#14151a; --fg2:#4a4d57; --mut:#8a8d98; --line:#e6e7ec;
+    --acc:#3b5bdb; --card:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0d0e12; --fg:#eef0f4; --fg2:#b6b9c3; --mut:#7d818c; --line:#22242c;
+      --acc:#7aa2ff; --card:#14161c; }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{ background:var(--bg); color:var(--fg); font:16px/1.6 -apple-system,BlinkMacSystemFont,
+    "Segoe UI",Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:920px; margin:0 auto; padding:64px 24px 80px; }
+  header{ margin-bottom:8px; }
+  .logo{ display:inline-flex; align-items:center; gap:12px; font-weight:800; font-size:22px;
+    letter-spacing:-.02em; }
+  .logo .dot{ width:14px; height:14px; border-radius:50%; background:var(--acc);
+    box-shadow:0 0 0 5px color-mix(in srgb, var(--acc) 18%, transparent); }
+  h1{ font-size:clamp(30px,5vw,46px); line-height:1.08; letter-spacing:-.03em; margin:26px 0 14px; }
+  .tag{ color:var(--fg2); font-size:clamp(16px,2.4vw,20px); max-width:640px; }
+  .cta{ display:flex; flex-wrap:wrap; gap:12px; margin:30px 0 8px; }
+  a.btn{ text-decoration:none; font-weight:600; font-size:15px; padding:11px 18px; border-radius:11px;
+    border:1px solid var(--line); color:var(--fg); background:var(--card); transition:.15s; }
+  a.btn:hover{ border-color:var(--acc); transform:translateY(-1px); }
+  a.btn.primary{ background:var(--acc); color:#fff; border-color:var(--acc); }
+  a.btn.primary:hover{ filter:brightness(1.06); }
+  .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px;
+    margin:48px 0; }
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .card h3{ margin:0 0 6px; font-size:15px; letter-spacing:-.01em; }
+  .card p{ margin:0; color:var(--fg2); font-size:14px; }
+  code{ background:color-mix(in srgb, var(--acc) 10%, transparent); color:var(--fg);
+    padding:2px 7px; border-radius:6px; font-size:13.5px; }
+  .install{ margin:8px 0 0; }
+  footer{ margin-top:56px; color:var(--mut); font-size:13px; border-top:1px solid var(--line);
+    padding-top:20px; }
+  footer a{ color:var(--fg2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><span class="dot"></span>TextGraph</span>
+  </header>
+
+  <h1>Deterministic, cited knowledge graphs from your documents.</h1>
+  <p class="tag">Local-first. Byte-level provenance on every edge. Zero LLM by default — so the
+  same corpus always yields a <strong>byte-identical</strong> graph you can audit and re-verify.</p>
+
+  <div class="cta">
+    <a class="btn primary" href="./graph.html">Open the interactive demo →</a>
+    <a class="btn" href="https://github.com/krishddd/Wiki_textgraph">GitHub</a>
+    <a class="btn" href="https://pypi.org/project/textgraph/">PyPI</a>
+    <a class="btn" href="https://github.com/krishddd/Wiki_textgraph/blob/main/CHANGELOG.md">Changelog</a>
+  </div>
+  <p class="install"><code>pip install textgraph</code></p>
+
+  <div class="grid">
+    <div class="card"><h3>Every claim is cited</h3><p>Each edge carries a re-verifiable
+      <code>[doc:byte-span]</code> citation — re-hash it against the source and it still matches.</p></div>
+    <div class="card"><h3>Decisions &amp; provenance</h3><p>WHY/DECISION/ADR markers become a
+      queryable causal chain; export a W3C PROV-O audit trail.</p></div>
+    <div class="card"><h3>Conflicts, never silent</h3><p>Contradictory single-truth claims are
+      surfaced for review, resolved only on an explicit, non-destructive policy.</p></div>
+    <div class="card"><h3>Bring your own scale</h3><p>Optional GQL, vision retrieval, access
+      control, and Graph-of-Thoughts reasoning — each an opt-in module.</p></div>
+  </div>
+
+  <footer>
+    The demo graph is generated from a small sample corpus by <code>textgraph build</code>
+    and served fully offline (no external requests). Source on
+    <a href="https://github.com/krishddd/Wiki_textgraph">GitHub</a>.
+  </footer>
+</div>
+</body>
+</html>
