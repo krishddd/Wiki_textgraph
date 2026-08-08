@@ -7,6 +7,19 @@ to Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **Decision objects — a queryable causal layer over `Rationale`.** Decision-worthy L1
+  markers (`WHY`/`DECISION`/`RATIONALE`/`ADR-N`) are promoted into first-class `Decision`
+  nodes (category, statement, byte-span citation), each linked back to its rationale via a
+  cited `DERIVED_FROM` edge. Author-controlled **causal edges** — the narrow, agent-legible
+  trio `CAUSED` / `INFLUENCED` / `PRECEDENT_FOR` — are inferred from explicit in-text ADR
+  references (e.g. `DECISION: … SUPERSEDES ADR-0007`). Deterministic, cited, and default-on;
+  disable with `Config(derive_decisions=False)`. (Automated `trace_decision_chain` /
+  `find_similar_decisions` remain future work — they depend on L6/L8.)
+- **PROV-O export** — `textgraph export --format prov-o` emits a W3C PROV-O **JSON-LD**
+  decision-provenance trail: `Decision → prov:Activity`, source `Document → prov:Entity`
+  (`prov:used`), the extractor → `prov:SoftwareAgent` (`prov:wasAssociatedWith`), and the
+  causal edges → `prov:wasInformedBy` (effect informed by cause). Byte-range citations ride
+  along as `textgraph:sourceSpan`. Dependency-free and byte-stable.
 - **`textgraph doctor`** — a read-only environment health check for first-time triage.
   Checks Python version, temp-dir writability, core/optional extras (`[ingest]`, `[ie]`,
   `[er]`, `[graph]`, DuckDB), and — the marquee check — **on-machine determinism**: it

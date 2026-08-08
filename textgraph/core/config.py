@@ -44,6 +44,10 @@ class Config:
     # Default rule backend is deterministic; "splink" requires the [er] extra.
     resolve_entities: bool = True
     er_backend: str = "rules"
+    # Decision provenance: promote decision-worthy Rationale markers (WHY/DECISION/
+    # RATIONALE/ADR-N) into first-class Decision nodes + causal edges. Depends only on
+    # the L1 rationale spine (no IE/ER/L6/L8), deterministic, cited.
+    derive_decisions: bool = True
     # L6 claim reification: turn each relation edge into a citable Claim node.
     reify_claims: bool = True
     # L6 bi-temporal assembly: close validity windows on superseded claims (invalidation

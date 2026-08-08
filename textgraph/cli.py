@@ -15,6 +15,7 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``reason`` — Graph-of-Thoughts reasoning: a KG-grounded, complexity-gated chain.
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
   * ``doctor`` — read-only environment health check (extras + on-machine determinism).
+  * ``export`` — export an interoperable view (PROV-O JSON-LD decision-provenance trail).
 
 The human CLI and the MCP tool surface are built off the same underlying result
 objects, formatted two ways — never two drifting code paths (§6.4).
@@ -374,6 +375,37 @@ def _cmd_console(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_export(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+    else:
+        result = build(root)
+        nodes, edges = result.nodes, result.edges
+
+    if args.format == "prov-o":
+        from textgraph.l9_artifacts.prov import export_prov_bytes
+
+        body = export_prov_bytes(nodes, edges)
+    else:  # pragma: no cover - argparse choices guard this
+        print(f"error: unknown format: {args.format}", file=sys.stderr)
+        return 2
+
+    if args.output:
+        out = Path(args.output)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(body)
+        print(f"wrote {out} ({len(body)} bytes)")
+    else:
+        sys.stdout.write(body.decode("utf-8"))
+    return 0
+
+
 def _cmd_doctor(args: argparse.Namespace) -> int:
     import json
 
@@ -472,6 +504,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_version = sub.add_parser("version", help="print the TextGraph version")
     p_version.set_defaults(func=_cmd_version)
+
+    p_export = sub.add_parser(
+        "export", help="export the graph in an interoperable format (PROV-O decision trail)"
+    )
+    p_export.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_export.add_argument(
+        "--format",
+        default="prov-o",
+        choices=["prov-o"],
+        help="export format (default: prov-o, a W3C PROV-O JSON-LD decision provenance trail)",
+    )
+    p_export.add_argument("-o", "--output", help="write to this file instead of stdout")
+    p_export.set_defaults(func=_cmd_export)
 
     p_doctor = sub.add_parser(
         "doctor", help="read-only environment health check (Python, extras, determinism)"

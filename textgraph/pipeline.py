@@ -18,6 +18,7 @@ from textgraph.core.layout import IngestResult
 from textgraph.l0_ingest import ingest_path
 from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l1_structure import parse_corpus
+from textgraph.l1_structure.decisions import derive_decisions
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
 from textgraph.l6_graph_model import apply_temporal, reify_claims
@@ -137,6 +138,21 @@ def build(
     t1 = time.perf_counter()
     nodes, edges = parse_corpus(results)
     l1_ms = (time.perf_counter() - t1) * 1000
+
+    # Decision provenance — promote decision-worthy Rationale markers into first-class
+    # Decision nodes + causal edges. Pure function of the L1 spine; no downstream deps.
+    decision_count = 0
+    if config.derive_decisions:
+        dec_nodes, dec_edges = derive_decisions(nodes, edges)
+        decision_count = len(dec_nodes)
+        nodes = sorted(
+            ({n.node_id: n for n in nodes} | {n.node_id: n for n in dec_nodes}).values(),
+            key=lambda n: n.node_id,
+        )
+        edges = sorted(
+            ({e.edge_id: e for e in edges} | {e.edge_id: e for e in dec_edges}).values(),
+            key=lambda e: e.edge_id,
+        )
 
     # L2 + L3 — encoder IE (default: deterministic rule backend). Entities merge
     # across documents by (type, normalized name); relations/mentions carry spans.
@@ -326,6 +342,7 @@ def build(
         },
         er_stats=er_stats,
         graph_stats={
+            "decisions": decision_count,
             "claims": claim_count,
             "supersedes": supersedes_count,
             "communities": community_count,
