@@ -27,6 +27,8 @@ from textgraph.l8_retrieval.model import (
     ClaimView,
     CommunitiesResult,
     CommunityView,
+    ConflictsResult,
+    ConflictView,
     ContradictionPair,
     ContradictionsResult,
     GraphPath,
@@ -792,6 +794,45 @@ class QueryEngine:
             if a and b:
                 pairs.append(ContradictionPair(a, b))
         return ContradictionsResult(pairs=pairs)
+
+    def conflicts(self, *, context: SecurityContext | None = None) -> ConflictsResult:
+        """Single-truth conflicts (same subject+predicate, different objects, overlapping).
+
+        Reads the ``Conflict`` nodes built at graph-assembly time and their ``CONTENDS``
+        edges. Security-aware: a conflict is hidden unless every contending claim is
+        authorized, so it can't leak the existence of a restricted claim.
+        """
+        nodes, _ok_docs = self._auth(context)
+        contenders: dict[str, list[str]] = {}
+        for e in self._edges:
+            if e.predicate == "CONTENDS" and e.subject.startswith("conflict:"):
+                contenders.setdefault(e.subject, []).append(e.object)
+        views: list[ConflictView] = []
+        for cid in sorted(contenders):
+            cnode = self._node.get(cid)
+            if cnode is None:
+                continue
+            claim_ids = sorted(contenders[cid])
+            if nodes is not None and any(c not in nodes for c in claim_ids):
+                continue  # never surface a conflict touching a restricted claim
+            claims = [cv for c in claim_ids if (cv := self._claim_view(c))]
+            if len(claims) < 2:
+                continue
+            p = cnode.properties
+            views.append(
+                ConflictView(
+                    conflict_id=cid,
+                    subject=self._name(str(p.get("subject_id", ""))),
+                    predicate=str(p.get("predicate", "")),
+                    severity=str(p.get("severity", "")),
+                    objects=[self._name(str(o)) for o in p.get("objects", [])],
+                    claims=claims,
+                )
+            )
+        # Most severe first (HIGH < MEDIUM < LOW), then by subject for stable order.
+        order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+        views.sort(key=lambda v: (order.get(v.severity, 3), v.subject, v.conflict_id))
+        return ConflictsResult(conflicts=views)
 
     # -- tool 7: communities ----------------------------------------------------
 

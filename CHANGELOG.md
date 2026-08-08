@@ -7,6 +7,18 @@ to Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **Conflict detection (truth discovery) — a first-class step, never a silent merge.**
+  When two sources make incompatible claims about the same entity on a *single-truth*
+  predicate (`CONTROLS`, `BENEFICIAL_OWNER_OF`, `DIRECTOR_OF` by default) — same subject
+  (after `SAME_AS`), different objects, **overlapping validity windows** — TextGraph now
+  surfaces a first-class `Conflict` node (severity-tagged) with cited `CONTENDS` edges to
+  every contending claim. Detection is deterministic and **only surfaces** the conflict;
+  it never picks a winner or deletes a claim (G3). The bi-temporal check means a legitimate
+  sequential change (director of Beta in 2019, of Gamma in 2021) is *not* flagged, while
+  genuinely contemporaneous claims are. New `textgraph conflicts` CLI verb,
+  `QueryEngine.conflicts()`, a **Conflicts** section in `GRAPH_REPORT.md`, and
+  `Config.detect_conflicts` / `Config.single_truth_predicates`. (Opt-in *resolution*
+  strategies remain future work — detection ships first, by design.)
 - **Decision objects — a queryable causal layer over `Rationale`.** Decision-worthy L1
   markers (`WHY`/`DECISION`/`RATIONALE`/`ADR-N`) are promoted into first-class `Decision`
   nodes (category, statement, byte-span citation), each linked back to its rationale via a

@@ -22,6 +22,7 @@ from textgraph.l1_structure.decisions import derive_decisions
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
 from textgraph.l6_graph_model import apply_temporal, reify_claims
+from textgraph.l6_graph_model.conflicts import detect_conflicts
 from textgraph.l7_analytics import Analytics, compute_analytics
 from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
 from textgraph.l8_retrieval.emit_chunks import emit_chunks
@@ -256,6 +257,24 @@ def build(
         )
         l6_ms = (time.perf_counter() - t4) * 1000
 
+    # Conflict detection — surface single-truth disagreements (Acme controls Beta vs Gamma)
+    # as first-class Conflict nodes. Never silently merges; resolution is a separate,
+    # opt-in step. Needs claims (L6) + SAME_AS (L5) + validity windows (invalidation).
+    conflict_count = 0
+    if config.detect_conflicts and config.reify_claims and config.extract_ie:
+        conflict_nodes, conflict_edges = detect_conflicts(
+            nodes, edges, single_truth=config.single_truth_predicates
+        )
+        conflict_count = len(conflict_nodes)
+        nodes = sorted(
+            ({n.node_id: n for n in nodes} | {n.node_id: n for n in conflict_nodes}).values(),
+            key=lambda n: n.node_id,
+        )
+        edges = sorted(
+            ({e.edge_id: e for e in edges} | {e.edge_id: e for e in conflict_edges}).values(),
+            key=lambda e: e.edge_id,
+        )
+
     # L7 — graph analytics folded back into the graph (node props + CONTRADICTS).
     l7_ms = 0.0
     analytics: Analytics | None = None
@@ -344,6 +363,7 @@ def build(
         graph_stats={
             "decisions": decision_count,
             "claims": claim_count,
+            "conflicts": conflict_count,
             "supersedes": supersedes_count,
             "communities": community_count,
             "contradictions": contradiction_count,

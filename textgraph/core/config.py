@@ -53,6 +53,13 @@ class Config:
     # L6 bi-temporal assembly: close validity windows on superseded claims (invalidation
     # not deletion) using in-text dates only — no wall-clock, so graph.json stays stable.
     invalidate_claims: bool = True
+    # Conflict detection: surface single-truth disagreements (same subject+predicate,
+    # different objects, overlapping validity windows) as first-class Conflict nodes.
+    # Detection only — never resolves/merges silently (G3). Deterministic.
+    detect_conflicts: bool = True
+    # Predicates treated as single-truth (only one object correct at a time) for conflict
+    # detection. Multi-truth predicates (a company's several directors) are excluded.
+    single_truth_predicates: tuple[str, ...] = ("BENEFICIAL_OWNER_OF", "CONTROLS", "DIRECTOR_OF")
     # L7 graph analytics: PageRank/betweenness/communities folded into the graph,
     # contradictions surfaced as CONTRADICTS edges. Pure-Python deterministic default;
     # "leiden" (behind the [graph] extra) is the optional higher-quality community pass.

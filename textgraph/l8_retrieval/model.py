@@ -265,6 +265,36 @@ class ContradictionsResult:
 
 
 @dataclass
+class ConflictView:
+    """One single-truth conflict: competing claims about the same subject+predicate."""
+
+    conflict_id: str
+    subject: str
+    predicate: str
+    severity: str
+    objects: list[str]
+    claims: list[ClaimView] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "conflict_id": self.conflict_id,
+            "subject": self.subject,
+            "predicate": self.predicate,
+            "severity": self.severity,
+            "objects": self.objects,
+            "claims": [c.to_dict() for c in self.claims],
+        }
+
+
+@dataclass
+class ConflictsResult:
+    conflicts: list[ConflictView] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"tool": "conflicts", "conflicts": [c.to_dict() for c in self.conflicts]}
+
+
+@dataclass
 class CommunityView:
     community_id: int
     label: str

@@ -139,6 +139,7 @@ textgraph path    ./my-documents "Acme Corp" "Delta Trust"
 textgraph gql     ./my-documents "MATCH (a)-[:CONTROLS]->(b) RETURN a.name, b.name"
 textgraph reason  ./my-documents "how is Acme Corp connected to Delta Trust"
 textgraph secure  ./my-documents "who moved the money" --policy policy.json --principal alice
+textgraph conflicts ./my-documents   # single-truth disagreements, surfaced not merged
 ```
 
 Export an interoperable **decision-provenance trail** (W3C PROV-O JSON-LD) — each

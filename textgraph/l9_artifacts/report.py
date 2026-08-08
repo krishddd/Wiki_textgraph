@@ -8,6 +8,8 @@ Deterministic: identical graph => identical report.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from textgraph.core.layout import IngestResult
 from textgraph.l9_artifacts.analytics_lite import Diagnostics
 from textgraph.store.base import Edge, Node
@@ -185,6 +187,31 @@ def render_report(
             an = _name(a) if a else e.subject
             bn = _name(b) if b else e.object
             lines.append(f"- `{an}` conflicts with `{bn}`")
+
+    # Conflicts: single-truth disagreements (same subject+predicate, different objects,
+    # overlapping windows). Surfaced, never silently resolved (G3).
+    conflicts = diag.by_label.get("Conflict", [])
+    if conflicts:
+        order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+        conflicts = sorted(
+            conflicts, key=lambda n: (order.get(str(n.properties.get("severity")), 3), n.node_id)
+        )
+        by_sev = Counter(str(n.properties.get("severity", "?")) for n in conflicts)
+        sev_summary = ", ".join(f"{by_sev[s]} {s}" for s in ("HIGH", "MEDIUM", "LOW") if by_sev[s])
+        lines += ["", f"## Conflicts: {len(conflicts)} ({sev_summary})", ""]
+        lines.append("_Single-truth disagreements surfaced for review — not auto-resolved._")
+        lines.append("")
+        for n in conflicts[:8]:
+            p = n.properties
+            subj_node = node_by_id.get(str(p.get("subject_id", "")))
+            subj = _name(subj_node) if subj_node else str(p.get("subject_id", ""))
+            objs = [
+                _name(node_by_id[o]) if o in node_by_id else str(o) for o in p.get("objects", [])
+            ]
+            lines.append(
+                f"- **[{p.get('severity')}]** `{subj}` has competing "
+                f"`{p.get('predicate')}` claims: {', '.join(f'`{o}`' for o in objs)}"
+            )
 
     rationale = diag.by_label.get("Rationale", [])
     if rationale:

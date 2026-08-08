@@ -8,7 +8,7 @@ Build:
 
 Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``query`` (hybrid search), ``path`` (max-likelihood), ``explain`` (why),
-    ``neighbors``, ``timeline``, ``contradictions``, ``communities``, ``stats``.
+    ``neighbors``, ``timeline``, ``contradictions``, ``conflicts``, ``communities``, ``stats``.
   * ``gql`` — a standard GQL (ISO-GQL/Cypher subset) query over the property graph.
   * ``vision`` — late-interaction MaxSim page retrieval (ColPali behind ``[vision]``).
   * ``secure`` — security-aware search under a ReBAC/ABAC policy (enterprise FGAC).
@@ -174,6 +174,31 @@ def _cmd_contradictions(args: argparse.Namespace) -> int:
         a, b = p["claim_a"], p["claim_b"]
         print(f"  {a['subject']} -{a['predicate']}-> {a['object']}")
         print(f"    [{a['polarity']}]{_fmt_window(a)}  vs  [{b['polarity']}]{_fmt_window(b)}")
+    return 0
+
+
+def _cmd_conflicts(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).conflicts().to_dict()
+    if not res["conflicts"]:
+        print("no conflicts found")
+        return 0
+    print(f"conflicts: {len(res['conflicts'])} (single-truth; not resolved -- review each)")
+    for c in res["conflicts"]:
+        print(
+            f"  [{c['severity']}] {c['subject']} -{c['predicate']}-> {{{', '.join(c['objects'])}}}"
+        )
+        for claim in c["claims"]:
+            cites = " ".join(_fmt_citation(x) for x in claim["citations"])
+            when = (
+                f"  valid=[{claim['t_valid']}, {claim['t_invalid'] or 'now'})"
+                if claim["t_valid"]
+                else ""
+            )
+            print(f"      {claim['subject']} -> {claim['object']}{when}  {cites}")
     return 0
 
 
@@ -596,6 +621,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_comm = sub.add_parser("communities", help="detected communities with auto-labels")
     p_comm.add_argument("path", help="corpus path to build")
     p_comm.set_defaults(func=_cmd_communities)
+
+    p_conf = sub.add_parser(
+        "conflicts", help="single-truth conflicts (same subject/predicate, different objects)"
+    )
+    p_conf.add_argument("path", help="corpus path to build")
+    p_conf.set_defaults(func=_cmd_conflicts)
 
     p_stats = sub.add_parser("stats", help="graph counts and most central entities")
     p_stats.add_argument("path", help="corpus path to build")
