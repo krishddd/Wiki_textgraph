@@ -28,6 +28,9 @@ TOOLS = (
     "neighbors",
     "timeline",
     "contradictions",
+    "conflicts",
+    "trace",
+    "decisions",
     "communities",
     "stats",
     "gql",
@@ -42,6 +45,9 @@ STRATEGY: dict[str, str] = {
     "why": "graph-traversal",  # claim neighbourhood of one node
     "timeline": "graph-traversal",  # temporal slice of one node
     "contradictions": "graph-analytics",  # precomputed CONTRADICTS edges
+    "conflicts": "graph-analytics",  # precomputed single-truth Conflict nodes
+    "trace": "graph-traversal",  # causal lineage of a decision
+    "decisions": "hybrid-lexical-graph",  # BM25 over decision statements
     "communities": "graph-analytics",  # precomputed clusters
     "stats": "graph-analytics",  # aggregate counts
     "search": "hybrid-lexical-graph",  # BM25 + Personalized PageRank + RRF
@@ -57,6 +63,20 @@ _PATH_CUES = (
     "path from",
     "path between",
     "between ",
+)
+# Cues that a decision-scoped question wants the causal *chain* rather than a lookup.
+_TRACE_CUES = (
+    "trace",
+    "lineage",
+    "chain",
+    "led to",
+    "leads to",
+    "caused",
+    "cause of",
+    "precedent",
+    "downstream",
+    "influenced",
+    "what led",
 )
 
 
@@ -87,8 +107,13 @@ def classify_query(question: str, forced: str = "auto") -> str:
         return "neighbors"
     if "timeline" in low or "when did" in low or "over time" in low or "history of" in low:
         return "timeline"
-    if "contradict" in low or "conflict" in low:
+    if "contradict" in low:
         return "contradictions"
+    if "conflict" in low:
+        return "conflicts"
+    if "decision" in low or "rationale" in low:
+        # A decision-scoped question: causal chain if it asks about lineage, else a lookup.
+        return "trace" if any(cue in low for cue in _TRACE_CUES) else "decisions"
     if "communit" in low or "cluster" in low or "topic" in low:
         return "communities"
     if low.startswith("stats") or "how many" in low or low.startswith("count"):
@@ -109,7 +134,10 @@ def route(question: str, forced: str = "auto") -> RoutePlan:
             "why": "asks for justification/claims about one entity",
             "neighbors": "asks what one entity relates to (one hop)",
             "timeline": "asks how something changed over time",
-            "contradictions": "asks about conflicting assertions",
+            "contradictions": "asks about opposite-polarity assertions",
+            "conflicts": "asks about single-truth conflicts (competing values)",
+            "trace": "asks how a decision came about / what it led to",
+            "decisions": "searches decisions by their statement",
             "communities": "asks about clusters/topics",
             "stats": "asks for aggregate counts",
             "reason": "open question — Graph-of-Thoughts over hybrid retrieval",

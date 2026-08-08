@@ -7,6 +7,13 @@ to Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **Console "Ask" chat routes to the decision/conflict tools.** Natural-language questions
+  now reach `conflicts`, `trace` (decision chain), and `find-decisions`: "are there
+  conflicts", "what led to this decision", "find decisions about retention". The chat renders
+  the causal chain and conflict list inline (relation, direction, resolution) with citation
+  chips, and new tool chips are selectable directly. `"conflict"` and `"contradiction"` now
+  route to their distinct tools. Tracing a body decision promotes to its ADR record so the
+  full lineage always surfaces.
 - **Decision-chain traversal + similarity (`trace_decision_chain`, `find_similar_decisions`).**
   `QueryEngine.trace_decision_chain(decision)` walks a decision's causal lineage — backward
   over `CAUSED`/`INFLUENCED`/`PRECEDENT_FOR` for **what led to it** (precedents/causes) and

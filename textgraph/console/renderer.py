@@ -232,6 +232,9 @@ SKELETON_HTML = """
             <option value="neighbors">Neighbors</option>
             <option value="timeline">Timeline</option>
             <option value="contradictions">Contradictions</option>
+            <option value="conflicts">Conflicts</option>
+            <option value="trace">Trace decision</option>
+            <option value="decisions">Find decisions</option>
             <option value="communities">Communities</option>
             <option value="stats">Stats</option>
             <option value="gql">GQL</option>
@@ -478,6 +481,23 @@ function chainHtml(detail){
   const steps=detail.map(s=>`<div class="step"><b>${esc(s.role)}</b> ${esc(s.content)}</div>`).join('');
   return `<details class="chain"><summary>reasoning · ${detail.length} steps</summary>${steps}</details>`;
 }
+// Structured detail for the decision/conflict tools (reason uses chainHtml above).
+function detailHtml(ans){
+  const d=ans.detail||[]; if(!d.length) return '';
+  if(ans.tool==='trace'){
+    const steps=d.map(s=>`<div class="step"><b>${esc(s.from)}</b> &mdash;${esc(s.relation)}&rarr; <b>${esc(s.to)}</b> <span style="color:var(--mut)">(${esc(s.direction)})</span></div>`).join('');
+    return `<details class="chain" open><summary>causal chain · ${d.length} hop(s)</summary>${steps}</details>`;
+  }
+  if(ans.tool==='conflicts'){
+    const steps=d.map(c=>`<div class="step"><b>[${esc(c.severity)}]</b> ${esc(c.subject)} <b>${esc(c.predicate)}</b> {${esc((c.objects||[]).join(', '))}}${c.resolved_object?` &rarr; <b>${esc(c.resolved_object)}</b>`:''}</div>`).join('');
+    return `<details class="chain" open><summary>${d.length} conflict(s)</summary>${steps}</details>`;
+  }
+  if(ans.tool==='decisions'){
+    const steps=d.map(h=>`<div class="step">[${esc(h.category)}] ${esc(h.name)} <span style="color:var(--mut)">(${(+h.score).toFixed(2)})</span></div>`).join('');
+    return `<details class="chain" open><summary>${d.length} decision(s)</summary>${steps}</details>`;
+  }
+  return '';
+}
 function addMsg(cls,html){ const log=document.getElementById('asklog');
   const w=log.querySelector('.welcome'); if(w) w.remove();
   const d=document.createElement('div'); d.className='msg '+cls; d.innerHTML=html;
@@ -506,7 +526,7 @@ async function ask(){
     S.lastFocus=ans.focus||S.lastFocus;
     const conf = ans.abstained ? '<span class="conf abstain">abstained</span>'
       : (typeof ans.confidence==='number' ? `<span class="conf">${Math.round(ans.confidence*100)}% grounded</span>` : '');
-    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`+chainHtml(ans.detail)+citeChips(ans.evidence);
+    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`+chainHtml(ans.detail)+detailHtml(ans)+citeChips(ans.evidence);
     applyHighlight(ans.highlight);
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
   asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;

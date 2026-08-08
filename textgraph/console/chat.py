@@ -153,6 +153,12 @@ def _dispatch(
         return _timeline(engine, e) if e else _reason(engine, q, mode)
     if chosen == "contradictions":
         return _contradictions(engine)
+    if chosen == "conflicts":
+        return _conflicts(engine)
+    if chosen == "trace":
+        return _trace(engine, q)
+    if chosen == "decisions":
+        return _find_decisions(engine, q)
     if chosen == "communities":
         return _communities(engine)
     if chosen == "stats":
@@ -366,6 +372,95 @@ def _contradictions(engine: QueryEngine) -> ChatAnswer:
         text=text,
         tool="contradictions",
         detail=[{"a": p.claim_a.to_dict(), "b": p.claim_b.to_dict()} for p in res.pairs],
+    )
+
+
+def _conflicts(engine: QueryEngine) -> ChatAnswer:
+    res = engine.conflicts()
+    if not res.conflicts:
+        return ChatAnswer(text="No single-truth conflicts found.", tool="conflicts")
+
+    def _line(c: Any) -> str:
+        base = f"[{c.severity}] {c.subject} {c.predicate} {{{', '.join(c.objects)}}}"
+        return base + (f" -> {c.resolved_object}" if c.resolved_object else "")
+
+    lines = "; ".join(_line(c) for c in res.conflicts[:4])
+    text = f"{len(res.conflicts)} conflict(s): {lines}."
+    # Highlight the subject + contended objects on the canvas where they resolve to entities.
+    highlight: list[str] = []
+    for c in res.conflicts:
+        for name in [c.subject, *c.objects]:
+            rid = engine.resolve(name)
+            if rid and rid not in highlight:
+                highlight.append(rid)
+    evidence = [cit for c in res.conflicts for cl in c.claims for cit in cl.citations]
+    return ChatAnswer(
+        text=text,
+        tool="conflicts",
+        evidence=evidence,
+        highlight_nodes=highlight,
+        detail=[c.to_dict() for c in res.conflicts],
+    )
+
+
+def _trace(engine: QueryEngine, q: str) -> ChatAnswer:
+    res = engine.trace_decision_chain(q)
+    if not res.found or res.decision is None:
+        return ChatAnswer(text="No matching decision found to trace.", tool="trace")
+    d = res.decision
+    parts = []
+    if res.ancestors:
+        parts.append(f"{len(res.ancestors)} precedent/cause(s)")
+    if res.descendants:
+        parts.append(f"{len(res.descendants)} effect(s)")
+    summary = ", ".join(parts) if parts else "no recorded causes or effects"
+    text = f'Decision "{d.name}": {summary}.'
+    hops = res.ancestors + res.descendants
+    evidence = list(d.citations) + [c for h in hops for c in h.citations]
+    return ChatAnswer(
+        text=text,
+        tool="trace",
+        focus=d.decision_id,
+        evidence=evidence,
+        highlight_nodes=[d.decision_id, *(h.from_id for h in hops), *(h.to_id for h in hops)],
+        highlight_edges=[[h.from_id, h.to_id] for h in hops],
+        detail=[
+            {
+                "direction": "ancestor" if h in res.ancestors else "descendant",
+                "relation": h.relation,
+                "from": h.from_name,
+                "to": h.to_name,
+                "evidence": [c.to_dict() for c in h.citations],
+            }
+            for h in hops
+        ],
+    )
+
+
+def _find_decisions(engine: QueryEngine, q: str) -> ChatAnswer:
+    res = engine.find_similar_decisions(q, k=6)
+    if not res.hits:
+        return ChatAnswer(text="No matching decisions found.", tool="decisions")
+    text = (
+        f'{len(res.hits)} decision(s) matching "{q}": '
+        + "; ".join(h.name[:70] for h in res.hits[:4])
+        + "."
+    )
+    return ChatAnswer(
+        text=text,
+        tool="decisions",
+        focus=res.hits[0].decision_id,
+        evidence=[c for h in res.hits for c in h.citations],
+        highlight_nodes=[h.decision_id for h in res.hits],
+        detail=[
+            {
+                "category": h.category,
+                "name": h.name,
+                "score": h.score,
+                "evidence": [c.to_dict() for c in h.citations],
+            }
+            for h in res.hits
+        ],
     )
 
 

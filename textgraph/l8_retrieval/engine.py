@@ -165,6 +165,13 @@ class QueryEngine:
             elif e.predicate in _CAUSAL_PREDICATES and e.object in self._decision_ids:
                 self._causal_out.setdefault(e.subject, []).append((e.object, e))
                 self._causal_in.setdefault(e.object, []).append((e.subject, e))
+        # A document's ADR record carries that document's causal edges, so a body decision
+        # can be promoted to it when tracing (the chain lives at ADR granularity).
+        self._adr_record_by_doc: dict[str, str] = {}
+        for did in sorted(self._decision_ids):
+            p = self._node[did].properties
+            if p.get("category") == "adr":
+                self._adr_record_by_doc.setdefault(str(p.get("doc_id", "")), did)
 
         # Lazily-built vision (page) retrieval state.
         self._pages_built: list[Any] | None = None
@@ -909,6 +916,14 @@ class QueryEngine:
         did = self._resolve_decision(handle, nodes)
         if did is None:
             return DecisionChainResult(found=False)
+        # If the match is a body decision with no chain of its own, promote it to its
+        # document's ADR record, where the causal edges live.
+        if did not in self._causal_in and did not in self._causal_out:
+            doc = str(self._node[did].properties.get("doc_id", ""))
+            rec = self._adr_record_by_doc.get(doc)
+            has_chain = rec is not None and (rec in self._causal_in or rec in self._causal_out)
+            if rec and rec != did and has_chain and (nodes is None or rec in nodes):
+                did = rec
 
         def walk(
             adj: dict[str, list[tuple[str, Edge]]], forward: bool
