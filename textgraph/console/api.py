@@ -44,6 +44,25 @@ def _json(status: int, payload: Any) -> tuple[int, str, bytes]:
     return status, "application/json", json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
+def export_graph_bytes(engine: QueryEngine) -> bytes:
+    """Serialize the current in-memory graph to canonical ``graph.json`` bytes.
+
+    The nodes + edges are complete and byte-canonical (the graph itself); the per-document
+    ``docs`` manifest section is omitted because the live engine doesn't retain the L0 ingest
+    results. For a corpus-directory console the server prefers a full rebuild-from-source
+    (which includes ``docs``); this is the fallback for a ``.duckdb``/snapshot source.
+    """
+    from textgraph.l9_artifacts.graph_json import build_graph_document, dump_graph_bytes
+
+    doc = build_graph_document(
+        config_hash="",
+        results=[],
+        nodes=list(engine._node.values()),
+        edges=engine._edges,
+    )
+    return dump_graph_bytes(doc)
+
+
 def route(engine: QueryEngine, path: str, params: dict[str, str]) -> tuple[int, str, bytes]:
     """Map a request ``(path, query params)`` to ``(status, content_type, body)``."""
     if path in ("/", "/index.html"):

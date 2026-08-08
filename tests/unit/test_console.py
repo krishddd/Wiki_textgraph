@@ -118,3 +118,23 @@ def test_inspect_endpoint_returns_admin_detail() -> None:
     assert payload["found"] is True
     assert payload["same_as"]["canonical"]  # alias cluster surfaced
     assert "confidence_tiers" in payload and "provenance" in payload and "claims" in payload
+
+
+def test_export_graph_bytes_is_valid_graph_json() -> None:
+    import json as _json
+    from pathlib import Path
+
+    from textgraph.console.api import export_graph_bytes
+    from textgraph.l8_retrieval import QueryEngine
+    from textgraph.pipeline import build
+
+    DOCS2 = Path(__file__).parent.parent / "fixtures" / "corpora" / "docs"
+    r = build(DOCS2)
+    body = export_graph_bytes(QueryEngine(r.nodes, r.edges))
+    assert body.endswith(b"\n")  # canonical JSON, trailing newline
+    doc = _json.loads(body)
+    assert {"schema_version", "tool_version", "nodes", "edges", "stats"} <= doc.keys()
+    assert doc["stats"]["node_count"] == len(doc["nodes"]) == len(r.nodes)
+    assert len(doc["edges"]) == len(r.edges)
+    # Deterministic: same graph -> byte-identical export.
+    assert export_graph_bytes(QueryEngine(r.nodes, r.edges)) == body

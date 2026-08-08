@@ -92,11 +92,34 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:
             if not self._authed():
                 return
+            path = urlparse(self.path).path
             # /api/config reports server-level flags the read-only route() can't know.
-            if urlparse(self.path).path == "/api/config":
+            if path == "/api/config":
                 self._json(200, {"ingest": state.allow_ingest, "auth": bool(state.token)})
                 return
+            if path == "/api/export":
+                self._export()
+                return
             self._route({})
+
+        def _export(self) -> None:
+            # Save a graph.json snapshot of the CURRENT graph (reflects any in-UI ingest).
+            # A corpus-dir console rebuilds from source for a complete artifact (with docs);
+            # a .duckdb / no-source console serializes the live engine's nodes + edges.
+            if state.source and Path(state.source).is_dir():
+                from textgraph.pipeline import build_graph_bytes
+
+                body = build_graph_bytes(Path(state.source))
+            else:
+                from textgraph.console.api import export_graph_bytes
+
+                body = export_graph_bytes(state.engine)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="graph.json"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def do_POST(self) -> None:
             if not self._authed():

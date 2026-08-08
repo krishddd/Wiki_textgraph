@@ -171,9 +171,10 @@ RENDERER_CSS = """
   .chain .step b { color:var(--fg); font-weight:600; }
   #askbar { display:flex; gap:8px; padding:11px 13px; border-top:1px solid var(--line);
     align-items:center; }
-  #attach { display:none; cursor:pointer; font-size:17px; line-height:1; padding:7px 9px;
-    border-radius:9px; border:1px solid var(--line); background:var(--bg); user-select:none; }
-  #attach:hover { border-color:var(--acc); }
+  #attach, #save { display:none; cursor:pointer; font-size:17px; line-height:1; padding:7px 9px;
+    border-radius:9px; border:1px solid var(--line); background:var(--bg); color:var(--fg);
+    user-select:none; }
+  #attach:hover, #save:hover { border-color:var(--acc); }
   #askbar select { padding:8px 9px; border-radius:9px; border:1px solid var(--line);
     background:var(--bg); color:var(--fg); font-size:12.5px; }
   #askq { flex:1; padding:9px 13px; border-radius:10px; border:1px solid var(--line);
@@ -221,6 +222,7 @@ SKELETON_HTML = """
         <div id="asklog"><div class="welcome">Ask a question in plain English — e.g. <em>&ldquo;how is Acme Corp connected to Delta Trust?&rdquo;</em> or <em>&ldquo;why does Acme matter?&rdquo;</em>. Answers are grounded in the graph, cited to the source, and highlighted on the canvas above.</div></div>
         <div id="askbar">
           <label id="attach" title="attach files to the graph">&#128206;<input type="file" id="attachin" multiple hidden></label>
+          <button id="save" title="download a graph.json snapshot of the current graph">&#128190;</button>
           <select id="asktool" title="which tool to use">
             <option value="auto">Auto</option>
             <option value="reason">Reason</option>
@@ -529,6 +531,17 @@ async function attachFiles(files){
       (res.rejected&&res.rejected.length?`<div class="cites">rejected: ${esc(res.rejected.join(', '))}</div>`:'');
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
 }
+async function saveSnapshot(){
+  const bubble=addMsg('bot','<span style="color:var(--mut)">exporting graph.json…</span>');
+  try{
+    const url=(typeof _u==='function')?_u('/api/export'):'/api/export';
+    const resp=await fetch(url); if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const blob=await resp.blob();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='graph.json';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+    bubble.innerHTML=`<div class="tooltag">export</div>Saved <b>graph.json</b> (${Math.round(blob.size/1024)} KB) to your downloads.`;
+  }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">export failed: '+esc(e.message||e)+'</span>'; }
+}
 function initAsk(){
   const dock=document.getElementById('ask');
   if(!dock) return;
@@ -537,6 +550,8 @@ function initAsk(){
   document.getElementById('askhead').onclick=()=>dock.classList.toggle('collapsed');
   document.getElementById('asksend').onclick=ask;
   document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
+  // Save snapshot is read-only, so it's always available on the live console.
+  const save=document.getElementById('save'); save.style.display='inline-block'; save.onclick=saveSnapshot;
   // File-attach is available only when the server was started with --allow-ingest.
   if(typeof TG.ingest==='function'){
     fetch(typeof _u==='function'?_u('/api/config'):'/api/config').then(r=>r.json()).then(cfg=>{

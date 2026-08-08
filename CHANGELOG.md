@@ -6,6 +6,14 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+- **Console graph.json export** — a read-only "Save snapshot" button in the console
+  downloads a canonical `graph.json` of the current graph (reflecting any in-UI ingest).
+  A corpus-directory console rebuilds from source for a complete artifact (with the `docs`
+  manifest); a `.duckdb`/snapshot console serializes the live engine's nodes + edges via
+  `export_graph_bytes`. Served at `GET /api/export`; deterministic and byte-canonical.
+  Hidden on the offline `graph.html` (no server).
+
 ## [3.0.0] - 2026-08-06
 
 **TextGraph 3.0 — the interactive + investigator-defaults release.** On top of the v2.0.0
