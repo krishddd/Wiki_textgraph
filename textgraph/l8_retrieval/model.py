@@ -306,6 +306,102 @@ class ConflictsResult:
 
 
 @dataclass
+class DecisionRef:
+    """A Decision node, cited to the byte span it was derived from."""
+
+    decision_id: str
+    name: str
+    category: str
+    citations: list[Citation] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision_id": self.decision_id,
+            "name": self.name,
+            "category": self.category,
+            "citations": [c.to_dict() for c in self.citations],
+        }
+
+
+@dataclass
+class ChainHop:
+    """One causal edge in a decision chain: ``from`` --relation--> ``to`` (cause -> effect)."""
+
+    relation: str  # CAUSED | INFLUENCED | PRECEDENT_FOR
+    from_id: str
+    from_name: str
+    to_id: str
+    to_name: str
+    depth: int
+    citations: list[Citation] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "relation": self.relation,
+            "from_id": self.from_id,
+            "from_name": self.from_name,
+            "to_id": self.to_id,
+            "to_name": self.to_name,
+            "depth": self.depth,
+            "citations": [c.to_dict() for c in self.citations],
+        }
+
+
+@dataclass
+class DecisionChainResult:
+    """The causal lineage of a decision: what led to it (ancestors) and what it led to."""
+
+    found: bool
+    decision: DecisionRef | None = None
+    ancestors: list[ChainHop] = field(default_factory=list)  # causes (traversed backward)
+    descendants: list[ChainHop] = field(default_factory=list)  # effects (traversed forward)
+    truncated: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tool": "trace_decision_chain",
+            "found": self.found,
+            "decision": self.decision.to_dict() if self.decision else None,
+            "ancestors": [h.to_dict() for h in self.ancestors],
+            "descendants": [h.to_dict() for h in self.descendants],
+            "truncated": self.truncated,
+        }
+
+
+@dataclass
+class DecisionHit:
+    decision_id: str
+    name: str
+    category: str
+    score: float
+    citations: list[Citation] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision_id": self.decision_id,
+            "name": self.name,
+            "category": self.category,
+            "score": round(self.score, 6),
+            "citations": [c.to_dict() for c in self.citations],
+        }
+
+
+@dataclass
+class SimilarDecisionsResult:
+    query: str
+    hits: list[DecisionHit] = field(default_factory=list)
+    truncated: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tool": "find_similar_decisions",
+            "query": self.query,
+            "hits": [h.to_dict() for h in self.hits],
+            "truncated": self.truncated,
+        }
+
+
+@dataclass
 class CommunityView:
     community_id: int
     label: str

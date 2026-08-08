@@ -16,6 +16,7 @@ Query (all eight L8 tools, over the same ``QueryEngine`` the MCP server uses):
   * ``console`` — serve the interactive web viewer; ``watch`` — incremental rebuilds.
   * ``doctor`` — read-only environment health check (extras + on-machine determinism).
   * ``export`` — export an interoperable view (PROV-O JSON-LD decision-provenance trail).
+  * ``trace-decision`` / ``find-decisions`` — walk a decision's causal chain; search decisions.
 
 The human CLI and the MCP tool surface are built off the same underlying result
 objects, formatted two ways — never two drifting code paths (§6.4).
@@ -229,6 +230,52 @@ def _cmd_conflicts(args: argparse.Namespace) -> int:
                 else ""
             )
             print(f"      {claim['subject']} -> {claim['object']}{when}  {cites}")
+    return 0
+
+
+def _cmd_trace_decision(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).trace_decision_chain(args.decision, max_hops=args.hops).to_dict()
+    if not res["found"]:
+        print(f"no decision matched: {args.decision}")
+        return 0
+    d = res["decision"]
+    dcites = " ".join(_fmt_citation(c) for c in d["citations"])
+    print(f"decision: {d['name']}  [{d['category']}]  {dcites}")
+
+    def _hop(h: dict[str, object]) -> str:
+        cites = " ".join(_fmt_citation(c) for c in h["citations"])  # type: ignore[union-attr]
+        return f"    {h['from_name']} -{h['relation']}-> {h['to_name']}  {cites}"
+
+    print(f"caused by / precedents ({len(res['ancestors'])}):")
+    for h in res["ancestors"]:
+        print(_hop(h))
+    print(f"led to / effects ({len(res['descendants'])}):")
+    for h in res["descendants"]:
+        print(_hop(h))
+    if res["truncated"]:
+        print("  ... (truncated to hop budget)")
+    return 0
+
+
+def _cmd_find_decisions(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).find_similar_decisions(args.query, k=args.k).to_dict()
+    if not res["hits"]:
+        print("no decisions found")
+        return 0
+    print(f"decisions similar to: {res['query']}")
+    for i, h in enumerate(res["hits"], 1):
+        cites = " ".join(_fmt_citation(c) for c in h["citations"])
+        print(f"  {i}. [{h['category']}] {h['name']}  (score {h['score']})")
+        if cites:
+            print(f"      {cites}")
     return 0
 
 
@@ -689,6 +736,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON map of source_name -> credibility for --resolve credibility_weighted",
     )
     p_conf.set_defaults(func=_cmd_conflicts)
+
+    p_trace = sub.add_parser(
+        "trace-decision", help="trace a decision's causal lineage (ancestors + effects)"
+    )
+    p_trace.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_trace.add_argument("decision", help="decision id or a phrase from its statement")
+    p_trace.add_argument("--hops", type=int, default=6, help="max causal hops each way (default 6)")
+    p_trace.set_defaults(func=_cmd_trace_decision)
+
+    p_findd = sub.add_parser(
+        "find-decisions", help="find decisions whose statement is most relevant to a query"
+    )
+    p_findd.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_findd.add_argument("query", help="natural-language query")
+    p_findd.add_argument("-k", type=int, default=5, help="number of decisions (default 5)")
+    p_findd.set_defaults(func=_cmd_find_decisions)
 
     p_stats = sub.add_parser("stats", help="graph counts and most central entities")
     p_stats.add_argument("path", help="corpus path to build")

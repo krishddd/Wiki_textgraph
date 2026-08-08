@@ -97,6 +97,9 @@ def derive_decisions(nodes: list[Node], edges: list[Edge]) -> tuple[list[Node], 
     out_edges: dict[str, Edge] = {}
     # decision_id keyed by ADR number, so an in-text "ADR-7" reference can find its target.
     adr_index: dict[int, str] = {}
+    # doc_id -> that document's own ADR-record decision (if it has one), so a reference made
+    # in a body line resolves to the record, keeping ADR-level lineage connected.
+    adr_record_by_doc: dict[str, str] = {}
     # (referencing decision_id, statement, span) collected for a second causal-linking pass.
     pending: list[tuple[str, str, SourceSpan]] = []
 
@@ -124,17 +127,21 @@ def derive_decisions(nodes: list[Node], edges: list[Edge]) -> tuple[list[Node], 
         out_edges[e.edge_id] = e
         if adr_num is not None:
             adr_index.setdefault(adr_num, did)
+            adr_record_by_doc.setdefault(span.doc_id, did)
         pending.append((did, statement, span))
 
     # Second pass: causal edges from in-text ADR references (needs the full adr_index).
     for did, statement, span in pending:
+        # A reference made inside a body line (WHY/DECISION) is really a statement about the
+        # document's ADR as a whole, so attribute it to that ADR record when there is one.
+        effect = adr_record_by_doc.get(span.doc_id, did)
         for keyword, num_str in _ADR_REF.findall(statement):
             target = adr_index.get(int(num_str))
-            if target is None or target == did:  # unknown ADR or a self-reference
+            if target is None or target == effect:  # unknown ADR or a self-reference
                 continue
             predicate = _causal_predicate(keyword)
             # The referenced (usually prior) decision is the source; this one is the object.
-            e = edge(target, predicate, did, span, tag=ConfidenceTag.INFERRED, confidence=0.8)
+            e = edge(target, predicate, effect, span, tag=ConfidenceTag.INFERRED, confidence=0.8)
             out_edges[e.edge_id] = e
 
     nodes_sorted = sorted(out_nodes.values(), key=lambda n: n.node_id)

@@ -141,6 +141,8 @@ textgraph reason  ./my-documents "how is Acme Corp connected to Delta Trust"
 textgraph secure  ./my-documents "who moved the money" --policy policy.json --principal alice
 textgraph conflicts ./my-documents   # single-truth disagreements, surfaced not merged
 textgraph conflicts ./my-documents --resolve voting   # opt-in: pick a winner, supersede losers
+textgraph trace-decision ./my-documents "byte-range citations"   # causal lineage of a decision
+textgraph find-decisions ./my-documents "why retention changed"  # search decisions by statement
 ```
 
 Conflicts are **surfaced, never silently merged**. Resolution is opt-in and

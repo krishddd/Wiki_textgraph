@@ -23,6 +23,7 @@ from typing import Any
 from textgraph.l7_analytics.algorithms import build_adjacency, pagerank
 from textgraph.l8_retrieval.bm25 import BM25Index, tokenize
 from textgraph.l8_retrieval.model import (
+    ChainHop,
     Citation,
     ClaimView,
     CommunitiesResult,
@@ -31,6 +32,9 @@ from textgraph.l8_retrieval.model import (
     ConflictView,
     ContradictionPair,
     ContradictionsResult,
+    DecisionChainResult,
+    DecisionHit,
+    DecisionRef,
     GraphPath,
     NeighborEdge,
     NeighborsResult,
@@ -38,6 +42,7 @@ from textgraph.l8_retrieval.model import (
     PathStep,
     SearchHit,
     SearchResult,
+    SimilarDecisionsResult,
     StatsResult,
     TimelineResult,
     WhyResult,
@@ -52,6 +57,8 @@ _RRF_K = 60  # Reciprocal Rank Fusion damping constant (standard default).
 # Edges that are graph plumbing, not entity-to-entity relations, kept out of the
 # relation adjacency used by path().
 _NON_RELATION = frozenset({"SAME_AS", "MENTIONS", "HAS_CHUNK", "SUBJECT_OF", "HAS_OBJECT"})
+# Causal predicates between Decision nodes (the decision-provenance chain).
+_CAUSAL_PREDICATES = frozenset({"CAUSED", "INFLUENCED", "PRECEDENT_FOR"})
 # Edges hidden from neighbors(): reification plumbing + membership/provenance edges,
 # so an entity's semantic relations surface instead of being buried under MENTIONS.
 _HIDDEN_NEIGHBORS = frozenset({"SUBJECT_OF", "HAS_OBJECT", "MENTIONS", "HAS_CHUNK"})
@@ -76,6 +83,7 @@ class QueryEngine:
         self._entity_ids = frozenset(n.node_id for n in nodes if "Entity" in n.labels)
         self._chunk_ids = frozenset(n.node_id for n in nodes if "Chunk" in n.labels)
         self._claim_ids = frozenset(n.node_id for n in nodes if "Claim" in n.labels)
+        self._decision_ids = frozenset(n.node_id for n in nodes if "Decision" in n.labels)
 
         # Name lookup for resolving a free-text handle to an entity id.
         self._by_name: dict[str, list[str]] = {}
@@ -142,9 +150,29 @@ class QueryEngine:
         # All documents any node derives from — the universe the access guard filters (G9).
         self._all_docs = frozenset(d for docs in self._node_docs.values() for d in docs)
 
+        # Decision-provenance state: statement search + causal adjacency (both directions).
+        self._decision_bm25 = BM25Index(
+            [(did, self._decision_text(did)) for did in sorted(self._decision_ids)]
+        )
+        self._decision_citation: dict[str, list[Citation]] = {}
+        self._causal_out: dict[str, list[tuple[str, Edge]]] = {}  # cause -> [(effect, edge)]
+        self._causal_in: dict[str, list[tuple[str, Edge]]] = {}  # effect -> [(cause, edge)]
+        for e in self._edges:
+            if e.subject not in self._decision_ids:
+                continue
+            if e.predicate == "DERIVED_FROM" and e.source_spans:
+                self._decision_citation.setdefault(e.subject, _citations(e))
+            elif e.predicate in _CAUSAL_PREDICATES and e.object in self._decision_ids:
+                self._causal_out.setdefault(e.subject, []).append((e.object, e))
+                self._causal_in.setdefault(e.object, []).append((e.subject, e))
+
         # Lazily-built vision (page) retrieval state.
         self._pages_built: list[Any] | None = None
         self._vision: Any = None
+
+    def _decision_text(self, did: str) -> str:
+        p = self._node[did].properties
+        return str(p.get("statement", p.get("name", "")))
 
     # -- graph view (for the visual console) ------------------------------------
 
@@ -837,6 +865,128 @@ class QueryEngine:
         order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
         views.sort(key=lambda v: (order.get(v.severity, 3), v.subject, v.conflict_id))
         return ConflictsResult(conflicts=views)
+
+    # -- decision provenance: causal chain + similarity -------------------------
+
+    def _resolve_decision(self, handle: str, nodes: frozenset[str] | None) -> str | None:
+        """Resolve a decision id or free-text handle to a visible Decision node id."""
+
+        def visible(did: str) -> bool:
+            return nodes is None or did in nodes
+
+        if handle in self._decision_ids and visible(handle):
+            return handle
+        hits = self._decision_bm25.search(handle, k=len(self._decision_ids) or 1)
+        for did, _score in hits:
+            if visible(did):
+                return did
+        return None
+
+    def _decision_ref(self, did: str) -> DecisionRef:
+        p = self._node[did].properties
+        return DecisionRef(
+            decision_id=did,
+            name=str(p.get("name", did)),
+            category=str(p.get("category", "")),
+            citations=self._decision_citation.get(did, []),
+        )
+
+    def trace_decision_chain(
+        self,
+        handle: str,
+        *,
+        max_hops: int = 6,
+        max_edges: int = 64,
+        context: SecurityContext | None = None,
+    ) -> DecisionChainResult:
+        """Trace a decision's causal lineage: ancestors (causes) and descendants (effects).
+
+        Walks ``CAUSED`` / ``INFLUENCED`` / ``PRECEDENT_FOR`` edges — backward for what led
+        to the decision, forward for what it led to — as ordered, cited hops. Cycle-safe and
+        bounded (``max_hops`` depth, ``max_edges`` total) so cost stays auditable (G7).
+        """
+        nodes, _ok_docs = self._auth(context)
+        did = self._resolve_decision(handle, nodes)
+        if did is None:
+            return DecisionChainResult(found=False)
+
+        def walk(
+            adj: dict[str, list[tuple[str, Edge]]], forward: bool
+        ) -> tuple[list[ChainHop], bool]:
+            hops: list[ChainHop] = []
+            seen = {did}
+            frontier = [(did, 0)]
+            truncated = False
+            while frontier:
+                node_id, depth = frontier.pop(0)
+                if depth >= max_hops:
+                    continue
+                # Deterministic order: by (relation, other name, edge id).
+                for other, e in sorted(
+                    adj.get(node_id, []),
+                    key=lambda pair: (pair[1].predicate, self._name(pair[0]), pair[1].edge_id),
+                ):
+                    if nodes is not None and other not in nodes:
+                        continue  # never surface a hop into a restricted decision
+                    if len(hops) >= max_edges:
+                        truncated = True
+                        break
+                    cause, effect = (other, node_id) if not forward else (node_id, other)
+                    hops.append(
+                        ChainHop(
+                            relation=e.predicate,
+                            from_id=cause,
+                            from_name=self._name(cause),
+                            to_id=effect,
+                            to_name=self._name(effect),
+                            depth=depth + 1,
+                            citations=_citations(e),
+                        )
+                    )
+                    if other not in seen:
+                        seen.add(other)
+                        frontier.append((other, depth + 1))
+                if len(hops) >= max_edges:
+                    truncated = True
+                    break
+            return hops, truncated
+
+        ancestors, trunc_a = walk(self._causal_in, forward=False)
+        descendants, trunc_d = walk(self._causal_out, forward=True)
+        return DecisionChainResult(
+            found=True,
+            decision=self._decision_ref(did),
+            ancestors=ancestors,
+            descendants=descendants,
+            truncated=trunc_a or trunc_d,
+        )
+
+    def find_similar_decisions(
+        self, query: str, *, k: int = 5, context: SecurityContext | None = None
+    ) -> SimilarDecisionsResult:
+        """Rank Decision nodes by BM25 relevance of their statement text to ``query``.
+
+        Every hit is cited to the span the decision was derived from. Security-aware: a
+        decision whose source document is unauthorized never surfaces.
+        """
+        nodes, _ok_docs = self._auth(context)
+        ranked = self._decision_bm25.search(query, k=max(k * 2, k))
+        hits: list[DecisionHit] = []
+        for did, score in ranked:
+            if nodes is not None and did not in nodes:
+                continue
+            p = self._node[did].properties
+            hits.append(
+                DecisionHit(
+                    decision_id=did,
+                    name=str(p.get("name", did)),
+                    category=str(p.get("category", "")),
+                    score=score,
+                    citations=self._decision_citation.get(did, []),
+                )
+            )
+        truncated = len(hits) > k
+        return SimilarDecisionsResult(query=query, hits=hits[:k], truncated=truncated)
 
     # -- tool 7: communities ----------------------------------------------------
 

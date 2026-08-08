@@ -7,6 +7,15 @@ to Semantic Versioning.
 ## [Unreleased]
 
 ### Added
+- **Decision-chain traversal + similarity (`trace_decision_chain`, `find_similar_decisions`).**
+  `QueryEngine.trace_decision_chain(decision)` walks a decision's causal lineage — backward
+  over `CAUSED`/`INFLUENCED`/`PRECEDENT_FOR` for **what led to it** (precedents/causes) and
+  forward for **what it led to** (effects) — as ordered, cited, cycle-safe, depth-bounded
+  hops. `QueryEngine.find_similar_decisions(query)` ranks `Decision` nodes by BM25 relevance
+  of their statement text, each hit cited to its source span. New `textgraph trace-decision`
+  and `textgraph find-decisions` CLI verbs; both are security-aware (a decision whose source
+  is unauthorized never surfaces). Causal linking now attributes an in-body ADR reference to
+  the document's ADR record, so ADR-level lineage stays connected end to end.
 - **Conflict detection (truth discovery) — a first-class step, never a silent merge.**
   When two sources make incompatible claims about the same entity on a *single-truth*
   predicate (`CONTROLS`, `BENEFICIAL_OWNER_OF`, `DIRECTOR_OF` by default) — same subject

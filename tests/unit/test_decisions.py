@@ -85,10 +85,12 @@ def test_supersedes_produces_precedent_for_edge(tmp_path: Path) -> None:
     assert len(causal) == 1
     e = causal[0]
     assert e.predicate == "PRECEDENT_FOR"
-    # The referenced (older) ADR-0005 record is the source; the new DECISION is the object.
+    # The referenced (older) ADR-0005 record is the source; the reference is attributed to
+    # the referencing document's own ADR record (ADR-0009), keeping ADR-level lineage joined.
     assert by_id[e.subject].properties["category"] == "adr"
     assert "ADR-0005" in by_id[e.subject].properties["marker"]
-    assert by_id[e.object].properties["category"] == "decision"
+    assert by_id[e.object].properties["category"] == "adr"
+    assert "ADR-0009" in by_id[e.object].properties["marker"]
     assert str(e.tag) == "INFERRED" and e.source_spans  # cited, non-GENERATED
 
 
