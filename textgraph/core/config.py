@@ -74,6 +74,14 @@ class Config:
     analytics_backend: str = "builtin"
     # L8 retrieval: emit Chunk nodes + entity<->chunk links (the dual-node graph).
     emit_chunks: bool = True
+    # Dense-embedding retrieval (semantic signal fused into hybrid search). "" = off (BM25 +
+    # PPR only). "openai" = OpenAI-compatible /embeddings (local Ollama nomic-embed-text, vLLM,
+    # or OpenAI); "st" = local sentence-transformers ([embed] extra); "hash" = deterministic
+    # model-free (testing). Query-time only — never enters graph.json, so G1 is unaffected.
+    embed_backend: str = ""
+    embed_model: str = "nomic-embed-text"
+    embed_base_url: str = "http://localhost:11434/v1"
+    embed_dim: int = 0  # 0 = infer from the first embedding response
     # Phase 8 vision-native retrieval: multi-vector page embedder for MaxSim late
     # interaction. "hash" is the deterministic, CI-safe default; "colpali" is the opt-in
     # [vision] model (import-guarded, falls back to hash). Query-time only — no effect on
@@ -90,9 +98,15 @@ class Config:
     # default (G2) so the determinism gate never sees an LLM. The model id + base URL
     # affect output, so they belong in the config hash; the API key never does — it is
     # read from the environment only and must not leak into config_hash/manifest.
+    # LLM model: empty means "use env MODEL_NAME, else the pipeline default (Nemotron, see
+    # client.DEFAULT_LLM_MODEL)". The base URL + API key come from the environment only.
     llm_model: str = ""
     llm_base_url: str = ""
     llm_max_calls: int = 8  # hard budget on LLM calls per build (G7)
+    # LLM relation enrichment (input): run the LLM over chunks to add GENERATED-tagged
+    # relations the deterministic extractors missed. Opt-in, on top of llm_enabled.
+    llm_extract: bool = False
+    llm_extract_max_calls: int = 40  # bound on uncached extraction calls per build (G7)
     llm_max_tokens: int = 256
     llm_temperature: float = 0.0  # deterministic-leaning; responses are also cached
     # Free-form, pinned model ids per layer (filled in as layers are added).

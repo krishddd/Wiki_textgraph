@@ -22,6 +22,10 @@ from textgraph.core.config import Config
 _API_KEY_ENV = ("TEXTGRAPH_LLM_API_KEY", "API_KEY", "OPENAI_API_KEY")
 _BASE_URL_ENV = ("TEXTGRAPH_LLM_BASE_URL", "MODEL_BASE_URL", "OPENAI_BASE_URL")
 _MODEL_ENV = ("TEXTGRAPH_LLM_MODEL", "MODEL_NAME", "OPENAI_MODEL")
+# The pipeline's default model when neither Config nor the environment names one — NVIDIA
+# Nemotron, served OpenAI-compatibly via vLLM. Only the (non-secret) model name is defaulted;
+# the base URL + API key must still be provided via the environment.
+DEFAULT_LLM_MODEL = "nvidia/Nemotron-Mini-4B-Instruct"
 
 
 def _first_env(names: tuple[str, ...]) -> str:
@@ -92,8 +96,8 @@ def resolve_client(config: Config) -> LLMClient | None:
     """
     api_key = _first_env(_API_KEY_ENV)
     base_url = config.llm_base_url or _first_env(_BASE_URL_ENV)
-    model = config.llm_model or _first_env(_MODEL_ENV)
-    if not (api_key and base_url and model):
+    model = config.llm_model or _first_env(_MODEL_ENV) or DEFAULT_LLM_MODEL
+    if not (api_key and base_url):
         return None
     return LLMClient(
         base_url=base_url,

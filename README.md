@@ -1,6 +1,14 @@
 # TextGraph
 
+[![PyPI](https://img.shields.io/pypi/v/textgraph-kg?logo=pypi&logoColor=white)](https://pypi.org/project/textgraph-kg/)
+[![Python](https://img.shields.io/pypi/pyversions/textgraph-kg?logo=python&logoColor=white)](https://pypi.org/project/textgraph-kg/)
+[![Live demo](https://img.shields.io/badge/demo-graph.html-3b5bdb)](https://krishddd.github.io/Wiki_textgraph/)
+[![CI](https://github.com/krishddd/Wiki_textgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/krishddd/Wiki_textgraph/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/krishddd/Wiki_textgraph)](LICENSE)
+
 > Turn a pile of case documents into a **queryable knowledge graph with byte-level provenance on every claim** — local-first, deterministic, and agent-legible.
+>
+> **Install:** `pip install textgraph-kg` · **[Live demo →](https://krishddd.github.io/Wiki_textgraph/)**
 
 TextGraph is built to help investigators make sense of **financial-crime and technical-crime** evidence: filings, contracts, wire-transfer logs, SARs, memos, chat/email exports, and reports. It ingests that corpus and emits a structured, versioned graph that shows **who is connected to whom, through what, and — crucially — *why*** — with every edge carrying the exact source span that supports it, so a finding can be re-verified and stands up to audit.
 
@@ -37,7 +45,7 @@ Investigators don't get clean markdown — they get PDFs, Word docs, and exports
 | Logs | `.log` (template mining) | ✅ built-in |
 | Conversations | `.chat` `.transcript` (speaker turns) | ✅ built-in |
 | PDF (text layer) | `.pdf` | ✅ built-in (pypdf) — investigators live in PDFs |
-| PDF layout / tables / OCR | scanned or complex `.pdf` | `pip install 'textgraph[ingest]'` (Docling) |
+| PDF layout / tables / OCR | scanned or complex `.pdf` | `pip install 'textgraph-kg[ingest]'` (Docling) |
 
 Unknown extensions fall back to plain text; a format needing a missing extra is **skipped with a warning**, never a crash (G2). For rich formats the *extracted* text becomes the canonical document, and every citation still re-verifies against it.
 

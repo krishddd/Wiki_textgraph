@@ -55,12 +55,39 @@ def _fmt_citation(cit: dict[str, object]) -> str:
     return f"[{cit['doc_id']}:{cit['start']}-{cit['end']}]"
 
 
+def _dense_engine(root: Path, args: argparse.Namespace) -> QueryEngine:
+    """Build a QueryEngine, wiring a dense embedder when ``--embed`` is given."""
+    backend = getattr(args, "embed", "") or ""
+    if not backend:
+        return _engine(root)
+    import tempfile
+
+    from textgraph.core.config import Config
+    from textgraph.l8_retrieval.dense import resolve_text_embedder
+
+    config = Config(
+        embed_backend=backend,
+        embed_model=args.embed_model or Config().embed_model,
+        embed_base_url=args.embed_url or Config().embed_base_url,
+    )
+    cache = Path(tempfile.gettempdir()) / "textgraph-embed-cache"
+    embedder = resolve_text_embedder(config, cache_dir=cache)
+    if root.is_file() and root.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        nodes, edges = load_graph(root)
+    else:
+        result = build(root)
+        nodes, edges = result.nodes, result.edges
+    return QueryEngine(nodes, edges, text_embedder=embedder)
+
+
 def _cmd_query(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
-    res = _engine(root).search(args.query, k=args.k).to_dict()
+    res = _dense_engine(root, args).search(args.query, k=args.k).to_dict()
     print(f"search: {res['query']}  (routing: {res['routing']})")
     for i, hit in enumerate(res["hits"], 1):
         cites = " ".join(_fmt_citation(c) for c in hit["citations"])
@@ -71,6 +98,24 @@ def _cmd_query(args: argparse.Namespace) -> int:
             print(f"      {cites}")
     if res["truncated"]:
         print("  ... (truncated to token budget)")
+    if getattr(args, "narrate", False):
+        from textgraph.core.config import Config
+        from textgraph.l4_llm_optional import resolve_client
+        from textgraph.l8_retrieval.model import Citation
+        from textgraph.l8_retrieval.narrate import narrate
+
+        client = resolve_client(Config())
+        if client is None:
+            print("\n[narrate] no LLM endpoint configured (set the LLM env vars).", file=sys.stderr)
+            return 0
+        passages = [
+            (h["snippet"], [Citation(**c) for c in h["citations"]])
+            for h in res["hits"]
+            if h.get("snippet")
+        ]
+        ans = narrate(client, args.query, passages)
+        if ans is not None:
+            print(f"\n[LLM answer -- GENERATED]\n{ans.text}")
     return 0
 
 
@@ -557,7 +602,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
 
     cred = json.loads(Path(args.credibility).read_text("utf-8")) if args.credibility else {}
     config = Config(
-        llm_enabled=bool(args.llm),
+        llm_enabled=bool(args.llm) or bool(args.llm_extract),
+        llm_extract=bool(args.llm_extract),
         resolve_conflicts_strategy=args.resolve_conflicts or "",
         source_credibility=cred,
     )
@@ -662,6 +708,13 @@ def build_parser() -> argparse.ArgumentParser:
         "API_KEY/MODEL_BASE_URL/MODEL_NAME from the environment",
     )
     p_build.add_argument(
+        "--llm-extract",
+        dest="llm_extract",
+        action="store_true",
+        help="opt-in: run the LLM over chunks to add GENERATED-tagged relations the "
+        "deterministic extractors missed (reads LLM env vars; bounded by budget)",
+    )
+    p_build.add_argument(
         "--resolve-conflicts",
         dest="resolve_conflicts",
         default="",
@@ -687,6 +740,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_query.add_argument("path", help="corpus path to build and query")
     p_query.add_argument("query", help="natural-language query")
     p_query.add_argument("-k", type=int, default=5, help="number of hits (default 5)")
+    p_query.add_argument(
+        "--embed",
+        default="",
+        choices=["", "openai", "st", "hash"],
+        help="add dense semantic retrieval: openai (OpenAI-compatible /embeddings, e.g. local "
+        "Ollama nomic-embed-text), st (sentence-transformers [embed] extra), hash (test). "
+        "Default: off (BM25 + graph only).",
+    )
+    p_query.add_argument(
+        "--embed-model", default="", help="embedding model (default: nomic-embed-text)"
+    )
+    p_query.add_argument("--embed-url", default="", help="OpenAI-compatible embeddings base URL")
+    p_query.add_argument(
+        "--narrate",
+        action="store_true",
+        help="compose a grounded, cited LLM answer from the retrieved evidence (GENERATED; "
+        "reads LLM env vars)",
+    )
     p_query.set_defaults(func=_cmd_query)
 
     p_path = sub.add_parser("path", help="maximum-likelihood path(s) between two entities")

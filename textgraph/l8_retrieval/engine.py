@@ -22,6 +22,7 @@ from typing import Any
 
 from textgraph.l7_analytics.algorithms import build_adjacency, pagerank
 from textgraph.l8_retrieval.bm25 import BM25Index, tokenize
+from textgraph.l8_retrieval.dense import TextEmbedder, cosine
 from textgraph.l8_retrieval.model import (
     ChainHop,
     Citation,
@@ -72,7 +73,12 @@ class QueryEngine:
     """Typed, bounded, cited retrieval over an assembled TextGraph."""
 
     def __init__(
-        self, nodes: list[Node], edges: list[Edge], *, policy: SecurityPolicy | None = None
+        self,
+        nodes: list[Node],
+        edges: list[Edge],
+        *,
+        policy: SecurityPolicy | None = None,
+        text_embedder: TextEmbedder | None = None,
     ) -> None:
         # Enterprise FGAC (Phase 9): when set, tools accept a per-call SecurityContext and
         # enforce it inside traversal (unauthorized transition probability -> 0). None =>
@@ -172,6 +178,19 @@ class QueryEngine:
             p = self._node[did].properties
             if p.get("category") == "adr":
                 self._adr_record_by_doc.setdefault(str(p.get("doc_id", "")), did)
+
+        # Dense semantic retrieval (optional). Embed every chunk once at build; queries are
+        # embedded on demand and cosine-ranked, then fused into the BM25+PPR RRF blend.
+        self._embedder = text_embedder
+        self._dense: dict[str, list[float]] = {}
+        if text_embedder is not None and self._chunk_ids:
+            cids = sorted(self._chunk_ids)
+            texts = [str(self._node[cid].properties.get("text", "")) for cid in cids]
+            try:
+                vecs = text_embedder.embed_batch(texts)
+                self._dense = dict(zip(cids, vecs, strict=False))
+            except Exception:  # pragma: no cover - a dead endpoint disables dense, never crashes
+                self._dense = {}
 
         # Lazily-built vision (page) retrieval state.
         self._pages_built: list[Any] | None = None
@@ -378,6 +397,24 @@ class QueryEngine:
             bm = [(cid, s) for cid, s in bm if cid in nodes]
         chunk_rank = {cid: i for i, (cid, _) in enumerate(bm)}
 
+        # Dense (semantic) chunk ranking, fused as a third RRF signal when an embedder is on.
+        dense_rank: dict[str, int] = {}
+        if self._dense:
+            try:
+                qvec = self._embedder.embed_batch([query])[0] if self._embedder else None
+            except Exception:  # pragma: no cover - transient endpoint failure -> skip dense
+                qvec = None
+            if qvec:
+                scored = (
+                    (cid, cosine(qvec, vec))
+                    for cid, vec in self._dense.items()
+                    if nodes is None or cid in nodes
+                )
+                dense_ranked = sorted(
+                    (p for p in scored if p[1] > 0.0), key=lambda p: (-p[1], p[0])
+                )[: max(k * 2, 10)]
+                dense_rank = {cid: i for i, (cid, _) in enumerate(dense_ranked)}
+
         # Seed PPR: query-name entities + entities in the top lexical chunks.
         seed: dict[str, float] = {}
         for nid in sorted(self._entity_ids):
@@ -411,12 +448,15 @@ class QueryEngine:
         )
         entity_rank = {nid: i for i, nid in enumerate(ent_ranking[: max(k * 2, 10)])}
 
-        # Reciprocal Rank Fusion across the chunk (lexical) and entity (graph) lists.
+        # Reciprocal Rank Fusion across the chunk (lexical), entity (graph), and — when a
+        # dense embedder is configured — chunk (semantic) lists.
         rrf: dict[str, float] = {}
         for cid, rank in chunk_rank.items():
             rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
         for nid, rank in entity_rank.items():
             rrf[nid] = rrf.get(nid, 0.0) + 1.0 / (_RRF_K + rank)
+        for cid, rank in dense_rank.items():
+            rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
 
         routed = self.resolve(query)
         routing = "local" if routed and routed in entity_rank else "global"

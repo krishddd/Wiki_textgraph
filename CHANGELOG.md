@@ -6,6 +6,34 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-08-08
+
+**TextGraph 3.2 — LLM-augmented intelligence, without losing the moat.** Adds semantic
+retrieval and opt-in LLM assistance for both **input** (extraction) and **output** (answers),
+benchmarked against [Semantica](docs/COMPARISON_SEMANTICA.md). Every addition is **opt-in and
+quarantined** — the deterministic-by-default build (byte-identical `graph.json`), byte-level
+provenance, and zero-LLM default are all untouched.
+
+> **Note:** the PyPI distribution is now **`textgraph-kg`** (`pip install textgraph-kg`); the
+> import package and CLI remain `textgraph`. (`textgraph` was already taken on PyPI.)
+
+### Added
+- **Dense semantic retrieval.** A third, *semantic* signal fused into the existing BM25 +
+  Personalized-PageRank RRF blend. Backends behind one interface: `openai` (OpenAI-compatible
+  `/embeddings` — local **Ollama `nomic-embed-text`**, vLLM, or OpenAI, dependency-free), `st`
+  (local `sentence-transformers`, `[embed]` extra), and `hash` (deterministic, model-free). A
+  persistent disk cache means only cache-misses hit the model. **Query-time only — never enters
+  `graph.json`**, so determinism (G1) is unaffected. `textgraph query … --embed openai`.
+- **LLM relation extraction (input).** `build --llm-extract` runs the LLM (default: NVIDIA
+  **Nemotron** via vLLM, `client.DEFAULT_LLM_MODEL`) over chunks to add `GENERATED`-tagged
+  relations the deterministic extractors miss — each cited to its chunk, bounded by a call
+  budget (G7), prompt-cached. Off by default, so the default build has zero `GENERATED` edges
+  and the determinism/provenance gates are untouched.
+- **LLM answer synthesis (output).** `query --narrate` composes a fluent, **cited** answer
+  strictly from the retrieved evidence — tagged `GENERATED`, instructed to abstain when the
+  evidence is insufficient, and always shown next to its re-verifiable citations.
+- **`docs/COMPARISON_SEMANTICA.md`** — an honest TextGraph-vs-Semantica comparison.
+
 ## [3.1.0] - 2026-08-08
 
 **TextGraph 3.1 — the decision-provenance & conflict release.** On top of v3.0's interactive

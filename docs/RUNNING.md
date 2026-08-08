@@ -145,6 +145,35 @@ textgraph trace-decision ./my-documents "byte-range citations"   # causal lineag
 textgraph find-decisions ./my-documents "why retention changed"  # search decisions by statement
 ```
 
+### Semantic search + LLM (opt-in, v3.2)
+
+Add a **dense semantic** signal to search (fused with BM25 + PageRank). Point it at a local
+Ollama, a vLLM, or OpenAI — the embeddings are cached, and they never touch `graph.json`:
+
+```bash
+textgraph query ./docs "systems posing serious risk" --embed openai \
+  --embed-model nomic-embed-text --embed-url http://localhost:11434/v1
+```
+
+Compose a **grounded, cited** answer from the retrieved evidence with an LLM (tagged
+`GENERATED`, abstains when unsupported). The endpoint is read from the environment:
+
+```bash
+export MODEL_BASE_URL=... API_KEY=... MODEL_NAME=nvidia/Nemotron-Mini-4B-Instruct
+textgraph query ./docs "what obligations apply to high-risk AI" --narrate
+```
+
+Enrich the graph with LLM-found relations the deterministic extractors miss (opt-in,
+`GENERATED`-tagged, cited to the chunk, budget-bounded):
+
+```bash
+textgraph build ./docs --llm-extract -o textgraph-out
+```
+
+The rule throughout: **the LLM augments, it never becomes ground truth** — everything
+model-authored is `GENERATED`-tagged and shown next to its re-verifiable citations. See
+[docs/COMPARISON_SEMANTICA.md](COMPARISON_SEMANTICA.md) for how this compares to Semantica.
+
 Conflicts are **surfaced, never silently merged**. Resolution is opt-in and
 non-destructive — losing claims are demoted (`SUPERSEDED_BY`, keeping their citation),
 never deleted. Strategies: `most_recent`, `voting`, `credibility_weighted` (the last reads

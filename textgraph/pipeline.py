@@ -27,7 +27,7 @@ from textgraph.l7_analytics import Analytics, compute_analytics
 from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
 from textgraph.l8_retrieval.emit_chunks import emit_chunks
 from textgraph.l9_artifacts.graph_json import build_graph_document, dump_graph_bytes
-from textgraph.store.base import Edge, Node
+from textgraph.store.base import Edge, Node, SourceSpan
 from textgraph.store.memory import InMemoryGraphStore
 
 # Extensions we attempt to ingest. Everything else is skipped so a corpus dir can
@@ -109,6 +109,42 @@ def _run_l4(
     )
     cache = PromptCache(llm_cache_dir)
     return synthesize(nodes, edges, analytics, client, cache, max_calls=config.llm_max_calls)
+
+
+def _run_llm_extract(
+    nodes: list[Node],
+    edges: list[Edge],
+    config: Config,
+    cache_dir: str | Path | None,
+) -> tuple[list[Node], list[Edge]]:
+    """Resolve the LLM client + cache and run GENERATED relation extraction; ([], []) if skipped."""
+    import tempfile
+
+    from textgraph.l4_llm_optional import PromptCache, resolve_client
+    from textgraph.l4_llm_optional.extract import extract_llm_relations
+
+    client = resolve_client(config)
+    if client is None:
+        return [], []
+    llm_cache_dir = (
+        Path(cache_dir) / "llm"
+        if cache_dir is not None
+        else Path(tempfile.mkdtemp(prefix="textgraph-llm-"))
+    )
+    cache = PromptCache(llm_cache_dir)
+    # Chunk text + the span it cites (from its incoming CONTAINS edge), for coarse provenance.
+    chunk_ids = {n.node_id for n in nodes if "Chunk" in n.labels}
+    by_id = {n.node_id: n for n in nodes}
+    chunk_span: dict[str, SourceSpan] = {}
+    for e in edges:
+        if e.object in chunk_ids and e.source_spans:
+            chunk_span.setdefault(e.object, e.source_spans[0])
+    chunks = [
+        (cid, str(by_id[cid].properties.get("text", "")), chunk_span[cid])
+        for cid in sorted(chunk_ids)
+        if cid in chunk_span
+    ]
+    return extract_llm_relations(chunks, client, cache, max_calls=config.llm_extract_max_calls)
 
 
 def build(
@@ -333,6 +369,22 @@ def build(
         )
         l8_ms = (time.perf_counter() - t6) * 1000
 
+    # LLM relation enrichment (opt-in, GENERATED). Runs the LLM over chunks to add relations
+    # the deterministic extractors missed; quarantined by tag, bounded by budget (G7).
+    gen_relation_count = 0
+    if config.llm_enabled and config.llm_extract and config.emit_chunks:
+        gen_nodes, gen_edges = _run_llm_extract(nodes, edges, config, cache_dir)
+        gen_relation_count = len(gen_edges)
+        if gen_edges:
+            nodes = sorted(
+                ({n.node_id: n for n in nodes} | {n.node_id: n for n in gen_nodes}).values(),
+                key=lambda n: n.node_id,
+            )
+            edges = sorted(
+                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in gen_edges}).values(),
+                key=lambda e: e.edge_id,
+            )
+
     # L4 — optional LLM synthesis (opt-in, GENERATED-tagged, quarantined). Runs last so
     # it can summarize the finished communities; skipped (never fails) if unconfigured.
     l4_ms = 0.0
@@ -391,6 +443,7 @@ def build(
             "contradictions": contradiction_count,
             "chunks": chunk_count,
             "summaries": summary_count,
+            "llm_relations": gen_relation_count,
         },
         analytics=analytics,
     )
