@@ -1,12 +1,30 @@
 [project]
 name = "textgraph-kg"
-version = "3.2.0"
+version = "3.2.1"
 description = "Turn any textual corpus into a queryable knowledge graph with byte-level provenance on every claim. Local-first, deterministic, zero-LLM-by-default."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+license-files = ["LICENSE"]
 authors = [{ name = "krishddd" }]
 keywords = ["knowledge-graph", "provenance", "information-extraction", "mcp", "deterministic", "rag"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+
 dependencies = [
     # Lean core: content addressing + pure-Python structural parsers.
     # Everything heavy (Docling, tree-sitter, encoder models) lives behind extras.
@@ -18,6 +36,14 @@ dependencies = [
     # OCR fidelity (Docling) stays opt-in in [ingest]; the default extracts the text layer.
     "pypdf>=4.0.0",
 ]
+
+[project.urls]
+Homepage = "https://krishddd.github.io/Wiki_textgraph/"
+Repository = "https://github.com/krishddd/Wiki_textgraph"
+Documentation = "https://github.com/krishddd/Wiki_textgraph/blob/main/docs/RUNNING.md"
+Changelog = "https://github.com/krishddd/Wiki_textgraph/blob/main/CHANGELOG.md"
+"Live demo" = "https://krishddd.github.io/Wiki_textgraph/"
+"Bug Tracker" = "https://github.com/krishddd/Wiki_textgraph/issues"
 
 [project.optional-dependencies]
 # Higher-fidelity rich-document ingestion. Docling adds layout/table/OCR; tree-sitter/Drain3

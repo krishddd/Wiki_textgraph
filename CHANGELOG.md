@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-08-08
+
+**Packaging & presentation polish** (no code/API changes). Makes the PyPI page and repo
+look the part next to [Semantica](docs/COMPARISON_SEMANTICA.md).
+
+### Added
+- **`LICENSE`** file (MIT) — so the license is detectable on GitHub and shipped in the sdist.
+- **PyPI project metadata** — `[project.urls]` (Homepage / Repository / Documentation /
+  Changelog / Live demo / Bug Tracker → the PyPI sidebar) and trove `classifiers` (Python
+  versions, MIT, audiences, topics), plus `license-files`.
+- **README** — a compact **TextGraph vs. Semantica** section (where TextGraph leads: byte-
+  identical builds, re-hashable citations, zero-LLM core; and the honest roadmap: RDF store,
+  OWL/SHACL, more providers/vector stores). A **Python-API** quick start alongside the CLI.
+
+### Fixed
+- **Broken README badges** — the CI badge pointed at a non-existent `ci.yml`; replaced with
+  working **tests** + **determinism** workflow badges and an MIT license badge.
+
 ## [3.2.0] - 2026-08-08
 
 **TextGraph 3.2 — LLM-augmented intelligence, without losing the moat.** Adds semantic

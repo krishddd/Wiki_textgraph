@@ -1,14 +1,15 @@
 # TextGraph
 
-[![PyPI](https://img.shields.io/pypi/v/textgraph-kg?logo=pypi&logoColor=white)](https://pypi.org/project/textgraph-kg/)
+[![PyPI](https://img.shields.io/pypi/v/textgraph-kg?logo=pypi&logoColor=white&label=PyPI)](https://pypi.org/project/textgraph-kg/)
 [![Python](https://img.shields.io/pypi/pyversions/textgraph-kg?logo=python&logoColor=white)](https://pypi.org/project/textgraph-kg/)
-[![Live demo](https://img.shields.io/badge/demo-graph.html-3b5bdb)](https://krishddd.github.io/Wiki_textgraph/)
-[![CI](https://github.com/krishddd/Wiki_textgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/krishddd/Wiki_textgraph/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/krishddd/Wiki_textgraph)](LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/krishddd/Wiki_textgraph/test.yml?branch=main&logo=github&label=tests)](https://github.com/krishddd/Wiki_textgraph/actions/workflows/test.yml)
+[![Determinism](https://img.shields.io/github/actions/workflow/status/krishddd/Wiki_textgraph/determinism.yml?branch=main&label=determinism)](https://github.com/krishddd/Wiki_textgraph/actions/workflows/determinism.yml)
+[![Live demo](https://img.shields.io/badge/demo-graph.html-3b5bdb?logo=googlechrome&logoColor=white)](https://krishddd.github.io/Wiki_textgraph/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 > Turn a pile of case documents into a **queryable knowledge graph with byte-level provenance on every claim** — local-first, deterministic, and agent-legible.
 >
-> **Install:** `pip install textgraph-kg` · **[Live demo →](https://krishddd.github.io/Wiki_textgraph/)**
+> **`pip install textgraph-kg`**  ·  **[Live demo →](https://krishddd.github.io/Wiki_textgraph/)**  ·  **[vs. Semantica →](docs/COMPARISON_SEMANTICA.md)**
 
 TextGraph is built to help investigators make sense of **financial-crime and technical-crime** evidence: filings, contracts, wire-transfer logs, SARs, memos, chat/email exports, and reports. It ingests that corpus and emits a structured, versioned graph that shows **who is connected to whom, through what, and — crucially — *why*** — with every edge carrying the exact source span that supports it, so a finding can be re-verified and stands up to audit.
 
@@ -25,6 +26,25 @@ Most GraphRAG tools build the graph *with an LLM*: extraction is non-determinist
 - **📏 Honest about quality.** We publish the **hallucinated-edge rate** (0.167 on the fixture, [BENCHMARKS.md](BENCHMARKS.md)) — a number most systems don't report at all.
 
 Local-first / DuckDB stays the default; a graph DB (Neo4j) is an *optional* scale-out backend, never required. The trade is deliberate: the deterministic default caps peak recall vs an LLM extractor, which is exactly why the higher-recall `[ie]` and opt-in LLM paths exist — but the reproducibility and re-verifiable citations are the moat.
+
+## TextGraph vs. Semantica
+
+[Semantica](https://github.com/semantica-agi/semantica) is the closest peer — same regulated-domain focus, PROV-O provenance, decision intelligence (`record_decision` / `trace_decision_chain` / `find_similar_decisions`), conflict detection, and bi-temporal facts. Independent convergence on the same shape is a good sign. Here's the honest split ([full comparison →](docs/COMPARISON_SEMANTICA.md)):
+
+**✅ Where TextGraph leads**
+
+- **Byte-identical builds, gated in CI** — diff two runs, reproduce any finding. (Semantica guarantees deterministic *reasoning*, not a byte-identical *build*.)
+- **Re-hashable byte-span citations** — every non-generated edge re-verifies against source bytes; 100% re-verify is gated. (Stronger than document/field-level provenance.)
+- **Zero-LLM, dependency-free core** — the whole default pipeline runs CPU-only, no API key, no vector DB. LLM/embeddings are opt-in and `GENERATED`-quarantined.
+
+**🧭 Where to improve (roadmap)**
+
+- **Storage breadth** — Semantica is polyglot (RDF *and* LPG: Oxigraph/Jena/Neo4j/Neptune). TextGraph is DuckDB-default with a Neo4j design; native RDF triple-store export is next.
+- **Formal ontology & reasoning** — Semantica has OWL/SHACL/SPARQL + Datalog/Rete. TextGraph has typed labels + Graph-of-Thoughts; SHACL validation and a rule engine are on the roadmap.
+- **Provider & vector-store breadth** — Semantica spans LiteLLM providers and FAISS/Qdrant/Weaviate/Milvus. TextGraph ships one OpenAI-compatible client + a cosine index; more backends welcome.
+- **Ecosystem polish** — Semantica has a hosted docs site, MCP/REST surface, and published benchmarks; TextGraph has an MCP server + honest fixture benchmarks and is growing the rest.
+
+The design rule that keeps the moat while closing the gap: **the LLM augments, it never becomes ground truth** — anything model-authored is `GENERATED`-tagged next to its re-verifiable citations.
 
 ## Who it's for
 
@@ -56,11 +76,32 @@ Unknown extensions fall back to plain text; a format needing a missing extra is 
 > how to open the interactive UI.
 
 ```bash
-# Simplest install (plain pip, three small pure-Python packages — no GPU, no network):
-python -m venv .venv && source .venv/bin/activate    # Windows: .venv\Scripts\activate
-pip install -r requirements.txt && pip install -e .
-# (or, with uv:  uv sync  — then prefix commands with `uv run`)
+pip install textgraph-kg          # the import package + CLI are named `textgraph`
+```
 
+**Python API** — build once, then call the eight typed, cited tools:
+
+```python
+from textgraph.pipeline import build
+from textgraph.l8_retrieval import QueryEngine
+
+result = build("./case-files")  # deterministic; byte-identical graph.json
+engine = QueryEngine(result.nodes, result.edges)
+
+hits = engine.search("who transferred funds to whom", k=5)
+for h in hits.hits:
+    print(h.name, "→", [c.ref() for c in h.citations])  # every hit re-verifiable
+
+engine.path("Acme Corp", "Gamma Holdings")  # max-likelihood cited path
+engine.why("Acme Corp")  # cited claims + validity windows
+engine.conflicts()  # single-truth conflicts, surfaced not merged
+engine.trace_decision_chain("beneficial owner policy")  # decision lineage
+```
+
+**CLI** — the same tools from the shell:
+
+```bash
+# ...or from source (dev): pip install -r requirements.txt && pip install -e .
 textgraph build ./case-files -o textgraph-out
 # → textgraph-out/graph.json, GRAPH_REPORT.md, graph.html, schema.yaml, manifest.json
 
