@@ -74,16 +74,17 @@ RENDERER_CSS = """
   #main { display:flex; flex-direction:column; min-width:0; min-height:0; padding:16px 16px 0;
     gap:12px; }
 
-  /* Stat cards — the headline data points */
-  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
-  .stat { background:var(--card); border:1px solid var(--line); border-radius:14px;
-    padding:14px 16px; box-shadow:var(--shadow); min-width:0; }
-  .stat .k { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut);
-    display:flex; align-items:center; gap:7px; }
-  .stat .k .swatch { width:9px; height:9px; border-radius:3px; }
-  .stat .v { font-size:26px; font-weight:700; letter-spacing:-.02em; margin-top:4px;
-    font-variant-numeric:tabular-nums; }
-  .stat .s { font-size:12px; color:var(--fg2); margin-top:2px; }
+  /* Stat cards — the headline data points (compact: a slim strip, not tall boxes) */
+  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:11px;
+    padding:8px 13px; box-shadow:var(--shadow); min-width:0;
+    display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+  .stat .k { font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--mut);
+    display:flex; align-items:center; gap:6px; order:2; }
+  .stat .k .swatch { width:8px; height:8px; border-radius:2px; }
+  .stat .v { font-size:20px; font-weight:700; letter-spacing:-.02em; order:1;
+    font-variant-numeric:tabular-nums; line-height:1.1; }
+  .stat .s { display:none; }  /* drop the sub-caption; the number + label is enough */
 
   /* Canvas card */
   #stage { position:relative; flex:1; min-height:0; background:var(--card);
@@ -107,10 +108,19 @@ RENDERER_CSS = """
   #legend .lg { display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--fg2); }
   #legend .lg .dot { width:9px; height:9px; border-radius:50%; }
 
-  /* Inspector */
-  aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; }
+  /* Inspector — a flex column that always fits the page; long lists scroll inside their
+     own section instead of pushing the panel off-screen. */
+  aside { background:var(--panel); border-left:1px solid var(--line); overflow:hidden;
+    display:flex; flex-direction:column; min-height:0; }
   aside h2 { font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--mut);
-    margin:18px 18px 10px; font-weight:600; }
+    margin:12px 18px 7px; font-weight:600; flex:none; }
+  aside h2:first-child { margin-top:14px; }
+  /* Long lists (communities, top entities, documents) each cap out and scroll internally,
+     so the panel never grows past the page. #detail takes whatever height is left. */
+  #comms { overflow-y:auto; max-height:26vh; flex:none; }
+  #tops  { overflow-y:auto; max-height:22vh; flex:none; }
+  #docs  { overflow-y:auto; max-height:14vh; flex:none; }
+  #tags, #all { flex:none; }
   .mut { color:var(--mut); font-weight:400; }
   .docrow { display:flex; align-items:center; gap:8px; padding:5px 18px; margin:0 8px;
     border-radius:8px; }
@@ -121,13 +131,13 @@ RENDERER_CSS = """
   .docrow .drm { border:none; background:none; cursor:pointer; color:var(--mut); font-size:14px;
     padding:2px 4px; border-radius:6px; line-height:1; }
   .docrow .drm:hover { color:var(--sup,#d64); background:var(--line2); }
-  .crow { display:flex; align-items:center; gap:9px; padding:6px 18px; cursor:pointer;
+  .crow { display:flex; align-items:center; gap:9px; padding:4px 18px; cursor:pointer;
     border-radius:9px; margin:0 8px; transition:background .12s; }
   .crow:hover { background:var(--line2); }
   .crow .dot { width:11px; height:11px; border-radius:4px; flex:none; }
   .crow .lbl { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .crow .ct { color:var(--mut); font-variant-numeric:tabular-nums; font-size:12px; }
-  .trow { display:flex; align-items:baseline; gap:9px; padding:6px 18px; cursor:pointer;
+  .trow { display:flex; align-items:baseline; gap:9px; padding:4px 18px; cursor:pointer;
     border-radius:9px; margin:0 8px; transition:background .12s; }
   .trow:hover { background:var(--line2); }
   .trow .rank { color:var(--mut); font-size:12px; width:16px; font-variant-numeric:tabular-nums; }
@@ -137,7 +147,8 @@ RENDERER_CSS = """
   .tag { font-size:11.5px; padding:4px 11px; border-radius:20px; border:1px solid var(--line);
     cursor:pointer; user-select:none; transition:opacity .12s; }
   .tag.off { opacity:.4; text-decoration:line-through; }
-  #detail { padding:12px 18px 28px; border-top:1px solid var(--line); margin-top:10px; }
+  #detail { padding:12px 18px 24px; border-top:1px solid var(--line); margin-top:6px;
+    flex:1; overflow-y:auto; min-height:0; }
   #detail .title { font-weight:650; font-size:15px; margin-bottom:2px; letter-spacing:-.01em; }
   #detail .sub { color:var(--fg2); font-size:12px; margin-bottom:10px; }
   .fact { border-left:2px solid var(--line); padding:6px 0 6px 10px; margin:8px 0; font-size:13px; }

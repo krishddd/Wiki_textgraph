@@ -6,6 +6,17 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-08-14
+
+### Changed
+- **Tighter console chrome, more room for the graph.** The four stat cards are now a slim
+  single-line strip (~42px tall instead of ~90px), so the graph canvas gets the reclaimed
+  height. The side inspector is a flex column that always fits the page: the community
+  roster, top-entities list, and document list each cap out and **scroll inside their own
+  section** (verified: nothing overflows the viewport, no page scroll), and the selected-node
+  detail takes whatever height is left and scrolls internally. Sidebar rows are a touch
+  shorter. No functional change — layout only.
+
 ## [4.0.0] - 2026-08-14
 
 The **NotebookLM-style graph console** release. The web viewer went from a static
