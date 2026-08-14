@@ -212,6 +212,8 @@ flowchart TD
 
 ## Status
 
+🟢 **v4.2.0 — ego / distance-intelligence view.** An **Ego** toggle colours the graph by hop-distance from a clicked focus node (0h / 1h / 2–3h / 4+h) with a live depth slider — a distance map for exploring a node's structural reach.
+
 🟢 **v4.1.0 — structural link prediction.** Suggest likely-missing relations from graph topology (Adamic-Adar and friends), deterministically: `textgraph predict`, a **Predict links** tool in the console, and dashed candidate edges on the graph. Closes the last big Semantica KG-engine gap (Node2Vec embeddings aside).
 
 🟢 **v4.0.0 — NotebookLM-style graph console.** The web console now self-organises into a mind-map: a client-side force layout clusters connected entities and fills the panel, a co-occurrence backbone connects entities that share a passage so even a relation-sparse build spreads, and opt-in **LLM-extracted relations are always shown** (their endpoints are pulled into view regardless of PageRank, so the meaningful `X →REGULATES→ Y` edges surface). `build --llm-extract-budget N` dials the LLM relation density. `graph.json` and the determinism/provenance gates are untouched.

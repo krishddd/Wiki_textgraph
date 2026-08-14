@@ -107,6 +107,22 @@ RENDERER_CSS = """
     max-width:60%; z-index:5; pointer-events:none; }
   #legend .lg { display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--fg2); }
   #legend .lg .dot { width:9px; height:9px; border-radius:50%; }
+  /* Ego / distance-intelligence banner (shown only in ego mode) */
+  #egobar { position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:6;
+    display:none; align-items:center; gap:14px; padding:8px 14px; border-radius:12px;
+    background:var(--panel); border:1px solid var(--line); box-shadow:var(--shadow);
+    font-size:12px; max-width:92%; }
+  #egobar.on { display:flex; }
+  #egobar .eg-anchor { font-weight:650; }
+  #egobar .eg-anchor .mut { font-weight:400; }
+  #egobar input[type=range] { width:120px; accent-color:var(--acc); vertical-align:middle; }
+  #egobar .eg-depth { display:flex; align-items:center; gap:7px; white-space:nowrap; color:var(--fg2); }
+  #egobar .eg-legend { display:flex; gap:10px; }
+  #egobar .eg-legend .lg { display:flex; align-items:center; gap:4px; color:var(--fg2); }
+  #egobar .eg-legend .dot { width:9px; height:9px; border-radius:50%; }
+  #egobar .eg-x { cursor:pointer; color:var(--mut); border:none; background:none; font-size:15px;
+    line-height:1; padding:0 2px; }
+  #egobar .eg-x:hover { color:var(--sup); }
 
   /* Inspector — a flex column that always fits the page; long lists scroll inside their
      own section instead of pushing the panel off-screen. */
@@ -228,6 +244,7 @@ SKELETON_HTML = """
       <input id="q" placeholder="Search entities &amp; passages…  (Enter)">
     </div>
     <div class="spacer"></div>
+    <button class="btn" id="egobtn" title="ego / distance view — colour nodes by hops from a focus node">Ego</button>
     <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
     <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
     <button class="btn" id="fit" title="fit graph to screen">Fit</button>
@@ -241,6 +258,7 @@ SKELETON_HTML = """
         <canvas id="c"></canvas>
         <div id="tip"></div>
         <div id="legend"></div>
+        <div id="egobar"></div>
         <div id="note"></div>
         <div id="time">
           <span>&#9201;</span>
@@ -302,7 +320,8 @@ const PALETTE = ['#4f6bff','#f59e42','#e0555b','#2bb7a3','#7bc043','#f2c14e','#c
 const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(),
-  predEdges:new Set(), date:null, grouped:false };
+  predEdges:new Set(), date:null, grouped:false,
+  ego:false, egoAnchor:null, egoDepth:3, egoDist:null, egoAdj:null };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -311,7 +330,13 @@ const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.lengt
 const TYPE_COLOR = { Organization:'#4f6bff', Person:'#2bb7a3', Location:'#f59e42',
   Money:'#7bc043', Date:'#c98bd6', Work:'#ef8fb4', Term:'#59c1ff', LLM:'#e0555b' };
 const OTHER_COLOR = '#8a94a6';
-function nodeColor(n){ return TYPE_COLOR[n && n.etype] || OTHER_COLOR; }
+// Ego / distance-intelligence bands: colour a node by how many hops it sits from the focus.
+const EGO_COLORS = { anchor:'#f2c14e', h1:'#2bb7a3', h23:'#7bc043', h46:'#4f6bff' };
+function egoColor(d){ return d===0?EGO_COLORS.anchor : d===1?EGO_COLORS.h1 : d<=3?EGO_COLORS.h23 : EGO_COLORS.h46; }
+function nodeColor(n){
+  if(S.ego && S.egoDist && n){ const d=S.egoDist.get(n.id); if(d!=null) return egoColor(d); }
+  return TYPE_COLOR[n && n.etype] || OTHER_COLOR;
+}
 function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 function buildLegend(){
   const el=document.getElementById('legend'); if(!el||!S.g) return;
@@ -426,7 +451,54 @@ function neighborsOf(id){ const set=new Set([id]); const edges=new Set();
     if(e.source===id){ set.add(e.target); edges.add(e.source+'>'+e.target); }
     else if(e.target===id){ set.add(e.source); edges.add(e.source+'>'+e.target); } }
   return {set,edges}; }
+
+// -- Ego / distance intelligence: colour the graph by hops from a focus node ----
+function egoAdjacency(){
+  if(S.egoAdj) return S.egoAdj; const m={};
+  for(const e of S.g.edges){ (m[e.source]=m[e.source]||[]).push(e.target);
+    (m[e.target]=m[e.target]||[]).push(e.source); }
+  S.egoAdj=m; return m;
+}
+function computeEgo(anchor){                 // BFS out to S.egoDepth hops
+  const adj=egoAdjacency(), dist=new Map([[anchor,0]]); let frontier=[anchor];
+  for(let d=1; d<=S.egoDepth && frontier.length; d++){ const next=[];
+    for(const u of frontier) for(const v of (adj[u]||[])){ if(!dist.has(v)){ dist.set(v,d); next.push(v); } }
+    frontier=next; }
+  return dist;
+}
+function renderEgoBar(){
+  const bar=document.getElementById('egobar'); if(!bar) return;
+  bar.classList.toggle('on', S.ego); if(!S.ego){ bar.innerHTML=''; return; }
+  const a=S.egoAnchor&&S.byId[S.egoAnchor]?S.byId[S.egoAnchor]:null;
+  const count=S.egoDist?S.egoDist.size:0;
+  const head = a ? `<span class="eg-anchor">Ego &middot; <span class="mut">focus</span> ${esc(a.name)}`
+      +` &middot; ${count} within ${S.egoDepth} hops</span>`
+    : `<span class="eg-anchor mut">Ego &middot; click a node to set the focus</span>`;
+  const leg = `<span class="eg-legend">`
+    +`<span class="lg"><span class="dot" style="background:${EGO_COLORS.anchor}"></span>0h</span>`
+    +`<span class="lg"><span class="dot" style="background:${EGO_COLORS.h1}"></span>1h</span>`
+    +`<span class="lg"><span class="dot" style="background:${EGO_COLORS.h23}"></span>2-3h</span>`
+    +`<span class="lg"><span class="dot" style="background:${EGO_COLORS.h46}"></span>4+h</span></span>`;
+  bar.innerHTML = head
+    +`<span class="eg-depth">depth <input type="range" id="egodepth" min="1" max="6" value="${S.egoDepth}"> ${S.egoDepth}h</span>`
+    + leg + `<button class="eg-x" id="egoclose" title="exit ego view">&times;</button>`;
+  const sl=document.getElementById('egodepth'); if(sl) sl.oninput=()=>{ S.egoDepth=+sl.value; reEgo(); };
+  const x=document.getElementById('egoclose'); if(x) x.onclick=()=>setEgo(false);
+}
+function reEgo(){
+  if(!S.egoAnchor){ S.egoDist=null; S.match=null; renderEgoBar(); draw(); return; }
+  S.egoDist=computeEgo(S.egoAnchor); S.match=new Set(S.egoDist.keys());
+  S.sel=S.byId[S.egoAnchor]||null; renderEgoBar(); draw();
+}
+function setEgo(on){
+  S.ego=on; document.getElementById('egobtn').classList.toggle('on',on);
+  document.getElementById('legend').style.display = on ? 'none' : '';  // bands replace type legend
+  if(on){ if(!S.egoAnchor && S.sel) S.egoAnchor=S.sel.id; reEgo(); }
+  else { S.egoDist=null; S.egoAnchor=null; S.match=null; renderEgoBar(); draw(); }
+}
+
 function onPick(n){
+  if(S.ego){ S.egoAnchor=n.id; reEgo(); inspect(n); return; }   // re-root the ego view
   if(S.pathMode){ S.pick.push(n.id); if(S.pick.length===2){ runPath(); } draw(); return; }
   S.sel=n;
   const nb=neighborsOf(n.id);           // click-to-expand: light up the node's neighbourhood
@@ -599,6 +671,7 @@ document.getElementById('panel').onclick=()=>{
   setTimeout(()=>{ resize(); fit(); }, 210); };  // let the grid transition finish, then refit
 document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
   document.getElementById('groupbtn').classList.toggle('on',S.grouped); draw(); };
+document.getElementById('egobtn').onclick=()=>setEgo(!S.ego);
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
 document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter') search();
   if(e.key==='Escape'){ e.target.value=''; S.match=null; draw(); } });
@@ -673,7 +746,10 @@ async function ask(){
 }
 async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
+  S.egoAdj=null;  // adjacency cache is stale after a rebuild
+  if(S.ego && S.egoAnchor && !S.byId[S.egoAnchor]) S.egoAnchor=null;  // focus removed
   relayout(); buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
+  if(S.ego) reEgo();
 }
 async function attachFiles(files){
   if(!files||!files.length) return;

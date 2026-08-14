@@ -6,6 +6,17 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-08-14
+
+### Added
+- **Ego / distance-intelligence view in the console.** An **Ego** toggle in the toolbar turns
+  the graph into a distance map: click any node to make it the focus, and every other node is
+  coloured by how many hops it sits from it — 0h (focus), 1h, 2–3h, 4+h — with nodes beyond
+  the chosen depth faded out. A depth slider (1–6 hops) re-roots the neighbourhood live, and a
+  banner reports the focus and how many nodes fall within range (e.g. *"focus MTOR · 218
+  within 3 hops"*). Pairs naturally with link prediction for exploring a node's structural
+  reach. Pure client-side (BFS over the shown relation graph); `graph.json` untouched.
+
 ## [4.1.0] - 2026-08-14
 
 ### Added
