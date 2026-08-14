@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-08-14
+
+### Added
+- **Smoother graph interaction.** Clicking a node now glides the camera to it (eased) and
+  draws a soft selection halo; clicking the **same** node again, clicking empty canvas, or
+  pressing **Escape** clears the selection ("undo"). Faded (non-neighbour) nodes are clickable
+  again, so you can jump straight from one focus to another. Dragging or zooming cancels an
+  in-flight glide so manual control always wins.
+
+### Fixed
+- **Top search box now actually shows results.** A query matching entities highlighted them
+  off-screen (and a no-match query faded the *entire* graph to near-invisible, so it looked
+  broken). Search now pans/zooms the camera to the matches, and on no match keeps the whole
+  graph visible with a clear message (plus any passage hits) instead of blacking it out.
+- **Grouped view is readable.** Instead of drawing hundreds of overlapping community hulls and
+  labels, **Group** now lays each community out as its own separated circular cluster on a
+  grid, and labels only the largest clusters. Toggling Group off restores the previous layout.
+
 ## [4.4.1] - 2026-08-14
 
 ### Changed

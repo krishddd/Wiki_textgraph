@@ -408,18 +408,26 @@ function edgeActive(e){ if(S.date===null) return true;
   return true; }
 
 function drawGroups(labelColor){
-  const g={};  // community -> {xs,ys,label}
+  const g={};  // community -> {xs,ys,label,cid}
   for(const n of S.g.nodes){ if(!visible(n)||n.community<0||n.community==null) continue;
-    (g[n.community]=g[n.community]||{xs:[],ys:[],label:n.community_label||('#'+n.community)});
+    (g[n.community]=g[n.community]||{xs:[],ys:[],label:n.community_label||('#'+n.community),cid:n.community});
     g[n.community].xs.push(SX(n)); g[n.community].ys.push(SY(n)); }
-  for(const k in g){ const m=g[k]; if(m.xs.length<2) continue;
+  // Rank clusters by size; only the largest ~18 get a label so text never piles up.
+  const sized=Object.values(g).filter(m=>m.xs.length>=2).sort((a,b)=>b.xs.length-a.xs.length);
+  const labelled=new Set(sized.slice(0,18).filter(m=>m.xs.length>=3).map(m=>m.cid));
+  const ergb=cssv('--edge-rgb')||'120,130,150';
+  for(const m of sized){
     const cx=m.xs.reduce((a,b)=>a+b,0)/m.xs.length, cy=m.ys.reduce((a,b)=>a+b,0)/m.ys.length;
     let rr=0; for(let i=0;i<m.xs.length;i++){ rr=Math.max(rr,Math.hypot(m.xs[i]-cx,m.ys[i]-cy)); }
-    rr+=22; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7);
-    ctx.fillStyle='rgba('+(cssv('--edge-rgb')||'120,130,150')+',0.06)'; ctx.fill();
-    ctx.strokeStyle='rgba('+(cssv('--edge-rgb')||'120,130,150')+',0.25)'; ctx.lineWidth=1; ctx.stroke();
-    ctx.fillStyle=labelColor; ctx.font='600 11px ui-sans-serif,system-ui';
-    ctx.fillText(m.label.slice(0,28), cx-rr+6, cy-rr+14); }
+    rr+=18; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7);
+    ctx.fillStyle='rgba('+ergb+',0.05)'; ctx.fill();
+    ctx.strokeStyle='rgba('+ergb+',0.22)'; ctx.lineWidth=1; ctx.stroke();
+    if(labelled.has(m.cid)){                       // a compact chip label above the bubble
+      const txt=m.label.replace(/\s*\([^)]*\)\s*$/,'').slice(0,26);
+      ctx.fillStyle=labelColor; ctx.font='600 11px ui-sans-serif,system-ui';
+      ctx.textAlign='center'; ctx.fillText(txt, cx, cy-rr-4); ctx.textAlign='left';
+    }
+  }
 }
 function draw(){
   const r = c.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
@@ -453,9 +461,12 @@ function draw(){
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
     const x=SX(n),y=SY(n),rr=rad(n); const d=dim(n);
+    const isSel=S.sel&&S.sel.id===n.id;
+    if(isSel){ ctx.save(); ctx.globalAlpha=0.22; ctx.beginPath(); ctx.arc(x,y,rr+9,0,7);
+      ctx.fillStyle=accent; ctx.fill(); ctx.restore(); }   // soft selection halo
     ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.fillStyle=nodeColor(n);
     ctx.globalAlpha = d?0.14:1; ctx.fill();
-    if(S.sel&&S.sel.id===n.id){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=selColor; ctx.stroke(); }
+    if(isSel){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=selColor; ctx.stroke(); }
     if(S.pick.includes(n.id)){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=accent; ctx.stroke(); }
     ctx.globalAlpha=1;
     if(rr*S.scale>6 && !d){ ctx.fillStyle=labelColor; ctx.font='11px ui-sans-serif,system-ui';
@@ -466,16 +477,39 @@ function draw(){
 }
 
 function hit(mx,my){ let best=null,bd=1e9;
-  for(const n of S.g.nodes){ if(!visible(n)||dim(n)) continue;
+  for(const n of S.g.nodes){ if(!visible(n)) continue;   // faded nodes are still clickable
     const dx=SX(n)-mx, dy=SY(n)-my, d=Math.hypot(dx,dy), rr=Math.max(7,rad(n));
     if(d<rr && d<bd){ bd=d; best=n; } } return best; }
 
+// Smooth camera glide (easeInOutQuad) — used when a pick recentres the view.
+let _anim=0;
+function animateTo(tx,ty,scale,ms){
+  const sx=S.tx, sy=S.ty, ss=S.scale, t0=performance.now(), id=++_anim;
+  (function step(now){ if(id!==_anim) return;           // a newer animation supersedes this one
+    let k=Math.min(1,(now-t0)/ms); k=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    S.tx=sx+(tx-sx)*k; S.ty=sy+(ty-sy)*k; S.scale=ss+(scale-ss)*k; draw();
+    if(k<1) requestAnimationFrame(step); })(t0);
+}
+function focusNode(n){ const r=c.getBoundingClientRect();   // glide the node toward centre
+  animateTo(r.width/2-n.x*S.scale, r.height/2-n.y*S.scale, S.scale, 420); }
+function clearSelection(){                                // "undo" a click: back to the full map
+  S.sel=null; S.match=null; S.pathEdges=new Set(); S.predEdges=new Set();
+  const d=document.getElementById('detail');
+  if(d) d.innerHTML='<div class="empty">Click a node to inspect its cited claims.</div>';
+  draw();
+}
+
 let drag=null;
-c.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,tx:S.tx,ty:S.ty,moved:0}; c.classList.add('grabbing'); });
+c.addEventListener('mousedown',e=>{ _anim++;   // manual control cancels any camera glide
+  drag={x:e.clientX,y:e.clientY,tx:S.tx,ty:S.ty,moved:0}; c.classList.add('grabbing'); });
 addEventListener('mouseup',e=>{
   if(drag && drag.moved<4){ const r=c.getBoundingClientRect(); const n=hit(e.clientX-r.left,e.clientY-r.top);
-    if(n) onPick(n); }
+    if(n) onPick(n);
+    else if(!S.pathMode) clearSelection();   // click on empty canvas = deselect
+  }
   drag=null; c.classList.remove('grabbing'); });
+addEventListener('keydown',e=>{ if(e.key==='Escape' && document.activeElement.tagName!=='INPUT'){
+  if(S.ego) setEgo(false); else clearSelection(); } });
 addEventListener('mousemove',e=>{
   const r=c.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   if(drag){ drag.moved+=Math.abs(e.movementX)+Math.abs(e.movementY);
@@ -485,7 +519,7 @@ addEventListener('mousemove',e=>{
   if(n){ tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my+8)+'px';
     tip.innerHTML=`<b>${esc(n.name)}</b>${n.community_label?' · '+esc(n.community_label):''}`; c.style.cursor='pointer'; }
   else { tip.style.display='none'; c.style.cursor=drag?'grabbing':'grab'; } });
-c.addEventListener('wheel',e=>{ e.preventDefault(); const r=c.getBoundingClientRect();
+c.addEventListener('wheel',e=>{ e.preventDefault(); _anim++; const r=c.getBoundingClientRect();
   const mx=e.clientX-r.left,my=e.clientY-r.top, f=e.deltaY<0?1.1:1/1.1;
   S.tx=mx-(mx-S.tx)*f; S.ty=my-(my-S.ty)*f; S.scale*=f; draw(); },{passive:false});
 
@@ -542,12 +576,14 @@ function setEgo(on){
 }
 
 function onPick(n){
-  if(S.ego){ S.egoAnchor=n.id; reEgo(); inspect(n); return; }   // re-root the ego view
+  if(S.ego){ S.egoAnchor=n.id; reEgo(); focusNode(n); inspect(n); return; }   // re-root the ego view
   if(S.pathMode){ S.pick.push(n.id); if(S.pick.length===2){ runPath(); } draw(); return; }
+  if(S.sel && S.sel.id===n.id){ clearSelection(); return; }   // click the same node = undo
   S.sel=n;
   const nb=neighborsOf(n.id);           // click-to-expand: light up the node's neighbourhood
   S.match = nb.set.size>1 ? nb.set : null;
   S.pathEdges = nb.edges;
+  focusNode(n);                          // glide the picked node toward centre
   draw(); inspect(n);
 }
 
@@ -586,17 +622,60 @@ async function runPath(){
 }
 async function search(){
   S.q=document.getElementById('q').value.trim();
-  if(!S.q){ S.match=null; draw(); return; }
-  const res=await TG.search(S.q);
-  S.match=new Set();
-  for(const hit of res.hits){ if(hit.kind==='entity'){ S.match.add(hit.node_id); } }
-  const ql=S.q.toLowerCase();
-  for(const n of S.g.nodes){ if(n.name.toLowerCase().includes(ql)) S.match.add(n.id); }
   const d=document.getElementById('detail');
-  const chunks=res.hits.filter(h=>h.kind==='chunk');
-  d.innerHTML=`<div class="title">Search · "${esc(S.q)}"</div><div class="sub">${res.routing||''} routing · ${S.match.size} match(es)</div>`+
-    (chunks.map(h=>`<div class="fact">${esc(h.snippet||h.name)}<div class="cite">${esc(citeStr(h.citations))}</div></div>`).join('')||'<div class="empty">no passages</div>');
+  if(!S.q){ S.match=null; S.sel=null; draw();
+    d.innerHTML='<div class="empty">Click a node to inspect its cited claims.</div>'; return; }
+  let res; try{ res=await TG.search(S.q); }catch(e){
+    d.innerHTML=`<div class="title">Search · "${esc(S.q)}"</div><div class="empty">search error: ${esc(e.message||e)}</div>`; return; }
+  // Only entities actually on the canvas (the top-N view) can be highlighted.
+  const matched=new Set(); const ql=S.q.toLowerCase();
+  for(const hit of (res.hits||[])){ if(hit.kind==='entity' && S.byId[hit.node_id]) matched.add(hit.node_id); }
+  for(const n of S.g.nodes){ if(n.name.toLowerCase().includes(ql)) matched.add(n.id); }
+  const chunks=(res.hits||[]).filter(h=>h.kind==='chunk');
+  const chunkHtml=chunks.map(h=>`<div class="fact">${esc(_clip(h.snippet||h.name,240))}<div class="cite">${esc(citeStr(h.citations))}</div></div>`).join('');
+  if(matched.size===0){
+    // No entity on the canvas matched — keep the whole graph visible (don't fade everything).
+    S.match=null; S.sel=null; draw();
+    const note = (res.hits&&res.hits.length) ? `${res.hits.length} passage match(es), but no shown entity` : 'no matches';
+    d.innerHTML=`<div class="title">Search · "${esc(S.q)}"</div><div class="sub">${esc(note)}</div>`
+      + (chunkHtml||'<div class="empty">Try an entity name you can see on the graph.</div>');
+    return;
+  }
+  S.match=matched; S.sel=null; S.pathEdges=new Set();
+  fitNodes([...matched]);   // glide the camera to the matches so you actually see them
   draw();
+  d.innerHTML=`<div class="title">Search · "${esc(S.q)}"</div><div class="sub">${esc(res.routing||'')} routing · ${matched.size} match(es) shown</div>`
+    + (chunkHtml||'<div class="empty">no passages</div>');
+}
+function _clip(s,n){ s=String(s||''); return s.length>n?s.slice(0,n)+'…':s; }
+
+// Grouped layout: pack each community into its own tidy circular cluster laid out on a grid,
+// so the community "bubbles" are separated and readable (instead of overlapping hulls). Node
+// positions are saved first and restored when Group is turned off.
+function groupLayout(){
+  if(!S._preGroup){ S._preGroup={}; S.g.nodes.forEach(n=>{ S._preGroup[n.id]={x:n.x,y:n.y}; }); }
+  const byComm={};
+  for(const n of S.g.nodes){ const c=(n.community==null?-1:n.community);
+    (byComm[c]=byComm[c]||[]).push(n); }
+  const clusters=Object.entries(byComm).filter(([c,ns])=>c!=='-1'&&ns.length>=2)
+    .sort((a,b)=>b[1].length-a[1].length);
+  const singles=[]; for(const [c,ns] of Object.entries(byComm)){ if(c==='-1'||ns.length<2) singles.push(...ns); }
+  const cols=Math.max(1,Math.ceil(Math.sqrt(clusters.length))), cell=560;
+  clusters.forEach(([c,ns],i)=>{
+    const gx=(i%cols)*cell, gy=Math.floor(i/cols)*cell, rad=34+Math.sqrt(ns.length)*30;
+    ns.sort((a,b)=>b.pagerank-a.pagerank);
+    ns.forEach((n,j)=>{ const a=2.399963*j, r=rad*Math.sqrt((j+0.5)/ns.length);
+      n.x=gx+Math.cos(a)*r; n.y=gy+Math.sin(a)*r; });
+  });
+  const rows=Math.max(1,Math.ceil(clusters.length/cols)), spanX=cols*cell;
+  const baseY=rows*cell+cell*0.35;   // singletons drift in a loose band below the clusters
+  singles.forEach((n,i)=>{ const a=2.399963*i, r=Math.sqrt(i+1)*26;
+    n.x=(spanX/2-cell/2)+Math.cos(a)*r; n.y=baseY+Math.sin(a)*r*0.5; });
+}
+function ungroupLayout(){
+  if(!S._preGroup) return;
+  S.g.nodes.forEach(n=>{ const p=S._preGroup[n.id]; if(p){ n.x=p.x; n.y=p.y; } });
+  S._preGroup=null;
 }
 
 function setPathMode(on){ S.pathMode=on; S.pick=[]; document.getElementById('pathbtn').classList.toggle('on',on); }
@@ -721,7 +800,8 @@ document.getElementById('panel').onclick=()=>{
   document.getElementById('panel').classList.toggle('on', b.classList.contains('solo'));
   syncRail(); setTimeout(()=>{ resize(); fit(); }, 210); };  // transition then refit
 document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
-  document.getElementById('groupbtn').classList.toggle('on',S.grouped); syncRail(); draw(); };
+  document.getElementById('groupbtn').classList.toggle('on',S.grouped); syncRail();
+  if(S.grouped) groupLayout(); else ungroupLayout(); fit(); };
 document.getElementById('egobtn').onclick=()=>setEgo(!S.ego);
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
 // Left-rail shortcuts proxy to the header controls (single source of truth for behaviour).
@@ -817,9 +897,10 @@ async function ask(){
 }
 async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  S.egoAdj=null;  // adjacency cache is stale after a rebuild
+  S.egoAdj=null; S._preGroup=null;  // caches stale after a rebuild
   if(S.ego && S.egoAnchor && !S.byId[S.egoAnchor]) S.egoAnchor=null;  // focus removed
-  relayout(); buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
+  relayout(); if(S.grouped) groupLayout();
+  buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
   if(S.ego) reEgo();
 }
 async function attachFiles(files){
