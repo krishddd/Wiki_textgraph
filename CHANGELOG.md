@@ -6,6 +6,34 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-08-14
+
+The **NotebookLM-style graph console** release. The web viewer went from a static
+force-laid dashboard to a self-organising, meaning-rich mind-map, and opt-in LLM relations
+are now first-class citizens on the canvas. `graph.json` and every gate are untouched — all
+of this is console-view behaviour.
+
+### Added
+- **LLM-extracted relations are always visible.** `--llm-extract` creates `entity:LLM:` nodes
+  that carry little PageRank, so their `X →REGULATES→ Y` edges used to fall below the top-N
+  rank cutoff and never render. The graph view now keeps every explicit-relation endpoint
+  first (LLM and rule relations alike), then fills the remaining budget by PageRank — so the
+  meaningful relations you built always show. On a sample corpus this took the shown relation
+  count from **1 to 239**.
+- **NotebookLM / Semantica-style mind-map layout** (from 3.8.0–3.9.1, consolidated here): a
+  client-side force layout clusters connected entities and fills the panel; a co-occurrence
+  backbone links entities that share a passage (hub-and-spoke for large passages) so a
+  relation-sparse build still spreads instead of collapsing to a ring; unlinked nodes scatter
+  as a filled halo. A ↔ toggle collapses the side panel for full-width graph.
+- **`build --llm-extract-budget N`** to dial LLM relation-extraction density (default 40).
+
+### Changed
+- Communities panel capped to the top 40 clusters (`+ N smaller clusters`).
+- README + Status describe the mind-map console and the always-visible LLM relations.
+
+### Fixed
+- Canvas re-fits after the Ask dock collapses/expands and after the full-width toggle.
+
 ## [3.9.1] - 2026-08-14
 
 ### Changed

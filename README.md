@@ -131,11 +131,15 @@ textgraph watch ./case-files -o textgraph-out
 # ...or open the interactive graph console (canvas viewer + all eight tools):
 textgraph console ./case-files          # -> http://127.0.0.1:8765
 
+# For a denser, meaning-rich map, build with LLM relation extraction first, then serve it:
+textgraph build ./case-files --llm-extract --llm-extract-budget 200 -o ./case-out
+textgraph console ./case-out            # shows every LLM-extracted X -PRED-> Y relation
+
 # ...or query it in standard GQL (ISO/IEC 39075 / Cypher subset):
 textgraph gql ./case-files "MATCH (a:Organization)-[:CONTROLS*1..3]->(b) RETURN a.name, b.name"
 ```
 
-The console is a clean, spacious viewer that surfaces your data at a glance: a row of **stat cards** (entities · relations · communities · time points), the force-laid graph with nodes coloured by community and sized by PageRank, an **"Ask" chat dock** — ask a question in plain English and it routes to the right graph tool, answers with cited evidence (and a collapsible reasoning chain), and highlights the answer on the graph beside it, no LLM required — a **Top-entities-by-PageRank** list, a communities panel with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, **click-to-inspect** for a node's cited claims and validity windows, a path mode that traces the maximum-likelihood chain between two entities, a time slider that scrubs superseded relations, and a light / dark toggle. Layout is precomputed server-side and deterministic, so the browser only ever *draws* it — no CDN, no framework, no physics engine, `graph.json` stays byte-identical. The offline `graph.html` artifact is the exact same viewer. See **[docs/RUNNING.md](docs/RUNNING.md)** for a walkthrough.
+The console is a clean, spacious viewer that surfaces your data at a glance: a row of **stat cards** (entities · relations · communities · time points), a **NotebookLM / Semantica-style mind-map** — nodes coloured by entity type (with a legend) and sized by PageRank, self-organised by a client-side force layout so connected entities cluster and the map fills the whole panel (a ↔ toggle collapses the side panel for full width). When a build has few explicit relations, the console links entities that **co-occur in the same passage** so the graph still spreads instead of scattering; opt-in **LLM-extracted relations are always shown** (their endpoints are pulled into view regardless of PageRank rank, so the meaningful `X →REGULATES→ Y` edges surface). Alongside: an **"Ask" chat dock** — ask a question in plain English and it routes to the right graph tool, answers with cited evidence (and a collapsible reasoning chain), and highlights the answer on the graph beside it (with an opt-in **Narrate (LLM)** mode for grounded prose) — a **Top-entities-by-PageRank** list, a communities panel with per-cluster toggles, a confidence-tag filter (so `GENERATED` output stays visibly quarantined), search that highlights matches, **click-to-inspect** for a node's cited claims and validity windows, in-UI **document management** (attach / remove with `--allow-ingest`), a path mode that traces the maximum-likelihood chain between two entities, a time slider that scrubs superseded relations, and a light / dark toggle. The browser only ever *draws* and *arranges* the graph the server ships — no CDN, no framework, no third-party JS; `graph.json` stays byte-identical. The offline `graph.html` artifact is the exact same viewer. See **[docs/RUNNING.md](docs/RUNNING.md)** for a walkthrough.
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
 
@@ -206,6 +210,8 @@ flowchart TD
 ```
 
 ## Status
+
+🟢 **v4.0.0 — NotebookLM-style graph console.** The web console now self-organises into a mind-map: a client-side force layout clusters connected entities and fills the panel, a co-occurrence backbone connects entities that share a passage so even a relation-sparse build spreads, and opt-in **LLM-extracted relations are always shown** (their endpoints are pulled into view regardless of PageRank, so the meaningful `X →REGULATES→ Y` edges surface). `build --llm-extract-budget N` dials the LLM relation density. `graph.json` and the determinism/provenance gates are untouched.
 
 🟢 **v1.0.0 — the full L0–L9 stack is shipped** (deterministic ingest → IE → resolution → bi-temporal claims → analytics → hybrid retrieval → optional LLM, with CLI, MCP, and a local web console).
 

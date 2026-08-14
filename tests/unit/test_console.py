@@ -39,6 +39,34 @@ def test_cooccurrence_backbone_suppressed_when_relations_exist() -> None:
     assert not [e for e in gv["edges"] if e["predicate"] == "CO_OCCURS"]
 
 
+def test_llm_relation_endpoints_shown_despite_low_pagerank() -> None:
+    # A GENERATED (LLM-extracted) relation connects low-PageRank entity:LLM: nodes. Even when
+    # the view is capped below the number of higher-ranked entities, those endpoints and the
+    # relation must appear — otherwise the meaningful X -PRED-> Y edges the user built stay
+    # invisible under the rank cutoff.
+    from textgraph.store.base import ConfidenceTag, Edge, Node
+
+    nodes = [
+        Node(f"entity:hi:{i}", ("Entity",), {"name": f"Hi{i}", "pagerank": 0.9 - i * 0.01})
+        for i in range(10)
+    ]
+    a = Node("entity:LLM:alpha", ("Entity",), {"name": "Alpha", "pagerank": 0.0, "etype": "LLM"})
+    b = Node("entity:LLM:beta", ("Entity",), {"name": "Beta", "pagerank": 0.0, "etype": "LLM"})
+    nodes += [a, b]
+    edge = Edge(
+        edge_id="edge:1",
+        subject=a.node_id,
+        predicate="REGULATES",
+        object=b.node_id,
+        tag=ConfidenceTag.GENERATED,
+        confidence=0.5,
+    )
+    gv = QueryEngine(nodes, [edge]).graph_view(max_nodes=5)  # cap below the 10 hi-rank entities
+    shown = {n["id"] for n in gv["nodes"]}
+    assert {a.node_id, b.node_id} <= shown
+    assert any(e["predicate"] == "REGULATES" for e in gv["edges"])
+
+
 def test_index_serves_self_contained_html() -> None:
     status, ctype, body = route(_engine(), "/", {})
     assert status == 200

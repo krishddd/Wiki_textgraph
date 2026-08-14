@@ -248,7 +248,21 @@ class QueryEngine:
             self._entity_ids,
             key=lambda nid: (-float(self._node[nid].properties.get("pagerank", 0.0)), nid),
         )
-        kept = set(ranked[:max_nodes])
+        # Entities that take part in an explicit (non-plumbing) relation are the semantic
+        # backbone — this includes opt-in LLM-extracted relations, whose `entity:LLM:` nodes
+        # carry little/no PageRank and would otherwise fall below the rank cutoff, hiding the
+        # very `X -REGULATES-> Y` edges the user built. Keep those endpoints first, then fill
+        # the remaining budget by PageRank, so meaningful relations are always visible.
+        rel_endpoints = {
+            nid
+            for e in self._edges
+            if e.predicate not in _NON_RELATION
+            for nid in (e.subject, e.object)
+            if nid in self._entity_ids
+        }
+        prioritized = [nid for nid in ranked if nid in rel_endpoints]
+        prioritized += [nid for nid in ranked if nid not in rel_endpoints]
+        kept = set(prioritized[:max_nodes])
         nodes = [
             {
                 "id": nid,
