@@ -908,7 +908,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_secure.set_defaults(func=_cmd_secure)
 
     p_console = sub.add_parser("console", help="serve the local web console over the graph")
-    p_console.add_argument("path", help="corpus path or .duckdb snapshot")
+    p_console.add_argument(
+        "path",
+        help="corpus dir, a built graph.json / output dir (serves the pre-built, e.g. "
+        "LLM-enriched, graph as-is), or a .duckdb snapshot",
+    )
     p_console.add_argument("--host", default="127.0.0.1", help="bind host (default 127.0.0.1)")
     p_console.add_argument("--port", type=int, default=8765, help="bind port (default 8765)")
     p_console.add_argument(

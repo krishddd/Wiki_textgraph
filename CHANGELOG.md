@@ -6,6 +6,23 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-08-08
+
+### Added
+- **The console can serve a pre-built `graph.json`.** `textgraph console textgraph-out`
+  (or `…/graph.json`, or a `.duckdb`) now serves the **already-built** graph instead of
+  silently rebuilding with the deterministic default. This means an **LLM-enriched build**
+  (`build --llm-extract`) shows *all* its `GENERATED` relations in the UI — previously the
+  console rebuilt without the LLM, so a legal/technical corpus (0 deterministic relations)
+  looked like disconnected dots. New `load_graph_json()` reconstructs `(nodes, edges)` from
+  a written `graph.json` (tags + byte-span citations preserved).
+
+  Typical flow — one build with intelligence, then explore it in the browser:
+  ```
+  textgraph build ./docs --llm-extract -o out
+  textgraph console out
+  ```
+
 ## [3.3.2] - 2026-08-08
 
 **Prove & guard the investigator defaults.** PDF ingestion and entity resolution have run

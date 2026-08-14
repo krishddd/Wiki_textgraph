@@ -5169,7 +5169,7 @@ wheels = [
 
 [[package]]
 name = "textgraph-kg"
-version = "3.3.2"
+version = "3.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "blake3" },

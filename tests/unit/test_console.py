@@ -138,3 +138,25 @@ def test_export_graph_bytes_is_valid_graph_json() -> None:
     assert len(doc["edges"]) == len(r.edges)
     # Deterministic: same graph -> byte-identical export.
     assert export_graph_bytes(QueryEngine(r.nodes, r.edges)) == body
+
+
+def test_console_serves_a_prebuilt_graph_json(tmp_path: Path) -> None:
+    # `textgraph console textgraph-out/graph.json` (or the output dir) serves the ALREADY
+    # built graph -- so an LLM-enriched build shows all its relations, no silent rebuild.
+    from textgraph.console.server import build_engine
+    from textgraph.l9_artifacts.graph_json import load_graph_json
+    from textgraph.pipeline import build_graph_bytes
+
+    out = tmp_path / "graph.json"
+    out.write_bytes(build_graph_bytes(DOCS))
+    r = build(DOCS)
+
+    nodes, edges = load_graph_json(out)
+    assert len(nodes) == len(r.nodes) and len(edges) == len(r.edges)
+    # tags + spans survive the round-trip (provenance intact).
+    assert {str(e.tag) for e in edges} == {str(e.tag) for e in r.edges}
+    assert any(e.source_spans for e in edges)
+
+    # build_engine accepts the graph.json file AND its containing directory.
+    assert build_engine(out).search("Acme", k=3).to_dict()["hits"]
+    assert build_engine(tmp_path).search("Acme", k=3).to_dict()["hits"]

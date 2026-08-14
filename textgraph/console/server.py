@@ -25,8 +25,21 @@ from textgraph.l8_retrieval.engine import QueryEngine
 
 
 def build_engine(source: str | Path) -> QueryEngine:
-    """Build a QueryEngine from a corpus directory or a persisted ``.duckdb`` file."""
+    """Build a QueryEngine from a corpus dir, a ``.duckdb`` file, or a built ``graph.json``.
+
+    Passing a ``graph.json`` (or a build-output directory containing one) serves the
+    *already-built* graph without re-running the pipeline — so an LLM-enriched build
+    (``build --llm-extract``) shows all its relations in the UI, instead of the console
+    silently rebuilding with the deterministic default.
+    """
     path = Path(source)
+    if path.is_dir() and (path / "graph.json").is_file():
+        path = path / "graph.json"  # a build-output dir -> serve its graph.json
+    if path.is_file() and path.suffix == ".json":
+        from textgraph.l9_artifacts.graph_json import load_graph_json
+
+        nodes, edges = load_graph_json(path)
+        return QueryEngine(nodes, edges)
     if path.is_file() and path.suffix == ".duckdb":
         from textgraph.store.duckdb_store import load_graph
 
