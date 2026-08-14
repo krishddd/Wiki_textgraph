@@ -6,6 +6,15 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-08-08
+
+### Fixed
+- **Console layout now fits the browser tab; the Ask dock is always visible.** `#main` (a grid
+  child) was missing `min-height:0`, so on shorter viewports its flex children overflowed and —
+  with `overflow:hidden` — the **Ask** chat dock was clipped off the bottom (you couldn't ask
+  questions). The graph canvas now shrinks to fit and the Ask box stays on-screen, no page
+  scroll. (`min-height:0` on `#main`, `#ask` is `flex:none`.)
+
 ## [3.7.0] - 2026-08-08
 
 ### Changed

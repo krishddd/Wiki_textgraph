@@ -69,7 +69,8 @@ RENDERER_CSS = """
 
   /* Body: canvas column + inspector */
   #body { display:grid; grid-template-columns:1fr 340px; min-height:0; }
-  #main { display:flex; flex-direction:column; min-width:0; padding:18px 18px 0; gap:16px; }
+  #main { display:flex; flex-direction:column; min-width:0; min-height:0; padding:16px 16px 0;
+    gap:12px; }
 
   /* Stat cards — the headline data points */
   #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
@@ -151,7 +152,7 @@ RENDERER_CSS = """
   .empty { color:var(--mut); padding:10px 0; }
 
   /* Ask — the grounded chat dock */
-  #ask { display:flex; flex-direction:column; height:280px; margin-bottom:18px;
+  #ask { display:flex; flex-direction:column; height:236px; flex:none; margin-bottom:14px;
     background:var(--card); border:1px solid var(--line); border-radius:16px;
     box-shadow:var(--shadow); overflow:hidden; transition:height .18s ease; }
   #ask.collapsed { height:46px; }
