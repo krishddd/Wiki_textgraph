@@ -185,6 +185,23 @@ def _cmd_neighbors(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_predict(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    preds = _engine(root).predict_links(args.node, index=args.index, k=args.k)
+    if not preds:
+        print("no candidate links found")
+        return 0
+    scope = f" for {args.node}" if args.node else ""
+    print(f"predicted links{scope} ({args.index}):")
+    for p in preds:
+        shared = ", ".join(p["shared"][:4])
+        print(f"  {p['source_name']} ~ {p['target_name']}  [{p['score']}]  via {shared}")
+    return 0
+
+
 def _fmt_window(c: dict[str, object]) -> str:
     if c["t_valid"] and c.get("t_invalid"):
         return f"  valid=[{c['t_valid']}, {c['t_invalid']}) SUPERSEDED"
@@ -808,6 +825,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_neigh.add_argument("node", help="entity (id or name)")
     p_neigh.add_argument("-k", type=int, default=20, help="max neighbors (default 20)")
     p_neigh.set_defaults(func=_cmd_neighbors)
+
+    p_predict = sub.add_parser(
+        "predict", help="predict likely-missing relations from graph structure (Adamic-Adar)"
+    )
+    p_predict.add_argument("path", help="corpus path to build")
+    p_predict.add_argument("node", nargs="?", default=None, help="anchor entity (optional)")
+    p_predict.add_argument(
+        "--index",
+        default="adamic_adar",
+        choices=["adamic_adar", "common_neighbors", "resource_allocation"],
+        help="overlap index (default adamic_adar)",
+    )
+    p_predict.add_argument("-k", type=int, default=12, help="max predictions (default 12)")
+    p_predict.set_defaults(func=_cmd_predict)
 
     p_timeline = sub.add_parser("timeline", help="claims about an entity ordered by validity")
     p_timeline.add_argument("path", help="corpus path to build")

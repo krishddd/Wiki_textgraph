@@ -262,6 +262,7 @@ SKELETON_HTML = """
             <option value="path">Path</option>
             <option value="why">Why</option>
             <option value="neighbors">Neighbors</option>
+            <option value="predict">Predict links</option>
             <option value="timeline">Timeline</option>
             <option value="contradictions">Contradictions</option>
             <option value="conflicts">Conflicts</option>
@@ -300,7 +301,8 @@ const PALETTE = ['#4f6bff','#f59e42','#e0555b','#2bb7a3','#7bc043','#f2c14e','#c
   '#ef8fb4','#9b7b5b','#8a94a6','#3aa0ff','#ff7a59','#59c1ff','#b08cff'];
 const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
-  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(), date:null, grouped:false };
+  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(),
+  predEdges:new Set(), date:null, grouped:false };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -373,6 +375,13 @@ function draw(){
       ctx.fillText(e.predicate.replace(/_/g,' ').slice(0,22), mx+3, my-3);
     }
   }
+  // Predicted "candidate" links — dashed, in the support colour, since they don't exist yet.
+  if(S.predEdges&&S.predEdges.size){ const sup=cssv('--sup')||'#e0555b';
+    ctx.save(); ctx.setLineDash([6,5]); ctx.strokeStyle=sup; ctx.lineWidth=1.6;
+    for(const key of S.predEdges){ const [s,t]=key.split('>'); const a=byId[s], b=byId[t];
+      if(!a||!b||!visible(a)||!visible(b)) continue;
+      ctx.beginPath(); ctx.moveTo(SX(a),SY(a)); ctx.lineTo(SX(b),SY(b)); ctx.stroke(); }
+    ctx.restore(); }
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
     const x=SX(n),y=SY(n),rr=rad(n); const d=dim(n);
@@ -618,6 +627,11 @@ function detailHtml(ans){
     const steps=d.map(h=>`<div class="step">[${esc(h.category)}] ${esc(h.name)} <span style="color:var(--mut)">(${(+h.score).toFixed(2)})</span></div>`).join('');
     return `<details class="chain" open><summary>${d.length} decision(s)</summary>${steps}</details>`;
   }
+  if(ans.tool==='predict'){
+    const steps=d.map(p=>`<div class="step"><b>${esc(p.source)}</b> &middot;&middot;&middot; <b>${esc(p.target)}</b> <span style="color:var(--mut)">(${(+p.score).toFixed(3)})</span>`
+      +(p.shared&&p.shared.length?`<br><span style="color:var(--mut)">via ${esc(p.shared.slice(0,4).join(', '))}</span>`:'')+`</div>`).join('');
+    return `<details class="chain" open><summary>${d.length} candidate link(s)</summary>${steps}</details>`;
+  }
   return '';
 }
 function addMsg(cls,html){ const log=document.getElementById('asklog');
@@ -631,9 +645,13 @@ function fitNodes(ids){ const pts=(ids||[]).map(i=>S.byId[i]).filter(Boolean); i
   const sx=(r.width-2*pad)/((maxx-minx)||1), sy=(r.height-2*pad)/((maxy-miny)||1);
   S.scale=Math.min(Math.max(Math.min(sx,sy),0.6),2.4);
   S.tx=r.width/2-((minx+maxx)/2)*S.scale; S.ty=r.height/2-((miny+maxy)/2)*S.scale; }
-function applyHighlight(h){
+function applyHighlight(h, tool){
   S.match=(h&&h.nodes&&h.nodes.length)?new Set(h.nodes):null;
-  S.pathEdges=new Set(); if(h&&h.edges) h.edges.forEach(e=>{ if(e[0]&&e[1]) S.pathEdges.add(e[0]+'>'+e[1]); });
+  // Predicted "candidate" links are drawn dashed (they don't exist in the graph yet);
+  // every other tool's highlighted edges are solid path edges.
+  S.predEdges=new Set(); S.pathEdges=new Set();
+  if(h&&h.edges){ const bucket = tool==='predict' ? S.predEdges : S.pathEdges;
+    h.edges.forEach(e=>{ if(e[0]&&e[1]) bucket.add(e[0]+'>'+e[1]); }); }
   fitNodes(h&&h.nodes); draw();
 }
 let asking=false;
@@ -649,7 +667,7 @@ async function ask(){
     const conf = ans.abstained ? '<span class="conf abstain">abstained</span>'
       : (typeof ans.confidence==='number' ? `<span class="conf">${Math.round(ans.confidence*100)}% grounded</span>` : '');
     bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`+chainHtml(ans.detail)+detailHtml(ans)+citeChips(ans.evidence);
-    applyHighlight(ans.highlight);
+    applyHighlight(ans.highlight, ans.tool);
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
   asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;
 }

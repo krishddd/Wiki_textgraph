@@ -153,6 +153,8 @@ def _dispatch(
         return _timeline(engine, e) if e else _reason(engine, q, mode)
     if chosen == "contradictions":
         return _contradictions(engine)
+    if chosen == "predict":
+        return _predict(engine, q, focus)
     if chosen == "narrate":
         return _narrate(engine, q)
     if chosen == "conflicts":
@@ -374,6 +376,47 @@ def _contradictions(engine: QueryEngine) -> ChatAnswer:
         text=text,
         tool="contradictions",
         detail=[{"a": p.claim_a.to_dict(), "b": p.claim_b.to_dict()} for p in res.pairs],
+    )
+
+
+def _predict(engine: QueryEngine, q: str, focus: str | None) -> ChatAnswer:
+    """Structural link prediction: suggest likely-missing relations (Adamic-Adar).
+
+    If the question names an entity (or one is in focus), predictions are scoped to it;
+    otherwise the strongest candidate links across the whole graph are returned. Predictions
+    are suggestions from topology, so they carry no citations (they never abstain) and are
+    surfaced as candidate edges the frontend draws dashed.
+    """
+    e = _one_entity(engine, q, focus)
+    preds = engine.predict_links(e, k=10) if e else engine.predict_links(k=12)
+    if not preds:
+        return ChatAnswer(
+            text="No candidate links found from the current graph structure.",
+            tool="predict",
+            focus=e,
+        )
+    scope = f" for {engine._name(e)}" if e else ""
+    summary = "; ".join(
+        f"{p['source_name']} — {p['target_name']} ({p['score']})" for p in preds[:6]
+    )
+    nodes = sorted({p["source"] for p in preds} | {p["target"] for p in preds})
+    edges = [[p["source"], p["target"]] for p in preds]
+    detail = [
+        {
+            "source": p["source_name"],
+            "target": p["target_name"],
+            "score": p["score"],
+            "shared": p["shared"],
+        }
+        for p in preds
+    ]
+    return ChatAnswer(
+        text=f"Top candidate links{scope}: {summary}.",
+        tool="predict",
+        focus=e,
+        highlight_nodes=nodes,
+        highlight_edges=edges,
+        detail=detail,
     )
 
 

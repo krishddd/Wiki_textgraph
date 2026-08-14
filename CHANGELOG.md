@@ -6,6 +6,22 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-08-14
+
+### Added
+- **Structural link prediction** — a new deterministic capability that suggests likely-missing
+  relations from graph topology, matching the one substantial Semantica KG-engine feature
+  TextGraph lacked. `textgraph/l7_analytics/link_prediction.py` scores unconnected entity
+  pairs by shared-neighbour overlap (**Adamic-Adar** default, plus common-neighbours and
+  resource-allocation), returning the top candidates with the shared entities that drove each
+  one (explainable, byte-reproducible). Surfaced three ways:
+  - `QueryEngine.predict_links(handle=None, index=..., k=...)`
+  - `textgraph predict <path> [node] [--index] [-k]` CLI verb
+  - a **Predict links** tool in the console Ask dock — predictions render as **dashed
+    candidate edges** on the graph, with the shared-neighbour evidence listed in the reply.
+  Predictions are suggestions from structure, so they carry no citations and are never written
+  into `graph.json` (query-time only; determinism/provenance gates untouched).
+
 ## [4.0.1] - 2026-08-14
 
 ### Changed

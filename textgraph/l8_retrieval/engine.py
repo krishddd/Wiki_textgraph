@@ -388,6 +388,39 @@ class QueryEngine:
             )
         return out
 
+    def predict_links(
+        self,
+        handle: str | None = None,
+        *,
+        index: str = "adamic_adar",
+        k: int = 12,
+    ) -> list[dict[str, Any]]:
+        """Predict likely-missing entity relations from graph structure (deterministic).
+
+        Scores unconnected entity pairs by shared-neighbour overlap (Adamic-Adar by default).
+        With ``handle`` set, only predictions incident to that entity are returned. Each
+        prediction carries the shared entities that drove it, so it's explainable — never
+        written to ``graph.json`` (a suggestion, surfaced as an ``INFERRED`` candidate).
+        """
+        from textgraph.l7_analytics.link_prediction import predict_links as _predict
+
+        adj = {nid: [obj for obj, _ in self._rel_adj.get(nid, [])] for nid in self._entity_ids}
+        anchor = self.resolve(handle) if handle else None
+        if handle and anchor is None:
+            return []
+        preds = _predict(adj, index=index, k=k, anchor=anchor)
+        return [
+            {
+                "source": p.source,
+                "target": p.target,
+                "source_name": self._name(p.source),
+                "target_name": self._name(p.target),
+                "score": p.score,
+                "shared": [self._name(s) for s in p.shared],
+            }
+            for p in preds
+        ]
+
     # -- helpers ----------------------------------------------------------------
 
     def _name(self, node_id: str) -> str:
