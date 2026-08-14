@@ -25,3 +25,7 @@ graph.html
 .DS_Store
 .idea/
 .vscode/
+
+# Build output (never commit)
+textgraph-out/
+*-out/
