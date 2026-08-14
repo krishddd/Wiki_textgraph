@@ -212,6 +212,8 @@ flowchart TD
 
 ## Status
 
+🟢 **v4.4.0 — studio-style console chrome.** A left rail, a segmented top toolbar, and collapsible inspector sections give the console a clean knowledge-studio layout.
+
 🟢 **v4.3.0 — forward-chaining rule engine (Datalog).** Derive new relations from recursive IF/THEN rules with a full derivation trace: `textgraph rules`, a **Rules** console tool, and `QueryEngine.apply_rules`. Closes the Semantica reasoning-engine gap.
 
 🟢 **v4.2.0 — ego / distance-intelligence view.** An **Ego** toggle colours the graph by hop-distance from a clicked focus node (0h / 1h / 2–3h / 4+h) with a live depth slider — a distance map for exploring a node's structural reach.

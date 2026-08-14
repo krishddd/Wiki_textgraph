@@ -6,6 +6,18 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-08-14
+
+### Changed
+- **Studio-style console chrome** (Semantica-inspired). The console now has a slim **left rail**
+  (brand + quick shortcuts: fit, ego, group, full-width, theme) spanning the full height, a
+  **segmented top toolbar** with labelled *Analyze* (Ego / Path / Group) and *View* (Fit /
+  full-width) bands, and **collapsible inspector sections** — click any right-panel header
+  (Communities, Top entities, Confidence tags, Documents) to fold it. Rail shortcuts stay in
+  sync with the header toggles. Verified in-browser: full height/vertical fit preserved, no
+  horizontal scroll, no console errors. The offline `graph.html` artifact inherits the same
+  chrome. Layout/chrome only — no change to the graph engine or `graph.json`.
+
 ## [4.3.0] - 2026-08-14
 
 ### Added

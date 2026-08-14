@@ -5,4 +5,4 @@ and semantic (embedding) search layer on top, always GENERATED-quarantined. See
 ARCHITECTURE.md for the L0-L9 stack.
 """
 
-__version__ = "4.3.0"
+__version__ = "4.4.0"

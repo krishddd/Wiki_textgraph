@@ -43,32 +43,53 @@ RENDERER_CSS = """
     font:14px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     overflow:hidden; -webkit-font-smoothing:antialiased; }
 
-  #app { display:grid; grid-template-rows:auto 1fr; height:100vh; }
+  /* Studio shell: a slim left rail + (app bar / body) stacked to its right. */
+  #app { display:grid; grid-template-columns:56px 1fr; grid-template-rows:auto 1fr;
+    height:100vh; }
+
+  /* Left rail — brand mark + vertical mode shortcuts (Semantica-style studio nav). */
+  #rail { grid-row:1 / 3; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:12px 0; background:var(--panel); border-right:1px solid var(--line); }
+  #rail .mark { width:26px; height:26px; border-radius:8px; margin-bottom:8px;
+    background:linear-gradient(135deg,var(--acc),#8a6bff); box-shadow:var(--shadow); }
+  .rail-btn { width:38px; height:38px; display:flex; align-items:center; justify-content:center;
+    border-radius:10px; border:1px solid transparent; background:none; color:var(--fg2);
+    cursor:pointer; font-size:16px; transition:background .12s,color .12s,border-color .12s; }
+  .rail-btn:hover { background:var(--line2); color:var(--fg); }
+  .rail-btn.on { background:var(--acc); color:#fff; }
+  .rail-sp { flex:1; }
 
   /* App bar */
-  header { display:flex; align-items:center; gap:14px; padding:14px 20px;
+  header { grid-column:2; display:flex; align-items:center; gap:12px; padding:11px 18px;
     background:var(--panel); border-bottom:1px solid var(--line); }
   .brand { display:flex; align-items:center; gap:10px; font-weight:650; letter-spacing:-.01em;
     font-size:15px; white-space:nowrap; }
-  .brand .mark { width:22px; height:22px; border-radius:7px;
-    background:linear-gradient(135deg,var(--acc),#8a6bff); box-shadow:var(--shadow); }
-  .search { position:relative; flex:1; max-width:560px; }
-  .search input { width:100%; padding:10px 14px 10px 38px; border-radius:11px;
+  .search { position:relative; flex:1; max-width:520px; }
+  .search input { width:100%; padding:9px 14px 9px 36px; border-radius:11px;
     border:1px solid var(--line); background:var(--bg); color:var(--fg); font-size:14px;
     outline:none; transition:border-color .15s,box-shadow .15s; }
   .search input:focus { border-color:var(--acc); box-shadow:0 0 0 3px var(--acc-soft); }
   .search svg { position:absolute; left:12px; top:50%; transform:translateY(-50%);
     width:16px; height:16px; color:var(--mut); }
   .spacer { flex:1; }
-  .btn { padding:9px 14px; border-radius:11px; border:1px solid var(--line);
-    background:var(--card); color:var(--fg); cursor:pointer; font-size:13px; font-weight:550;
-    white-space:nowrap; transition:background .15s,border-color .15s,color .15s; }
-  .btn:hover { border-color:var(--acc); color:var(--acc); }
-  .btn.on { background:var(--acc); color:#fff; border-color:var(--acc); }
-  .icon-btn { padding:9px 11px; }
+  /* Segmented toolbar: labelled pill groups, like the Explore studio's CAMERA/LAYOUT bands. */
+  .seg { display:flex; align-items:center; gap:2px; padding:3px; border-radius:12px;
+    background:var(--bg); border:1px solid var(--line); }
+  .seg .seg-l { font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mut);
+    padding:0 7px 0 5px; white-space:nowrap; }
+  .btn { padding:7px 12px; border-radius:9px; border:1px solid transparent;
+    background:none; color:var(--fg); cursor:pointer; font-size:12.5px; font-weight:550;
+    white-space:nowrap; transition:background .15s,color .15s; }
+  .btn:hover { background:var(--line2); color:var(--acc); }
+  .btn.on { background:var(--acc); color:#fff; }
+  /* Standalone buttons (outside a segment) keep a visible border. */
+  header > .btn, header > .icon-btn { border-color:var(--line); background:var(--card); }
+  header > .btn:hover { border-color:var(--acc); }
+  .icon-btn { padding:7px 10px; }
 
   /* Body: canvas column + inspector */
-  #body { display:grid; grid-template-columns:1fr 340px; min-height:0; transition:grid-template-columns .2s ease; }
+  #body { grid-column:2; display:grid; grid-template-columns:1fr 340px; min-height:0;
+    transition:grid-template-columns .2s ease; }
   #body.solo { grid-template-columns:1fr 0; }
   #body.solo aside { display:none; }
   #main { display:flex; flex-direction:column; min-width:0; min-height:0; padding:16px 16px 0;
@@ -131,6 +152,12 @@ RENDERER_CSS = """
   aside h2 { font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--mut);
     margin:12px 18px 7px; font-weight:600; flex:none; }
   aside h2:first-child { margin-top:14px; }
+  /* Collapsible section headers (click to fold), like the studio inspector's cards. */
+  aside h2.sec { cursor:pointer; display:flex; align-items:center; gap:6px; user-select:none; }
+  aside h2.sec::after { content:'\\25BE'; margin-left:auto; font-size:9px; color:var(--mut);
+    transition:transform .15s; }
+  aside h2.sec.collapsed::after { transform:rotate(-90deg); }
+  aside h2.sec:hover { color:var(--fg2); }
   /* Long lists (communities, top entities, documents) each cap out and scroll internally,
      so the panel never grows past the page. #detail takes whatever height is left. */
   #comms { overflow-y:auto; max-height:26vh; flex:none; }
@@ -237,18 +264,33 @@ RENDERER_CSS = """
 
 SKELETON_HTML = """
 <div id="app">
+  <div id="rail">
+    <span class="mark" title="TextGraph"></span>
+    <button class="rail-btn" id="r-fit" title="fit graph to screen">&#9633;</button>
+    <button class="rail-btn" id="r-ego" title="ego / distance view">&#9673;</button>
+    <button class="rail-btn" id="r-group" title="grouped (community) view">&#9635;</button>
+    <button class="rail-btn" id="r-panel" title="expand graph to full width / show panel">&#8596;</button>
+    <span class="rail-sp"></span>
+    <button class="rail-btn" id="r-theme" title="toggle light / dark">&#9681;</button>
+  </div>
   <header>
-    <div class="brand"><span class="mark"></span>TextGraph</div>
+    <div class="brand">TextGraph</div>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
       <input id="q" placeholder="Search entities &amp; passages…  (Enter)">
     </div>
     <div class="spacer"></div>
-    <button class="btn" id="egobtn" title="ego / distance view — colour nodes by hops from a focus node">Ego</button>
-    <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
-    <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
-    <button class="btn" id="fit" title="fit graph to screen">Fit</button>
-    <button class="btn icon-btn" id="panel" title="expand graph to full width / show panel">&#8596;</button>
+    <div class="seg">
+      <span class="seg-l">Analyze</span>
+      <button class="btn" id="egobtn" title="ego / distance view — colour nodes by hops from a focus node">Ego</button>
+      <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
+      <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
+    </div>
+    <div class="seg">
+      <span class="seg-l">View</span>
+      <button class="btn" id="fit" title="fit graph to screen">Fit</button>
+      <button class="btn" id="panel" title="expand graph to full width / show panel">&#8596;</button>
+    </div>
     <button class="btn icon-btn" id="theme" title="toggle light / dark">&#9681;</button>
   </header>
   <div id="body">
@@ -493,6 +535,7 @@ function reEgo(){
 }
 function setEgo(on){
   S.ego=on; document.getElementById('egobtn').classList.toggle('on',on);
+  const r=document.getElementById('r-ego'); if(r) r.classList.toggle('on',on);
   document.getElementById('legend').style.display = on ? 'none' : '';  // bands replace type legend
   if(on){ if(!S.egoAnchor && S.sel) S.egoAnchor=S.sel.id; reEgo(); }
   else { S.egoDist=null; S.egoAnchor=null; S.match=null; renderEgoBar(); draw(); }
@@ -665,15 +708,37 @@ try{ const saved=localStorage.getItem('tg-theme'); if(saved) document.documentEl
 document.getElementById('all').onchange=e=>{ S.hidden.clear();
   if(!e.target.checked) S.g.communities.forEach(c=>S.hidden.add(c.community_id));
   document.querySelectorAll('#comms input').forEach(cb=>cb.checked=e.target.checked); draw(); };
+// Keep the left-rail shortcut buttons visually in sync with the header toggles.
+function syncRail(){
+  const solo=document.getElementById('body').classList.contains('solo');
+  document.getElementById('r-ego').classList.toggle('on', S.ego);
+  document.getElementById('r-group').classList.toggle('on', S.grouped);
+  document.getElementById('r-panel').classList.toggle('on', solo);
+}
 document.getElementById('fit').onclick=fit;
 document.getElementById('panel').onclick=()=>{
   const b=document.getElementById('body'); b.classList.toggle('solo');
   document.getElementById('panel').classList.toggle('on', b.classList.contains('solo'));
-  setTimeout(()=>{ resize(); fit(); }, 210); };  // let the grid transition finish, then refit
+  syncRail(); setTimeout(()=>{ resize(); fit(); }, 210); };  // transition then refit
 document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
-  document.getElementById('groupbtn').classList.toggle('on',S.grouped); draw(); };
+  document.getElementById('groupbtn').classList.toggle('on',S.grouped); syncRail(); draw(); };
 document.getElementById('egobtn').onclick=()=>setEgo(!S.ego);
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
+// Left-rail shortcuts proxy to the header controls (single source of truth for behaviour).
+document.getElementById('r-fit').onclick=fit;
+document.getElementById('r-ego').onclick=()=>document.getElementById('egobtn').click();
+document.getElementById('r-group').onclick=()=>document.getElementById('groupbtn').click();
+document.getElementById('r-panel').onclick=()=>document.getElementById('panel').click();
+document.getElementById('r-theme').onclick=()=>document.getElementById('theme').click();
+// Collapsible inspector sections: a header folds every following sibling up to the next
+// header (or the always-on #detail pane).
+document.querySelectorAll('aside h2').forEach(h=>{
+  h.classList.add('sec');
+  h.onclick=()=>{ h.classList.toggle('collapsed'); const off=h.classList.contains('collapsed');
+    let el=h.nextElementSibling;
+    while(el && el.tagName!=='H2' && el.id!=='detail'){ el.style.display=off?'none':''; el=el.nextElementSibling; }
+  };
+});
 document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter') search();
   if(e.key==='Escape'){ e.target.value=''; S.match=null; draw(); } });
 addEventListener('resize',resize);
