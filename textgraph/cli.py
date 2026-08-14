@@ -590,6 +590,10 @@ def _cmd_export(args: argparse.Namespace) -> int:
         from textgraph.l9_artifacts.ontology import export_shacl_bytes
 
         body = export_shacl_bytes(nodes, edges)
+    elif args.format == "cypher":
+        from textgraph.l9_artifacts.cypher import export_cypher_bytes
+
+        body = export_cypher_bytes(nodes, edges)
     else:  # pragma: no cover - argparse choices guard this
         print(f"error: unknown format: {args.format}", file=sys.stderr)
         return 2
@@ -721,15 +725,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_version.set_defaults(func=_cmd_version)
 
     p_export = sub.add_parser(
-        "export", help="export the graph in an interoperable format (RDF/OWL/SHACL/PROV-O)"
+        "export", help="export the graph in an interoperable format (RDF/OWL/SHACL/PROV-O/Cypher)"
     )
     p_export.add_argument("path", help="corpus path or .duckdb snapshot")
     p_export.add_argument(
         "--format",
         default="prov-o",
-        choices=["prov-o", "rdf", "owl", "shacl"],
+        choices=["prov-o", "rdf", "owl", "shacl", "cypher"],
         help="export format: prov-o (PROV-O JSON-LD decision trail), rdf (Turtle triple store "
-        "with reified provenance), owl (OWL vocabulary), shacl (SHACL shapes). Default: prov-o.",
+        "with reified provenance), owl (OWL vocabulary), shacl (SHACL shapes), cypher "
+        "(openCypher load script for Neo4j / Memgraph / AGE). Default: prov-o.",
     )
     p_export.add_argument("-o", "--output", help="write to this file instead of stdout")
     p_export.set_defaults(func=_cmd_export)

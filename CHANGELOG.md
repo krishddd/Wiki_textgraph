@@ -6,6 +6,20 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-08-14
+
+### Added
+- **openCypher export → Neo4j / Memgraph / AGE / Neptune.** `textgraph export --format cypher`
+  emits a deterministic, idempotent load script (`MERGE` nodes on `id`, `MATCH … MERGE` the
+  relationships) that recreates the whole graph in any Bolt / openCypher database. Every
+  relationship keeps its `ConfidenceTag`, confidence, original predicate, and `[doc:start-end]`
+  byte citation as properties, so provenance re-verification (G3) works over the graph store
+  too. Pure string emission — no driver dependency; the DB is a downstream **materialization
+  target** for the already-built `graph.json` (per `docs/plans/neo4j-backend.md`), so the build
+  stays local and deterministic. Relationship types and labels are sanitised to valid Cypher
+  identifiers; string values are escaped; output is byte-stable (G1). New
+  `textgraph/l9_artifacts/cypher.py::export_cypher_bytes`.
+
 ## [4.5.0] - 2026-08-14
 
 ### Added
