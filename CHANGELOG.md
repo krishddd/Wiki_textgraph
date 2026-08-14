@@ -6,6 +6,16 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.4.1] - 2026-08-14
+
+### Changed
+- **Positioning refresh.** The one-line description (PyPI summary, README tagline, package
+  docstring, and docs landing) now reflects what TextGraph grew into this cycle: an
+  **interactive graph studio**, **link prediction**, and **Datalog rule reasoning**, on top of
+  the deterministic/local-first/byte-cited core (with opt-in LLM extraction and semantic
+  search). PyPI is immutable, so the summary only refreshes on a new version — hence this
+  docs-only patch.
+
 ## [4.4.0] - 2026-08-14
 
 ### Changed

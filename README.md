@@ -7,7 +7,7 @@
 [![Live demo](https://img.shields.io/badge/demo-graph.html-3b5bdb?logo=googlechrome&logoColor=white)](https://krishddd.github.io/Wiki_textgraph/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-> Turn a pile of case documents into a **queryable, byte-cited knowledge graph** — **deterministic & local-first by default**, with **opt-in LLM extraction, grounded answer synthesis, and semantic search** layered on top (always `GENERATED`-quarantined, never masquerading as ground truth).
+> Turn a pile of case documents into a **queryable, byte-cited knowledge graph** — **deterministic & local-first by default**. Explore it in an **interactive graph studio**, derive new relations with **link prediction & Datalog rules**, and layer **opt-in LLM extraction, grounded answer synthesis, and semantic search** on top (always `GENERATED`-quarantined, never masquerading as ground truth).
 >
 > **`pip install textgraph-kg`**  ·  **[Live demo →](https://krishddd.github.io/Wiki_textgraph/)**  ·  **[vs. Semantica →](docs/COMPARISON_SEMANTICA.md)**
 
