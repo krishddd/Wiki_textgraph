@@ -6,6 +6,20 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-08-14
+
+### Added
+- **Co-occurrence backbone so the graph spreads across the panel.** When a build has almost
+  no explicit relations (deterministic extraction of prose that names entities but states few
+  hard relations), the console now links entities that are mentioned together in the same
+  passage — a `CO_OCCURS` edge tagged `STRUCTURAL`. The map spreads like a proper
+  Semantica/NotebookLM graph instead of collapsing to a ring of unconnected dots. The fallback
+  is automatically suppressed once real relations exist, so an LLM-extracted graph keeps its
+  own semantic predicates. Console view only — `graph.json` and the determinism/provenance
+  gates are untouched.
+- **Full-width graph toggle (&#8596;).** A header button collapses the side inspector so the
+  graph fills the entire panel, then refits automatically.
+
 ## [3.8.0] - 2026-08-14
 
 ### Added

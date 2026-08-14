@@ -288,6 +288,16 @@ class QueryEngine:
                     "t_invalid": t_invalid,
                 }
             )
+        # Co-occurrence backbone: when the graph has almost no explicit relations (a
+        # deterministic build of prose that names entities but states few hard relations),
+        # link entities that are mentioned together in the same passage so the map spreads
+        # across the canvas instead of collapsing to a ring of unconnected dots. These are
+        # honest, deterministic, meaningful edges (co-mentioned entities are related),
+        # tagged STRUCTURAL and labelled CO_OCCURS so they filter/label distinctly. They are
+        # suppressed once real relations exist, so an LLM-extracted graph keeps its own
+        # semantic predicates. Console view only — graph.json and the gates are untouched.
+        if len(edges) < max(3, len(nodes) // 4):
+            edges.extend(self._cooccurrence_edges(kept))
         # Community roster (size = all entities in the community, not just the kept ones).
         sizes: dict[int, int] = {}
         labels: dict[int, str] = {}
@@ -310,6 +320,39 @@ class QueryEngine:
             "total": len(self._entity_ids),
             "truncated": len(self._entity_ids) > len(nodes),
         }
+
+    def _cooccurrence_edges(self, kept: set[str]) -> list[dict[str, Any]]:
+        """Derive CO_OCCURS edges among ``kept`` entities that share a passage.
+
+        Deterministic and bounded: passages that mention 2..15 kept entities contribute a
+        co-mention to each pair; pairs are ranked by how many passages share them and capped
+        at ``3 * |kept|`` so the map is connected but never a hairball. Tagged STRUCTURAL.
+        """
+        from itertools import combinations
+
+        pair_count: dict[tuple[str, str], int] = {}
+        for ents in self._chunk_entities.values():
+            group = sorted({e for e in ents if e in kept})
+            if not 2 <= len(group) <= 15:  # skip singletons and boilerplate-dense passages
+                continue
+            for a, b in combinations(group, 2):
+                pair_count[(a, b)] = pair_count.get((a, b), 0) + 1
+        ranked = sorted(pair_count.items(), key=lambda kv: (-kv[1], kv[0]))
+        cap = max(60, len(kept) * 3)
+        out: list[dict[str, Any]] = []
+        for (a, b), n in ranked[:cap]:
+            out.append(
+                {
+                    "source": a,
+                    "target": b,
+                    "predicate": "CO_OCCURS",
+                    "tag": "STRUCTURAL",
+                    "confidence": round(min(1.0, 0.3 + 0.1 * n), 4),
+                    "t_valid": None,
+                    "t_invalid": None,
+                }
+            )
+        return out
 
     # -- helpers ----------------------------------------------------------------
 

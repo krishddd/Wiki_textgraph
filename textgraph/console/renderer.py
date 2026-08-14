@@ -68,7 +68,9 @@ RENDERER_CSS = """
   .icon-btn { padding:9px 11px; }
 
   /* Body: canvas column + inspector */
-  #body { display:grid; grid-template-columns:1fr 340px; min-height:0; }
+  #body { display:grid; grid-template-columns:1fr 340px; min-height:0; transition:grid-template-columns .2s ease; }
+  #body.solo { grid-template-columns:1fr 0; }
+  #body.solo aside { display:none; }
   #main { display:flex; flex-direction:column; min-width:0; min-height:0; padding:16px 16px 0;
     gap:12px; }
 
@@ -218,6 +220,7 @@ SKELETON_HTML = """
     <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
     <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
     <button class="btn" id="fit" title="fit graph to screen">Fit</button>
+    <button class="btn icon-btn" id="panel" title="expand graph to full width / show panel">&#8596;</button>
     <button class="btn icon-btn" id="theme" title="toggle light / dark">&#9681;</button>
   </header>
   <div id="body">
@@ -565,6 +568,10 @@ document.getElementById('all').onchange=e=>{ S.hidden.clear();
   if(!e.target.checked) S.g.communities.forEach(c=>S.hidden.add(c.community_id));
   document.querySelectorAll('#comms input').forEach(cb=>cb.checked=e.target.checked); draw(); };
 document.getElementById('fit').onclick=fit;
+document.getElementById('panel').onclick=()=>{
+  const b=document.getElementById('body'); b.classList.toggle('solo');
+  document.getElementById('panel').classList.toggle('on', b.classList.contains('solo'));
+  setTimeout(()=>{ resize(); fit(); }, 210); };  // let the grid transition finish, then refit
 document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
   document.getElementById('groupbtn').classList.toggle('on',S.grouped); draw(); };
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);

@@ -16,6 +16,29 @@ def _engine(corpus: Path = DOCS) -> QueryEngine:
     return QueryEngine(r.nodes, r.edges)
 
 
+def test_cooccurrence_backbone_connects_a_relationless_graph() -> None:
+    # A build that names entities but states few explicit relations should still render a
+    # connected map: the console derives CO_OCCURS edges from shared passages so the layout
+    # spreads instead of collapsing to a ring. Simulate by stripping the relation edges.
+    from textgraph.l8_retrieval.engine import _NON_RELATION
+
+    r = build(DOCS)
+    plumbing = _NON_RELATION | {"HAS_CHUNK"}
+    stripped = [e for e in r.edges if e.predicate in plumbing]  # keep MENTIONS, drop relations
+    eng = QueryEngine(r.nodes, stripped)
+    gv = eng.graph_view(max_nodes=600)
+    cooc = [e for e in gv["edges"] if e["predicate"] == "CO_OCCURS"]
+    assert cooc, "expected co-occurrence edges when the graph has no explicit relations"
+    assert all(e["tag"] == "STRUCTURAL" for e in cooc)
+
+
+def test_cooccurrence_backbone_suppressed_when_relations_exist() -> None:
+    # The normal build has real relations, so the co-occurrence fallback must stay off.
+    r = build(DOCS)
+    gv = QueryEngine(r.nodes, r.edges).graph_view(max_nodes=600)
+    assert not [e for e in gv["edges"] if e["predicate"] == "CO_OCCURS"]
+
+
 def test_index_serves_self_contained_html() -> None:
     status, ctype, body = route(_engine(), "/", {})
     assert status == 200
