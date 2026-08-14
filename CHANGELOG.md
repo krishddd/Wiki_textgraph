@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-08-08
+
+**Prove & guard the investigator defaults.** PDF ingestion and entity resolution have run
+by default since 3.0 — this release makes that *visible and regression-proof*, per the
+"do users know it does?" gap in the market review.
+
+### Added
+- **`benchmarks/defaults.py`** — a zero-config-defaults benchmark: proves a *default* install
+  (no flags, no extras) ingests PDFs (`pypdf` core) and resolves entity aliases (rules ER),
+  with a **before/after** table (Acme surface forms unified under one canonical via `SAME_AS`)
+  and build/query latency. Written into [BENCHMARKS.md](BENCHMARKS.md).
+- **Regression guard** (`tests/unit/test_defaults.py`) — locks in: PDF ingests on the default
+  install, `pypdf` stays a *core* dependency (not the `[ingest]` extra), entity resolution is
+  on by default (`resolve_entities=True`, `er_backend="rules"`), and a default build resolves
+  aliases into a canonical identity — so these defaults can never silently regress.
+- **README "Works out of the box" section** — makes the zero-config defaults (PDF, entity
+  resolution, hybrid retrieval, opt-in LLM) explicit up front.
+
 ### Fixed
 - **`--llm-extract` no longer silently runs L4 community summaries.** It was coupled to
   `llm_enabled`, so `build --llm-extract` also produced `SUMMARIZES` (GENERATED) edges — the

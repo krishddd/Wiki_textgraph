@@ -15,6 +15,18 @@ TextGraph is built to help investigators make sense of **financial-crime and tec
 
 It is the natural-language successor to [**llm-wiki**](https://github.com/krishddd/llm-wiki): where `llm-wiki` gave an agent cited, streaming answers over Wikipedia, TextGraph generalizes that to **any textual corpus** and produces a graph an agent can traverse — multi-hop relationship discovery, contradiction detection, temporal reasoning, and provenance-backed retrieval — not just a stream of prose.
 
+## Works out of the box (zero config)
+
+`pip install textgraph-kg` → `textgraph build ./docs` already does the investigator happy
+path — **no flags, no extras, no API key, no server:**
+
+- 📄 **PDFs ingest by default** — `pypdf` is a *core* dependency (investigators live in PDFs). `.docx`/`.html`/`.epub`/logs/chat too. (Docling layout/table/OCR is the only opt-in, in `[ingest]`.)
+- 🔗 **Entity resolution is on by default** — `Acme Corporation` / `Acme Corp` / `ACME` collapse to one canonical identity via cited `SAME_AS`, so a query for one reaches facts filed under the others. Deterministic rules backend; Splink stays optional in `[er]`.
+- 🔎 **Hybrid retrieval by default** — BM25 + Personalized-PageRank + RRF, every hit cited.
+- 🧠 **LLM & embeddings are opt-in** — `--llm-extract`, `--narrate`, `--embed` layer on top, always `GENERATED`-quarantined; the default stays deterministic and offline.
+
+Numbers for the PDF + entity-resolution defaults (before/after) are in [BENCHMARKS.md](BENCHMARKS.md#zero-config-defaults-pdf--entity-resolution).
+
 ## Why it's different (vs "GraphRAG")
 
 Most GraphRAG tools build the graph *with an LLM*: extraction is non-deterministic, edges arrive without verifiable sources, and you can't reproduce or audit the result. TextGraph inverts that. The edge is **trust**, not just recall:
