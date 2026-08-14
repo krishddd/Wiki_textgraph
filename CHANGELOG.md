@@ -6,6 +6,22 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-08-14
+
+### Added
+- **NotebookLM-style mindmap layout in the console.** The graph viewer now runs a client-side
+  force-directed layout (Fruchterman-Reingold) on load: connected entities pull together into a
+  radial map and unlinked entities are parked on an outer ring, instead of relying on the
+  server's scattered positions. Once a build has relations, the console reads as a linked
+  mind-map rather than dots in lines. Relation edges are also drawn more prominently.
+- **`build --llm-extract-budget N`** — raises the number of chunks the LLM relation extractor
+  reads (default 40). Crank it up (e.g. `200`) for a denser, NotebookLM-style relation tree on
+  larger corpora. Calls are still prompt-cached, so re-runs are free.
+
+### Changed
+- **De-cluttered the Communities panel.** On corpora with hundreds of clusters the sidebar
+  rendered every one; it now shows the top 40 by size with a "+ N smaller clusters" line.
+
 ## [3.7.1] - 2026-08-08
 
 ### Fixed

@@ -348,7 +348,7 @@ function draw(){
     const a=byId[e.source], b=byId[e.target]; if(!a||!b||!visible(a)||!visible(b)) continue;
     const inPath = S.pathEdges.has(e.source+'>'+e.target)||S.pathEdges.has(e.target+'>'+e.source);
     const active = edgeActive(e);
-    const alpha = (dim(a)||dim(b)) ? 0.05 : (active ? 0.22 : 0.05);
+    const alpha = (dim(a)||dim(b)) ? 0.05 : (active ? 0.42 : 0.06);
     ctx.beginPath(); ctx.moveTo(SX(a),SY(a)); ctx.lineTo(SX(b),SY(b));
     ctx.strokeStyle = inPath?accent:('rgba('+ergb+','+alpha+')');
     ctx.lineWidth = inPath?2.5:1; ctx.stroke();
@@ -491,15 +491,50 @@ function buildTops(){
 function fitTo(n){ const r=c.getBoundingClientRect(); S.scale=Math.max(S.scale,1.4);
   S.tx=r.width/2-n.x*S.scale; S.ty=r.height/2-n.y*S.scale; draw(); }
 
+// Force-directed re-layout (Fruchterman-Reingold). The server ships positions that
+// scatter when the graph is sparse; this self-organizes connected nodes into a
+// NotebookLM-style radial mindmap and parks unlinked nodes on an outer ring.
+function relayout(){
+  if(!S.g||!S.g.nodes.length) return;
+  const nodes=S.g.nodes, deg={}; nodes.forEach(n=>deg[n.id]=0);
+  const links=[];
+  for(const e of S.g.edges){ const a=S.byId[e.source], b=S.byId[e.target];
+    if(a&&b&&a!==b){ deg[a.id]++; deg[b.id]++; links.push([a,b]); } }
+  const conn=nodes.filter(n=>deg[n.id]>0), iso=nodes.filter(n=>!deg[n.id]);
+  if(conn.length<2) return;                       // no relations -> keep server layout
+  const N=conn.length, k=Math.sqrt(1000*1000/N);
+  conn.forEach((n,i)=>{ const a=2.399963*i, r=k*Math.sqrt(i+1)*0.5;
+    n.x=Math.cos(a)*r; n.y=Math.sin(a)*r; });     // deterministic phyllotaxis seed
+  const ITERS=N>350?120:200; let temp=k*0.9;
+  for(let it=0; it<ITERS; it++){
+    for(const n of conn){ n._dx=0; n._dy=0; }
+    for(let i=0;i<N;i++){ const v=conn[i];
+      for(let j=i+1;j<N;j++){ const u=conn[j];
+        let dx=v.x-u.x, dy=v.y-u.y, d=Math.hypot(dx,dy)||0.01, f=k*k/d;
+        const ux=dx/d*f, uy=dy/d*f; v._dx+=ux; v._dy+=uy; u._dx-=ux; u._dy-=uy; } }
+    for(const [a,b] of links){ let dx=a.x-b.x, dy=a.y-b.y, d=Math.hypot(dx,dy)||0.01, f=d*d/k;
+      const ux=dx/d*f, uy=dy/d*f; a._dx-=ux; a._dy-=uy; b._dx+=ux; b._dy+=uy; }
+    for(const n of conn){ let d=Math.hypot(n._dx,n._dy)||0.01;
+      n.x+=n._dx/d*Math.min(d,temp); n.y+=n._dy/d*Math.min(d,temp); n.x*=0.998; n.y*=0.998; }
+    temp*=0.97;
+  }
+  let R=300; conn.forEach(n=>{ R=Math.max(R,Math.hypot(n.x,n.y)); }); R+=90;
+  iso.forEach((n,i)=>{ const a=2*Math.PI*i/(iso.length||1); n.x=Math.cos(a)*R; n.y=Math.sin(a)*R; });
+}
+
 function buildSidebar(){
   const cw=document.getElementById('comms'); cw.innerHTML='';
-  for(const cm of S.g.communities){ const row=document.createElement('div'); row.className='crow';
+  const CAP=40, comms=S.g.communities, shown=comms.slice(0,CAP);   // cap the roster; 100s of rows is noise
+  for(const cm of shown){ const row=document.createElement('div'); row.className='crow';
     row.innerHTML=`<input type="checkbox" checked><span class="dot" style="background:${color(cm.community_id)}"></span><span class="lbl">${esc(cm.label||('#'+cm.community_id))}</span><span class="ct">${cm.size}</span>`;
     const cb=row.querySelector('input');
     row.onclick=e=>{ if(e.target!==cb) cb.checked=!cb.checked;
       if(cb.checked) S.hidden.delete(cm.community_id); else S.hidden.add(cm.community_id);
       document.getElementById('all').checked=S.hidden.size===0; draw(); };
     cw.appendChild(row); }
+  if(comms.length>CAP){ const more=document.createElement('div'); more.className='crow';
+    more.style.cursor='default'; more.innerHTML=`<span class="lbl mut">+ ${comms.length-CAP} smaller clusters</span>`;
+    cw.appendChild(more); }
   const tw=document.getElementById('tags'); tw.innerHTML='';
   for(const t of TAGS){ const el=document.createElement('span'); el.className='tag'; el.textContent=t;
     el.style.borderColor='var(--line)';
@@ -597,7 +632,7 @@ async function ask(){
 }
 async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); draw();
+  relayout(); buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
 }
 async function attachFiles(files){
   if(!files||!files.length) return;
@@ -674,6 +709,7 @@ async function removeDoc(name){
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
+  relayout();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); initAsk(); buildDocs(); resize(); fit();
 })();
 """

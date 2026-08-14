@@ -620,6 +620,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
     config = Config(
         llm_enabled=bool(args.llm),
         llm_extract=bool(args.llm_extract),
+        llm_extract_max_calls=int(getattr(args, "llm_extract_budget", 40)),
         resolve_conflicts_strategy=args.resolve_conflicts or "",
         source_credibility=cred,
     )
@@ -734,6 +735,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="opt-in: run the LLM over chunks to add GENERATED-tagged relations the "
         "deterministic extractors missed (reads LLM env vars; bounded by budget)",
+    )
+    p_build.add_argument(
+        "--llm-extract-budget",
+        dest="llm_extract_budget",
+        type=int,
+        default=40,
+        metavar="N",
+        help="max chunks the LLM extractor reads (default 40). Raise it for a denser, "
+        "NotebookLM-style relation map on larger corpora (more LLM calls, cached).",
     )
     p_build.add_argument(
         "--resolve-conflicts",
