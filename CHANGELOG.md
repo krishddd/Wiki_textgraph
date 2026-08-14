@@ -6,6 +6,16 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-08-08
+
+### Changed
+- **Nodes are coloured by entity type, not community.** The graph previously cycled a palette
+  across dozens of communities (colours looked random). Now each node's colour comes from a
+  small fixed **type** legend — Organization / Person / Location / Money / Date / Work / Term /
+  LLM / Other — drawn top-left over the canvas with per-type counts, the Semantica-style
+  category colouring. Community structure is still available via the **Group** overlay and the
+  communities panel.
+
 ## [3.6.0] - 2026-08-08
 
 ### Added

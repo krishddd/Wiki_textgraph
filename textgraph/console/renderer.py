@@ -99,6 +99,10 @@ RENDERER_CSS = """
   #tip { position:absolute; pointer-events:none; padding:6px 10px; background:var(--panel);
     border:1px solid var(--line); border-radius:9px; font-size:12px; display:none; z-index:6;
     box-shadow:var(--shadow); max-width:260px; }
+  #legend { position:absolute; top:12px; left:16px; display:flex; flex-wrap:wrap; gap:6px 12px;
+    max-width:60%; z-index:5; pointer-events:none; }
+  #legend .lg { display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--fg2); }
+  #legend .lg .dot { width:9px; height:9px; border-radius:50%; }
 
   /* Inspector */
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; }
@@ -221,6 +225,7 @@ SKELETON_HTML = """
       <div id="stage">
         <canvas id="c"></canvas>
         <div id="tip"></div>
+        <div id="legend"></div>
         <div id="note"></div>
         <div id="time">
           <span>&#9201;</span>
@@ -284,7 +289,19 @@ const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
+// Semantica-style: nodes are coloured by ENTITY TYPE (a small fixed legend), not by the
+// dozens of communities (which cycle colours and look random).
+const TYPE_COLOR = { Organization:'#4f6bff', Person:'#2bb7a3', Location:'#f59e42',
+  Money:'#7bc043', Date:'#c98bd6', Work:'#ef8fb4', Term:'#59c1ff', LLM:'#e0555b' };
+const OTHER_COLOR = '#8a94a6';
+function nodeColor(n){ return TYPE_COLOR[n && n.etype] || OTHER_COLOR; }
 function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+function buildLegend(){
+  const el=document.getElementById('legend'); if(!el||!S.g) return;
+  const counts={}; for(const n of S.g.nodes){ const t=n.etype||'Other'; counts[t]=(counts[t]||0)+1; }
+  const types=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  el.innerHTML=types.map(t=>`<span class="lg"><span class="dot" style="background:${nodeColor({etype:t})}"></span>${esc(t)} <span class="mut">${counts[t]}</span></span>`).join('');
+}
 function cssv(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
 function resize(){ const r = c.getBoundingClientRect(), d = devicePixelRatio||1;
@@ -344,7 +361,7 @@ function draw(){
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
     const x=SX(n),y=SY(n),rr=rad(n); const d=dim(n);
-    ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.fillStyle=color(n.community);
+    ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.fillStyle=nodeColor(n);
     ctx.globalAlpha = d?0.14:1; ctx.fill();
     if(S.sel&&S.sel.id===n.id){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=selColor; ctx.stroke(); }
     if(S.pick.includes(n.id)){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=accent; ctx.stroke(); }
@@ -579,7 +596,7 @@ async function ask(){
 }
 async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildStats(); buildSidebar(); buildTops(); initTime(); draw();
+  buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); draw();
 }
 async function attachFiles(files){
   if(!files||!files.length) return;
@@ -656,6 +673,6 @@ async function removeDoc(name){
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildStats(); buildSidebar(); buildTops(); initTime(); initAsk(); buildDocs(); resize(); fit();
+  buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); initAsk(); buildDocs(); resize(); fit();
 })();
 """
