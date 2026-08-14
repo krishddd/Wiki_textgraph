@@ -496,7 +496,8 @@ function fitTo(n){ const r=c.getBoundingClientRect(); S.scale=Math.max(S.scale,1
 
 // Force-directed re-layout (Fruchterman-Reingold). The server ships positions that
 // scatter when the graph is sparse; this self-organizes connected nodes into a
-// NotebookLM-style radial mindmap and parks unlinked nodes on an outer ring.
+// NotebookLM-style radial mindmap and scatters the few unlinked nodes in a filled
+// halo disc (a Vogel spiral, not a hard ring) so the map fills the whole canvas.
 function relayout(){
   if(!S.g||!S.g.nodes.length) return;
   const nodes=S.g.nodes, deg={}; nodes.forEach(n=>deg[n.id]=0);
@@ -521,8 +522,12 @@ function relayout(){
       n.x+=n._dx/d*Math.min(d,temp); n.y+=n._dy/d*Math.min(d,temp); n.x*=0.998; n.y*=0.998; }
     temp*=0.97;
   }
-  let R=300; conn.forEach(n=>{ R=Math.max(R,Math.hypot(n.x,n.y)); }); R+=90;
-  iso.forEach((n,i)=>{ const a=2*Math.PI*i/(iso.length||1); n.x=Math.cos(a)*R; n.y=Math.sin(a)*R; });
+  // Scatter unlinked nodes as a FILLED disc surrounding the connected core (Vogel spiral:
+  // r ~ sqrt(i) fills area evenly), so they read as a spread halo, never a hard circle.
+  let R=300; conn.forEach(n=>{ R=Math.max(R,Math.hypot(n.x,n.y)); });
+  const gA=Math.PI*(3-Math.sqrt(5)), inner=R*0.55, span=R*1.15;
+  iso.forEach((n,i)=>{ const t=Math.sqrt((i+0.5)/(iso.length||1)), a=i*gA;
+    const rr=inner+span*t; n.x=Math.cos(a)*rr; n.y=Math.sin(a)*rr; });
 }
 
 function buildSidebar(){
@@ -673,7 +678,8 @@ function initAsk(){
   if(!dock) return;
   // `const TG` is a lexical global, not a window property — test the binding via typeof.
   if(typeof TG==='undefined' || typeof TG.chat!=='function'){ dock.style.display='none'; return; } // offline graph.html has no server
-  document.getElementById('askhead').onclick=()=>dock.classList.toggle('collapsed');
+  document.getElementById('askhead').onclick=()=>{ dock.classList.toggle('collapsed');
+    setTimeout(()=>{ resize(); fit(); }, 200); };  // canvas buffer must follow the height change
   document.getElementById('asksend').onclick=ask;
   document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
   // Save snapshot is read-only, so it's always available on the live console.

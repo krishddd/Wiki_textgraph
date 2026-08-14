@@ -6,7 +6,18 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
-## [3.9.0] - 2026-08-14
+## [3.9.1] - 2026-08-14
+
+### Changed
+- **The map now fills the canvas instead of forming a circle.** The co-occurrence backbone
+  links far more entities — larger passages are connected hub-and-spoke to their strongest
+  member (instead of being skipped), so on a typical corpus ~87% of shown nodes are connected
+  (was a large unlinked ring). The few genuinely unlinked nodes now scatter as a filled halo
+  disc (a Vogel spiral), never a hard ring, so the graph spreads across the whole panel.
+
+### Fixed
+- **Collapsing the Ask dock no longer leaves the graph mis-sized.** The canvas buffer is now
+  re-fit after the dock expands/collapses (and after the full-width panel toggle).
 
 ### Added
 - **Co-occurrence backbone so the graph spreads across the panel.** When a build has almost

@@ -324,21 +324,41 @@ class QueryEngine:
     def _cooccurrence_edges(self, kept: set[str]) -> list[dict[str, Any]]:
         """Derive CO_OCCURS edges among ``kept`` entities that share a passage.
 
-        Deterministic and bounded: passages that mention 2..15 kept entities contribute a
-        co-mention to each pair; pairs are ranked by how many passages share them and capped
-        at ``3 * |kept|`` so the map is connected but never a hairball. Tagged STRUCTURAL.
+        Deterministic, bounded, and tuned to *connect* the map (so it spreads across the
+        canvas rather than leaving a ring of unlinked dots):
+
+        * A small passage (2..8 kept entities) contributes every pair — a tight local cluster.
+        * A larger passage (up to 80) is linked hub-and-spoke to its highest-PageRank member,
+          which guarantees connectivity in O(k) edges without a hairball.
+
+        Pairs are ranked by how many passages share them and capped at ``5 * |kept|``. Tagged
+        STRUCTURAL. Only the truly boilerplate-dense passages (>80 entities) are skipped.
         """
         from itertools import combinations
 
+        def _pr(nid: str) -> float:
+            return float(self._node[nid].properties.get("pagerank", 0.0))
+
         pair_count: dict[tuple[str, str], int] = {}
+
+        def _bump(a: str, b: str) -> None:
+            key = (a, b) if a < b else (b, a)
+            pair_count[key] = pair_count.get(key, 0) + 1
+
         for ents in self._chunk_entities.values():
             group = sorted({e for e in ents if e in kept})
-            if not 2 <= len(group) <= 15:  # skip singletons and boilerplate-dense passages
+            if not 2 <= len(group) <= 80:  # skip singletons and boilerplate-dense passages
                 continue
-            for a, b in combinations(group, 2):
-                pair_count[(a, b)] = pair_count.get((a, b), 0) + 1
+            if len(group) <= 8:
+                for a, b in combinations(group, 2):
+                    _bump(a, b)
+            else:  # hub-and-spoke to the strongest member — connectivity without a hairball
+                hub = max(group, key=lambda n: (_pr(n), n))
+                for e in group:
+                    if e != hub:
+                        _bump(hub, e)
         ranked = sorted(pair_count.items(), key=lambda kv: (-kv[1], kv[0]))
-        cap = max(60, len(kept) * 3)
+        cap = max(120, len(kept) * 5)
         out: list[dict[str, Any]] = []
         for (a, b), n in ranked[:cap]:
             out.append(
