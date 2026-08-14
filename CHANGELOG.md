@@ -6,6 +6,17 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-08-08
+
+### Added
+- **Document management in the console** — a **Documents** panel (sidebar) lists the corpus
+  files, and with `--allow-ingest` each has a 🗑 **remove** button that deletes the file and
+  rebuilds the graph. Pairs with the existing 📎 **upload** (attach) button, so the full
+  add / list / remove lifecycle is in the browser — only launching is a terminal command.
+  New `GET /api/docs` (list) and `POST /api/remove` (delete + rebuild, gated on
+  `--allow-ingest`); `console.ingest.list_documents()` / `remove_document()` (traversal-safe,
+  refuses paths outside the corpus and missing files).
+
 ## [3.5.0] - 2026-08-08
 
 **Console intelligence + explorability.** The web console gets the "explore + ask" loop and

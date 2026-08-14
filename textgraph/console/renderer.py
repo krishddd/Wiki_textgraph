@@ -104,6 +104,16 @@ RENDERER_CSS = """
   aside { background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; }
   aside h2 { font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--mut);
     margin:18px 18px 10px; font-weight:600; }
+  .mut { color:var(--mut); font-weight:400; }
+  .docrow { display:flex; align-items:center; gap:8px; padding:5px 18px; margin:0 8px;
+    border-radius:8px; }
+  .docrow:hover { background:var(--acc-soft); }
+  .docrow .dn { flex:1; font-size:12.5px; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; }
+  .docrow .ds { color:var(--mut); font-size:11px; font-variant-numeric:tabular-nums; }
+  .docrow .drm { border:none; background:none; cursor:pointer; color:var(--mut); font-size:14px;
+    padding:2px 4px; border-radius:6px; line-height:1; }
+  .docrow .drm:hover { color:var(--sup,#d64); background:var(--line2); }
   .crow { display:flex; align-items:center; gap:9px; padding:6px 18px; cursor:pointer;
     border-radius:9px; margin:0 8px; transition:background .12s; }
   .crow:hover { background:var(--line2); }
@@ -255,6 +265,8 @@ SKELETON_HTML = """
       <div id="tops"></div>
       <h2>Confidence tags</h2>
       <div class="tags" id="tags"></div>
+      <h2 id="docshdr" style="display:none">Documents <span id="doccount" class="mut"></span></h2>
+      <div id="docs"></div>
       <div id="detail"><div class="empty">Click a node to inspect its cited claims.</div></div>
     </aside>
   </div>
@@ -577,7 +589,7 @@ async function attachFiles(files){
     const res=await TG.ingest(files);
     if(!res.ok){ bubble.innerHTML='<span style="color:var(--sup)">'+esc(res.error||'ingest failed')+
       (res.rejected&&res.rejected.length?' (rejected: '+esc(res.rejected.join(', '))+')':'')+'</span>'; return; }
-    await reloadGraph();
+    await reloadGraph(); buildDocs();
     const added=res.added_entities||[];
     bubble.innerHTML=`<div class="tooltag">ingest</div>Added ${esc(res.written.join(', '))} — `+
       `${added.length} new entit${added.length===1?'y':'ies'}`+
@@ -618,9 +630,32 @@ function initAsk(){
   }
 }
 
+function fmtKB(b){ return b>=1024?Math.round(b/1024)+' KB':b+' B'; }
+async function buildDocs(){
+  const box=document.getElementById('docs'), hdr=document.getElementById('docshdr');
+  const u=(typeof _u==='function')?_u('/api/docs'):'/api/docs';
+  let data; try{ data=await (await fetch(u)).json(); }catch(e){ return; }
+  const docs=data.docs||[];
+  if(!docs.length){ hdr.style.display='none'; box.innerHTML=''; return; }
+  hdr.style.display=''; document.getElementById('doccount').textContent='· '+docs.length;
+  box.innerHTML=docs.map(d=>`<div class="docrow"><span class="dn" title="${esc(d.name)}">${esc(d.name)}</span>`
+    +`<span class="ds">${fmtKB(d.bytes)}</span>`
+    +(data.can_edit?`<button class="drm" data-n="${esc(d.name)}" title="remove this document">&#128465;</button>`:'')
+    +`</div>`).join('');
+  box.querySelectorAll('.drm').forEach(b=>b.onclick=()=>removeDoc(b.dataset.n));
+}
+async function removeDoc(name){
+  if(!confirm('Remove "'+name+'" from the corpus and rebuild the graph?')) return;
+  const u=(typeof _u==='function')?_u('/api/remove'):'/api/remove';
+  try{
+    const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const j=await r.json(); if(!j.ok){ alert('Remove failed: '+(j.error||r.status)); return; }
+    await reloadGraph(); await buildDocs();
+  }catch(e){ alert('Remove failed: '+(e.message||e)); }
+}
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  buildStats(); buildSidebar(); buildTops(); initTime(); initAsk(); resize(); fit();
+  buildStats(); buildSidebar(); buildTops(); initTime(); initAsk(); buildDocs(); resize(); fit();
 })();
 """

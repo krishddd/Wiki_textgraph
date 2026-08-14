@@ -113,6 +113,12 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             if path == "/api/export":
                 self._export()
                 return
+            if path == "/api/docs":
+                from textgraph.console.ingest import list_documents
+
+                docs = list_documents(state.source) if state.source else []
+                self._json(200, {"docs": docs, "can_edit": state.allow_ingest and bool(docs)})
+                return
             self._route({})
 
         def _export(self) -> None:
@@ -142,6 +148,9 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             raw = self.rfile.read(length) if length else b""
             if parsed.path == "/api/ingest":
                 self._ingest(raw)
+                return
+            if parsed.path == "/api/remove":
+                self._remove(raw)
                 return
             # Other POSTs (the chat) carry JSON/urlencoded params merged into route().
             params: dict[str, str] = {}
@@ -191,6 +200,30 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                     "added_entities": sorted(after - before),
                 },
             )
+
+        def _remove(self, raw: bytes) -> None:
+            if not state.allow_ingest or not state.source:
+                self._json(403, {"ok": False, "error": "editing disabled (start --allow-ingest)"})
+                return
+            try:
+                name = str(json.loads(raw or b"{}").get("name", ""))
+            except (ValueError, UnicodeDecodeError):
+                name = ""
+            if not name:
+                self._json(400, {"ok": False, "error": "no document name given"})
+                return
+            from textgraph.console.chat import forget
+            from textgraph.console.ingest import remove_document
+
+            with state.ingest_lock:
+                res = remove_document(state.source, name, cache_dir=state.cache_dir)
+                if not res.ok:
+                    self._json(404, {"ok": False, "error": f"cannot remove: {name}"})
+                    return
+                old = state.engine
+                state.engine = QueryEngine(res.nodes, res.edges)
+                forget(old)
+            self._json(200, {"ok": True, "removed": name, "nodes": len(res.nodes)})
 
         def log_message(self, *args: object) -> None:
             pass  # keep the console quiet

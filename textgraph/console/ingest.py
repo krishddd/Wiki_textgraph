@@ -122,3 +122,40 @@ def ingest_files(
     return IngestResult(
         ok=True, written=written, rejected=rejected, nodes=result.nodes, edges=result.edges
     )
+
+
+def list_documents(source: str | Path) -> list[dict[str, object]]:
+    """List the ingestible files in the corpus directory (name + size), sorted by name.
+
+    Empty when ``source`` is not a directory (a ``graph.json`` / ``.duckdb`` snapshot has no
+    editable corpus behind it).
+    """
+    from textgraph.pipeline import _iter_corpus_files
+
+    root = Path(source)
+    if not root.is_dir():
+        return []
+    return [
+        {"name": str(p.relative_to(root)).replace("\\", "/"), "bytes": p.stat().st_size}
+        for p in _iter_corpus_files(root)
+    ]
+
+
+def remove_document(
+    source: str | Path, name: str, *, cache_dir: str | Path | None = None
+) -> IngestResult:
+    """Delete one document from the corpus dir (traversal-safe) and rebuild the graph.
+
+    The inverse of :func:`ingest_files`; only the named file is removed, then the graph is
+    rebuilt from whatever remains. Returns ``ok=False`` if the path escapes the corpus or the
+    file is absent. Deleting an empty corpus rebuilds to an empty graph (still ``ok``).
+    """
+    root = Path(source)
+    if not root.is_dir():
+        return IngestResult(ok=False)
+    target = (root / name).resolve()
+    if root.resolve() not in target.parents or not target.is_file():
+        return IngestResult(ok=False)
+    target.unlink()
+    result = build(root, cache_dir=cache_dir)
+    return IngestResult(ok=True, written=[name], nodes=result.nodes, edges=result.edges)

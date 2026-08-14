@@ -160,3 +160,36 @@ def test_console_serves_a_prebuilt_graph_json(tmp_path: Path) -> None:
     # build_engine accepts the graph.json file AND its containing directory.
     assert build_engine(out).search("Acme", k=3).to_dict()["hits"]
     assert build_engine(tmp_path).search("Acme", k=3).to_dict()["hits"]
+
+
+def test_list_and_remove_documents(tmp_path: Path) -> None:
+    from textgraph.console.ingest import list_documents, remove_document
+
+    (tmp_path / "a.md").write_text("Acme Corp controls Beta Ltd.", encoding="utf-8")
+    (tmp_path / "b.md").write_text("Gamma Holdings owns Delta Trust.", encoding="utf-8")
+    names = [d["name"] for d in list_documents(tmp_path)]
+    assert names == ["a.md", "b.md"]
+
+    res = remove_document(tmp_path, "a.md")
+    assert res.ok and not (tmp_path / "a.md").exists()
+    assert [d["name"] for d in list_documents(tmp_path)] == ["b.md"]
+    assert res.nodes  # graph rebuilt from what remains
+
+
+def test_remove_document_is_traversal_safe(tmp_path: Path) -> None:
+    from textgraph.console.ingest import remove_document
+
+    (tmp_path / "keep.md").write_text("x", encoding="utf-8")
+    outside = tmp_path.parent / "secret.txt"
+    outside.write_text("do not delete", encoding="utf-8")
+    assert not remove_document(tmp_path, "../secret.txt").ok  # escapes the corpus -> refused
+    assert not remove_document(tmp_path, "missing.md").ok  # absent -> refused
+    assert outside.exists()  # untouched
+
+
+def test_list_documents_empty_for_non_directory(tmp_path: Path) -> None:
+    from textgraph.console.ingest import list_documents
+
+    gj = tmp_path / "graph.json"
+    gj.write_text("{}", encoding="utf-8")
+    assert list_documents(gj) == []  # a snapshot has no editable corpus behind it
