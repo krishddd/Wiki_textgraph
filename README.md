@@ -54,7 +54,7 @@ Local-first / DuckDB stays the default; a graph DB (Neo4j) is an *optional* scal
 
 - **Structural link prediction** — `predict_links` (Adamic-Adar / common-neighbours / resource-allocation) suggests likely-missing relations from topology, deterministically. `textgraph predict`, a **Predict links** tool in the console Ask dock, and candidate edges drawn dashed on the graph. (Node2Vec graph embeddings are still on the roadmap.)
 - **LPG storage backends** — Semantica is polyglot (RDF *and* labeled-property graphs: Neo4j/Neptune/AGE). TextGraph now exports RDF and has a Neo4j design; a live LPG driver is next.
-- **Rule reasoning** — Semantica has Datalog/Rete/SPARQL. TextGraph has typed labels, Graph-of-Thoughts, GQL, and now OWL/SHACL export for external validators; an embedded forward-chaining rule engine is on the roadmap.
+- **Rule reasoning** — a deterministic **forward-chaining Datalog subset** (`textgraph/reasoning/`, `textgraph rules`, and a **Rules** console tool) derives new relations from recursive IF/THEN rules with a full derivation trace for every inferred fact. (Semantica also has Rete/SPARQL; those remain on the roadmap.)
 - **Provider & vector-store breadth** — Semantica spans LiteLLM providers and FAISS/Qdrant/Weaviate/Milvus. TextGraph ships one OpenAI-compatible client (chat + embeddings) + a cosine index; more backends welcome.
 - **Ecosystem polish** — Semantica has a hosted docs site and published benchmarks. TextGraph has an **MCP server**, a **REST API** (the console's `/api/*`), a **live demo**, and honest fixture benchmarks ([BENCHMARKS.md](BENCHMARKS.md)) — and is growing the rest.
 
@@ -211,6 +211,8 @@ flowchart TD
 ```
 
 ## Status
+
+🟢 **v4.3.0 — forward-chaining rule engine (Datalog).** Derive new relations from recursive IF/THEN rules with a full derivation trace: `textgraph rules`, a **Rules** console tool, and `QueryEngine.apply_rules`. Closes the Semantica reasoning-engine gap.
 
 🟢 **v4.2.0 — ego / distance-intelligence view.** An **Ego** toggle colours the graph by hop-distance from a clicked focus node (0h / 1h / 2–3h / 4+h) with a live depth slider — a distance map for exploring a node's structural reach.
 

@@ -28,6 +28,7 @@ TOOLS = (
     "why",
     "neighbors",
     "predict",
+    "rules",
     "timeline",
     "contradictions",
     "conflicts",
@@ -45,6 +46,7 @@ STRATEGY: dict[str, str] = {
     "path": "graph-traversal",  # multi-hop max-likelihood path
     "neighbors": "graph-traversal",  # one-hop expansion
     "predict": "graph-analytics",  # structural link prediction (Adamic-Adar overlap)
+    "rules": "graph-analytics",  # forward-chaining Datalog inference over relations
     "why": "graph-traversal",  # claim neighbourhood of one node
     "timeline": "graph-traversal",  # temporal slice of one node
     "contradictions": "graph-analytics",  # precomputed CONTRADICTS edges
@@ -107,6 +109,8 @@ def classify_query(question: str, forced: str = "auto") -> str:
         return "path"
     if low.startswith("why") or "explain" in low:
         return "why"
+    if ":-" in question:  # a Datalog rule was typed
+        return "rules"
     if "predict" in low or "missing link" in low or "suggest link" in low or "likely link" in low:
         return "predict"
     if "neighbo" in low or "related to" in low:

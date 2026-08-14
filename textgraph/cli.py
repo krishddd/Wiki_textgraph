@@ -202,6 +202,27 @@ def _cmd_predict(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_rules(args: argparse.Namespace) -> int:
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    rule_text = Path(args.rules).read_text("utf-8") if Path(args.rules).is_file() else args.rules
+    try:
+        derived = _engine(root).apply_rules(rule_text)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if not derived:
+        print("no new facts derived")
+        return 0
+    print(f"derived {len(derived)} new fact(s):")
+    for d in derived:
+        via = "; ".join(d["support"])
+        print(f"  {d['source_name']} {d['predicate']} {d['target_name']}  [{d['rule']}: {via}]")
+    return 0
+
+
 def _fmt_window(c: dict[str, object]) -> str:
     if c["t_valid"] and c.get("t_invalid"):
         return f"  valid=[{c['t_valid']}, {c['t_invalid']}) SUPERSEDED"
@@ -839,6 +860,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_predict.add_argument("-k", type=int, default=12, help="max predictions (default 12)")
     p_predict.set_defaults(func=_cmd_predict)
+
+    p_rules = sub.add_parser(
+        "rules", help="forward-chaining Datalog inference over relations (derive new facts)"
+    )
+    p_rules.add_argument("path", help="corpus path to build")
+    p_rules.add_argument(
+        "rules",
+        help="Datalog rules as a string or a path to a rules file "
+        "(e.g. 'uncle(A,C) :- brother(A,B), parent(B,C).')",
+    )
+    p_rules.set_defaults(func=_cmd_rules)
 
     p_timeline = sub.add_parser("timeline", help="claims about an entity ordered by validity")
     p_timeline.add_argument("path", help="corpus path to build")

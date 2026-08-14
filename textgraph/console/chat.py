@@ -155,6 +155,8 @@ def _dispatch(
         return _contradictions(engine)
     if chosen == "predict":
         return _predict(engine, q, focus)
+    if chosen == "rules":
+        return _rules(engine, q)
     if chosen == "narrate":
         return _narrate(engine, q)
     if chosen == "conflicts":
@@ -414,6 +416,46 @@ def _predict(engine: QueryEngine, q: str, focus: str | None) -> ChatAnswer:
         text=f"Top candidate links{scope}: {summary}.",
         tool="predict",
         focus=e,
+        highlight_nodes=nodes,
+        highlight_edges=edges,
+        detail=detail,
+    )
+
+
+def _rules(engine: QueryEngine, q: str) -> ChatAnswer:
+    """Forward-chaining Datalog inference: derive new relations from typed rules.
+
+    The message text is the rule(s), e.g. ``uncle(A,C) :- brother(A,B), parent(B,C).``
+    Derived facts are explainable (each lists the body facts that fired) and drawn as
+    highlighted edges; they're inferences, so they carry no source citations.
+    """
+    try:
+        derived = engine.apply_rules(q)
+    except ValueError as exc:
+        return ChatAnswer(text=f"Could not parse the rule: {exc}", tool="rules")
+    if not derived:
+        return ChatAnswer(
+            text="No new facts were derived from those rules over the current graph.",
+            tool="rules",
+        )
+    summary = "; ".join(
+        f"{d['source_name']} {d['predicate']} {d['target_name']}" for d in derived[:8]
+    )
+    nodes = sorted({d["source"] for d in derived} | {d["target"] for d in derived})
+    edges = [[d["source"], d["target"]] for d in derived]
+    detail = [
+        {
+            "source": d["source_name"],
+            "target": d["target_name"],
+            "predicate": d["predicate"],
+            "rule": d["rule"],
+            "support": d["support"],
+        }
+        for d in derived
+    ]
+    return ChatAnswer(
+        text=f"Derived {len(derived)} new fact(s): {summary}.",
+        tool="rules",
         highlight_nodes=nodes,
         highlight_edges=edges,
         detail=detail,

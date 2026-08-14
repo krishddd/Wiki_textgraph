@@ -421,6 +421,45 @@ class QueryEngine:
             for p in preds
         ]
 
+    def apply_rules(self, rules: str, *, max_iterations: int = 25) -> list[dict[str, Any]]:
+        """Forward-chain Datalog rules over the entity relations; return *newly* derived facts.
+
+        ``rules`` is Datalog text (``uncle(A, C) :- brother(A, B), parent(B, C).``); predicates
+        are edge predicates, variables start uppercase. Derived facts are explainable
+        (``rule`` + ``support``) and resolved to names for display. Suggestions only — never
+        written to ``graph.json``.
+        """
+        from textgraph.reasoning.rules import forward_chain, parse_rules
+
+        rule_list = parse_rules(rules)
+        base = [
+            (e.predicate, e.subject, e.object)
+            for e in self._edges
+            if e.predicate not in _NON_RELATION
+            and e.subject in self._entity_ids
+            and e.object in self._entity_ids
+        ]
+        base_set = set(base)
+        _, derivations = forward_chain(base, rule_list, max_iterations=max_iterations)
+        out: list[dict[str, Any]] = []
+        for fact in sorted(derivations):
+            if fact in base_set:
+                continue
+            d = derivations[fact]
+            pred, subj, obj = fact
+            out.append(
+                {
+                    "predicate": pred,
+                    "source": subj,
+                    "target": obj,
+                    "source_name": self._name(subj),
+                    "target_name": self._name(obj),
+                    "rule": d.rule_id,
+                    "support": [f"{self._name(s)} {p} {self._name(o)}" for p, s, o in d.support],
+                }
+            )
+        return out
+
     # -- helpers ----------------------------------------------------------------
 
     def _name(self, node_id: str) -> str:

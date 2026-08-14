@@ -6,6 +6,23 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-08-14
+
+### Added
+- **Forward-chaining rule engine (Datalog subset)** — the biggest remaining Semantica
+  capability gap (their reasoning module). `textgraph/reasoning/` derives new relations from
+  existing ones with recursive IF/THEN rules (`FUNDS_REACH(X, Z) :- TRANSFERRED(X, Y),
+  TRANSFERRED(Y, Z).`), joined to a fixpoint. Cycle-safe (finite, monotonic fact set),
+  deterministic, and **fully explainable** — every derived fact keeps the rule that fired and
+  the exact body facts that supported it. Surfaced three ways:
+  - `QueryEngine.apply_rules(rules_text)`
+  - `textgraph rules <path> "<rules-or-file>"` CLI verb
+  - a **Rules (Datalog)** tool in the console Ask dock — type a rule, derived facts light up
+    as edges with their derivation listed. (Uppercase terms are variables; lowercase/quoted
+    are constants.)
+  Derived facts are inferences surfaced at query time, never written into `graph.json`
+  (determinism/provenance gates untouched).
+
 ## [4.2.0] - 2026-08-14
 
 ### Added
