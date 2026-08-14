@@ -153,6 +153,8 @@ def _dispatch(
         return _timeline(engine, e) if e else _reason(engine, q, mode)
     if chosen == "contradictions":
         return _contradictions(engine)
+    if chosen == "narrate":
+        return _narrate(engine, q)
     if chosen == "conflicts":
         return _conflicts(engine)
     if chosen == "trace":
@@ -372,6 +374,37 @@ def _contradictions(engine: QueryEngine) -> ChatAnswer:
         text=text,
         tool="contradictions",
         detail=[{"a": p.claim_a.to_dict(), "b": p.claim_b.to_dict()} for p in res.pairs],
+    )
+
+
+def _narrate(engine: QueryEngine, q: str) -> ChatAnswer:
+    """Opt-in LLM answer: compose a grounded, cited reply over the retrieved evidence.
+
+    GENERATED-quarantined; needs an LLM endpoint in the environment (MODEL_BASE_URL /
+    MODEL_NAME / API_KEY). No endpoint -> a clear message, never a fabricated answer.
+    """
+    from textgraph.core.config import Config
+    from textgraph.l4_llm_optional import resolve_client
+    from textgraph.l8_retrieval.narrate import narrate as _compose
+
+    res = engine.search(q, k=6)
+    passages = [(h.snippet, list(h.citations)) for h in res.hits if h.snippet]
+    client = resolve_client(Config())
+    if client is None:
+        return ChatAnswer(
+            text="LLM narration needs an endpoint: set MODEL_BASE_URL / MODEL_NAME / API_KEY "
+            "in the environment before launching the console.",
+            tool="narrate",
+        )
+    ans = _compose(client, q, passages)
+    if ans is None:
+        return ChatAnswer(text="No retrieved evidence to ground an answer.", tool="narrate")
+    return ChatAnswer(
+        text=ans.text,
+        tool="narrate",
+        evidence=list(ans.citations),
+        highlight_nodes=[h.node_id for h in res.hits if h.kind == "entity"],
+        detail=[{"note": "GENERATED — composed by the LLM from the cited evidence above."}],
     )
 
 

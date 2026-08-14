@@ -6,6 +6,27 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-08-08
+
+**Console intelligence + explorability.** The web console gets the "explore + ask" loop and
+cleaner retrieval — one terminal command to launch, everything else in the browser.
+
+### Added
+- **Click-to-expand neighbours** — clicking a node lights up its neighbourhood (connected
+  nodes + edges), so you can walk the graph instead of staring at dots.
+- **Relation labels on edges** — predicates are drawn on highlighted edges (and on every edge
+  when zoomed in), so the graph reads as *who → how → whom*, not anonymous lines.
+- **Grouped view** — a **Group** toggle outlines each community with its label (Semantica-style
+  cluster grouping) for large graphs.
+- **LLM answers in the Ask dock** — a **Narrate (LLM)** tool composes a grounded, cited answer
+  over the retrieved evidence, in the browser (opt-in; needs an LLM endpoint in the env;
+  `GENERATED`-quarantined; degrades to a clear message when no endpoint is set).
+
+### Changed
+- **Cleaner search** — repeated file-header templates (identical `====` banners across many
+  docs) are detected and down-ranked, and result snippets skip the banner/label lines so you
+  see real content, not separators. Query-time only; `graph.json` is unaffected.
+
 ## [3.4.0] - 2026-08-08
 
 ### Added

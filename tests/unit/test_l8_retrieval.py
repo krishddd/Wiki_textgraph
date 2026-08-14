@@ -139,3 +139,19 @@ def test_communities_and_stats() -> None:
 
 def test_estimate_tokens_is_monotonic() -> None:
     assert estimate_tokens("a" * 40) > estimate_tokens("a" * 4)
+
+
+def test_clean_snippet_strips_banner_headers() -> None:
+    from textgraph.l8_retrieval.engine import _clean_snippet
+
+    text = (
+        "================================================================\n"
+        "EU AI ACT - LEGAL TEXT DOCUMENT\n"
+        "================================================================\n"
+        "\nTitle: Recital (1)\n\n"
+        "The purpose of this Regulation is to improve the internal market.\n"
+    )
+    snip = _clean_snippet(text)
+    assert not snip.startswith("=")
+    assert "EU AI ACT - LEGAL TEXT DOCUMENT" not in snip  # all-caps banner line skipped
+    assert "purpose of this Regulation" in snip

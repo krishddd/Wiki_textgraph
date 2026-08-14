@@ -22,6 +22,7 @@ from dataclasses import dataclass
 TOOLS = (
     "auto",
     "reason",
+    "narrate",
     "search",
     "path",
     "why",
@@ -52,6 +53,7 @@ STRATEGY: dict[str, str] = {
     "stats": "graph-analytics",  # aggregate counts
     "search": "hybrid-lexical-graph",  # BM25 + Personalized PageRank + RRF
     "reason": "hybrid-multi-tool",  # Graph-of-Thoughts over several of the above
+    "narrate": "hybrid-multi-tool",  # opt-in LLM answer grounded on retrieved evidence
 }
 
 # Ordered cue → tool rules. First match wins; documented so the decision is auditable.
@@ -140,6 +142,7 @@ def route(question: str, forced: str = "auto") -> RoutePlan:
             "decisions": "searches decisions by their statement",
             "communities": "asks about clusters/topics",
             "stats": "asks for aggregate counts",
+            "narrate": "opt-in LLM answer grounded on the retrieved evidence",
             "reason": "open question — Graph-of-Thoughts over hybrid retrieval",
         }.get(tool, "hybrid retrieval")
     return RoutePlan(tool=tool, strategy=strategy, reason=reason)

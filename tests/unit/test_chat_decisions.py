@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from textgraph.console.chat import answer, classify
 from textgraph.l8_retrieval import QueryEngine
 from textgraph.pipeline import build
@@ -84,3 +85,20 @@ def test_answers_are_deterministic() -> None:
     a = answer(eng, "are there conflicts").to_dict()
     b = answer(eng, "are there conflicts").to_dict()
     assert a == b
+
+
+def test_narrate_tool_is_registered_and_selectable() -> None:
+    from textgraph.l8_retrieval.routing import TOOLS
+
+    assert "narrate" in TOOLS
+    assert classify("anything", forced="narrate") == "narrate"
+
+
+def test_narrate_without_llm_endpoint_is_graceful(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No LLM env configured -> a clear message, never a fabricated answer.
+    for var in ("TEXTGRAPH_LLM_API_KEY", "API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    ans = answer(_engine(CONFLICT), "summarise the conflicts", tool="narrate")
+    assert ans.tool == "narrate"
+    assert "endpoint" in ans.text.lower()
+    assert not ans.abstained

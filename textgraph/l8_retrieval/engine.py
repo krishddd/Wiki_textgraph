@@ -69,6 +69,25 @@ def _citations(edge: Edge) -> list[Citation]:
     return [Citation(s.doc_id, s.start, s.end, s.hash) for s in edge.source_spans]
 
 
+def _clean_snippet(text: str, limit: int = 280) -> str:
+    """Skip leading banner/separator/label lines so a snippet shows real content, not a
+    repeated file-header template (``====`` rules, ``KEY: value`` metadata)."""
+    lines = text.splitlines()
+    i = 0
+    for line in lines:
+        s = line.strip()
+        # A separator rule (mostly = - * # _), a boilerplate label line, or an empty line.
+        alnum = sum(ch.isalnum() for ch in s)
+        is_rule = bool(s) and alnum <= max(2, len(s) // 5)
+        is_label = s.isupper() and len(s) <= 40  # e.g. "FULL TEXT", "LEGISLATIVE CONTEXT"
+        if not s or is_rule or is_label:
+            i += 1
+        else:
+            break
+    body = "\n".join(lines[i:]).strip() or text.strip()
+    return " ".join(body.split())[:limit]
+
+
 class QueryEngine:
     """Typed, bounded, cited retrieval over an assembled TextGraph."""
 
@@ -100,6 +119,22 @@ class QueryEngine:
         # BM25 over chunk passages.
         self._bm25 = BM25Index(
             [(cid, str(self._node[cid].properties.get("text", ""))) for cid in self._chunk_ids]
+        )
+
+        # Boilerplate detection: chunks whose leading text is a template repeated across many
+        # documents (e.g. an identical file-header banner) carry no signal but match everything.
+        # They are down-ranked in search so real content surfaces instead. (Query-time only.)
+        from collections import Counter
+
+        fingerprints: Counter[str] = Counter()
+        chunk_fp: dict[str, str] = {}
+        for cid in self._chunk_ids:
+            text = str(self._node[cid].properties.get("text", ""))
+            fp = " ".join(text.split())[:120].lower()  # whitespace-normalised head
+            chunk_fp[cid] = fp
+            fingerprints[fp] += 1
+        self._boilerplate_chunks = frozenset(
+            cid for cid, fp in chunk_fp.items() if fingerprints[fp] > 3
         )
 
         # Dual-node PPR graph: entities + chunks joined by relations / SAME_AS /
@@ -450,13 +485,17 @@ class QueryEngine:
 
         # Reciprocal Rank Fusion across the chunk (lexical), entity (graph), and — when a
         # dense embedder is configured — chunk (semantic) lists.
+        def _w(cid: str) -> float:
+            # Down-weight repeated-template (boilerplate) chunks so they don't dominate.
+            return 0.2 if cid in self._boilerplate_chunks else 1.0
+
         rrf: dict[str, float] = {}
         for cid, rank in chunk_rank.items():
-            rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
+            rrf[cid] = rrf.get(cid, 0.0) + _w(cid) / (_RRF_K + rank)
         for nid, rank in entity_rank.items():
             rrf[nid] = rrf.get(nid, 0.0) + 1.0 / (_RRF_K + rank)
         for cid, rank in dense_rank.items():
-            rrf[cid] = rrf.get(cid, 0.0) + 1.0 / (_RRF_K + rank)
+            rrf[cid] = rrf.get(cid, 0.0) + _w(cid) / (_RRF_K + rank)
 
         routed = self.resolve(query)
         routing = "local" if routed and routed in entity_rank else "global"
@@ -467,7 +506,7 @@ class QueryEngine:
         candidates: list[SearchHit] = []
         for node_id, score in fused:
             if node_id in self._chunk_ids:
-                snippet = str(self._node[node_id].properties.get("text", ""))[:280]
+                snippet = _clean_snippet(str(self._node[node_id].properties.get("text", "")))
                 cit = self._chunk_citation.get(node_id)
                 candidates.append(
                     SearchHit(

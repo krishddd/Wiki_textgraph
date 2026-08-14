@@ -200,6 +200,7 @@ SKELETON_HTML = """
       <input id="q" placeholder="Search entities &amp; passages…  (Enter)">
     </div>
     <div class="spacer"></div>
+    <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
     <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
     <button class="btn" id="fit" title="fit graph to screen">Fit</button>
     <button class="btn icon-btn" id="theme" title="toggle light / dark">&#9681;</button>
@@ -225,6 +226,7 @@ SKELETON_HTML = """
           <button id="save" title="download a graph.json snapshot of the current graph">&#128190;</button>
           <select id="asktool" title="which tool to use">
             <option value="auto">Auto</option>
+            <option value="narrate">Narrate (LLM)</option>
             <option value="reason">Reason</option>
             <option value="search">Search</option>
             <option value="path">Path</option>
@@ -266,7 +268,7 @@ const PALETTE = ['#4f6bff','#f59e42','#e0555b','#2bb7a3','#7bc043','#f2c14e','#c
   '#ef8fb4','#9b7b5b','#8a94a6','#3aa0ff','#ff7a59','#59c1ff','#b08cff'];
 const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
-  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(), date:null };
+  q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(), date:null, grouped:false };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -291,11 +293,26 @@ function edgeActive(e){ if(S.date===null) return true;
   if(e.t_invalid && S.date >= e.t_invalid) return false;
   return true; }
 
+function drawGroups(labelColor){
+  const g={};  // community -> {xs,ys,label}
+  for(const n of S.g.nodes){ if(!visible(n)||n.community<0||n.community==null) continue;
+    (g[n.community]=g[n.community]||{xs:[],ys:[],label:n.community_label||('#'+n.community)});
+    g[n.community].xs.push(SX(n)); g[n.community].ys.push(SY(n)); }
+  for(const k in g){ const m=g[k]; if(m.xs.length<2) continue;
+    const cx=m.xs.reduce((a,b)=>a+b,0)/m.xs.length, cy=m.ys.reduce((a,b)=>a+b,0)/m.ys.length;
+    let rr=0; for(let i=0;i<m.xs.length;i++){ rr=Math.max(rr,Math.hypot(m.xs[i]-cx,m.ys[i]-cy)); }
+    rr+=22; ctx.beginPath(); ctx.arc(cx,cy,rr,0,7);
+    ctx.fillStyle='rgba('+(cssv('--edge-rgb')||'120,130,150')+',0.06)'; ctx.fill();
+    ctx.strokeStyle='rgba('+(cssv('--edge-rgb')||'120,130,150')+',0.25)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=labelColor; ctx.font='600 11px ui-sans-serif,system-ui';
+    ctx.fillText(m.label.slice(0,28), cx-rr+6, cy-rr+14); }
+}
 function draw(){
   const r = c.getBoundingClientRect(); ctx.clearRect(0,0,r.width,r.height);
   const byId = S.byId; const ergb = cssv('--edge-rgb')||'120,130,150';
   const labelColor = cssv('--canvas-label')||'#334'; const accent = cssv('--acc')||'#4f6bff';
   const selColor = cssv('--fg')||'#111';
+  if(S.grouped) drawGroups(labelColor);
   for(const e of S.g.edges){
     if(!S.tags.has(e.tag)) continue;
     const a=byId[e.source], b=byId[e.target]; if(!a||!b||!visible(a)||!visible(b)) continue;
@@ -305,6 +322,12 @@ function draw(){
     ctx.beginPath(); ctx.moveTo(SX(a),SY(a)); ctx.lineTo(SX(b),SY(b));
     ctx.strokeStyle = inPath?accent:('rgba('+ergb+','+alpha+')');
     ctx.lineWidth = inPath?2.5:1; ctx.stroke();
+    // Label relation predicates on highlighted edges, or on every edge when zoomed in.
+    if(e.predicate && (inPath || S.scale>1.6) && !(dim(a)||dim(b))){
+      const mx=(SX(a)+SX(b))/2, my=(SY(a)+SY(b))/2;
+      ctx.fillStyle=inPath?accent:labelColor; ctx.font='10px ui-sans-serif,system-ui';
+      ctx.fillText(e.predicate.replace(/_/g,' ').slice(0,22), mx+3, my-3);
+    }
   }
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
@@ -345,9 +368,18 @@ c.addEventListener('wheel',e=>{ e.preventDefault(); const r=c.getBoundingClientR
   const mx=e.clientX-r.left,my=e.clientY-r.top, f=e.deltaY<0?1.1:1/1.1;
   S.tx=mx-(mx-S.tx)*f; S.ty=my-(my-S.ty)*f; S.scale*=f; draw(); },{passive:false});
 
+function neighborsOf(id){ const set=new Set([id]); const edges=new Set();
+  for(const e of S.g.edges){ if(!S.tags.has(e.tag)) continue;
+    if(e.source===id){ set.add(e.target); edges.add(e.source+'>'+e.target); }
+    else if(e.target===id){ set.add(e.source); edges.add(e.source+'>'+e.target); } }
+  return {set,edges}; }
 function onPick(n){
   if(S.pathMode){ S.pick.push(n.id); if(S.pick.length===2){ runPath(); } draw(); return; }
-  S.sel=n; draw(); inspect(n);
+  S.sel=n;
+  const nb=neighborsOf(n.id);           // click-to-expand: light up the node's neighbourhood
+  S.match = nb.set.size>1 ? nb.set : null;
+  S.pathEdges = nb.edges;
+  draw(); inspect(n);
 }
 
 function citeStr(cs){ return (cs||[]).map(x=>`[${x.doc_id.slice(0,18)}…:${x.start}-${x.end}]`).join(' '); }
@@ -468,6 +500,8 @@ document.getElementById('all').onchange=e=>{ S.hidden.clear();
   if(!e.target.checked) S.g.communities.forEach(c=>S.hidden.add(c.community_id));
   document.querySelectorAll('#comms input').forEach(cb=>cb.checked=e.target.checked); draw(); };
 document.getElementById('fit').onclick=fit;
+document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
+  document.getElementById('groupbtn').classList.toggle('on',S.grouped); draw(); };
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
 document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter') search();
   if(e.key==='Escape'){ e.target.value=''; S.match=null; draw(); } });
