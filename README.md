@@ -177,38 +177,130 @@ A strictly bottom-up layer stack. Each layer is a **pure function of the layer b
 flowchart TD
     IN["📄 Case corpus<br/>PDF · DOCX · ODT · RTF · HTML · EPUB<br/>JSON/YAML · logs · chat/email exports"]
 
-    subgraph SPINE["🟢 Structural spine — Phase 1 (zero LLM, deterministic)"]
+    subgraph SPINE["🟢 Structural spine (zero LLM, deterministic)"]
         direction TB
-        L0["L0 · Ingest &amp; Normalize<br/><i>CanonicalDoc = UTF-8 + offset map + block tree</i>"]
+        L0["L0 · Ingest &amp; Normalize<br/><i>CanonicalDoc = UTF-8 + offset map + block tree + chunks</i>"]
         L1["L1 · Deterministic Structure<br/><i>sections, links, definitions, citations,<br/>Rationale &amp; Requirement nodes</i>"]
         L0 --> L1
     end
 
-    subgraph SEM["⚪ Semantic layers — Phase 2+"]
+    subgraph SEM["⚪ Extraction (deterministic core + opt-in enrichers)"]
         direction TB
         L2["L2 · Linguistic substrate<br/><i>coref · temporal · negation</i>"]
-        L3["L3 · Encoder IE<br/><i>entities + typed relations</i>"]
-        L4["L4 · Optional LLM<br/><i>rationale synthesis (opt-in)</i>"]
-        L5["L5 · Entity resolution<br/><i>SAME_AS lattice, non-destructive</i>"]
-        L2 --> L3 --> L4 --> L5
+        L3["L3 · Encoder IE<br/><i>entities + typed relations — EXTRACTED</i>"]
+        XT{{"opt-in enrichers — run here, before resolution"}}
+        XLLM["🧠 LLM relation extraction · --llm-extract<br/><i>chunk → LLM → triples, merged onto entities · GENERATED</i>"]
+        XCO["🔗 Co-occurrence backbone · --co-occurrence<br/><i>co-mentioned entities → CO_OCCURS · STRUCTURAL</i>"]
+        L2 --> L3 --> XT
+        XT -.-> XLLM
+        XT -.-> XCO
     end
 
-    subgraph RETR["🟢 Graph &amp; retrieval — Phase 4 (zero LLM, deterministic)"]
+    subgraph GRAPH["⚪ Resolution &amp; graph model (deterministic)"]
         direction TB
-        L6["L6 · Claim reification<br/><i>reified Claims + t_valid provenance</i>"]
-        L7["L7 · Analytics<br/><i>PageRank · communities · bridges · contradictions</i>"]
-        L8["L8 · Retrieval<br/><i>BM25 + Personalized PageRank + RRF</i>"]
-        L6 --> L7 --> L8
+        L5["L5 · Entity resolution<br/><i>SAME_AS lattice, non-destructive</i>"]
+        L6["L6 · Claim reification<br/><i>reified Claims + t_valid provenance + invalidation</i>"]
     end
 
-    L9["📦 L9 · Artifacts + MCP / Skill<br/>graph.json · graph.html · GRAPH_REPORT.md · MCP tools"]
+    subgraph RETR["🟢 Analytics &amp; retrieval (zero LLM, deterministic)"]
+        direction TB
+        L7["L7 · Analytics<br/><i>PageRank · communities · layout · bridges · contradictions</i>"]
+        L8["L8 · Retrieval<br/><i>dual-node graph · BM25 + Personalized PageRank + RRF</i>"]
+        L7 --> L8
+    end
+
+    L4["🧠 L4 · LLM synthesis · --llm (opt-in, runs last)<br/><i>GENERATED community summaries</i>"]
+    L9["📦 L9 · Artifacts + MCP<br/>graph.json · graph.html · GRAPH_REPORT.md · MCP tools"]
 
     IN --> L0
     L1 --> L2
-    L5 --> L6
+    L3 --> L5
+    XLLM -.->|GENERATED nodes+edges| L5
+    XCO -.->|STRUCTURAL edges| L5
+    L5 --> L6 --> L7
+    L7 -.->|summaries opt-in| L4
+    L4 -.-> L9
     L8 --> L9
-    L1 -.->|"ships today (models-free)"| L9
+    L1 -.->|"models-free path ships today"| L9
 ```
+
+> **Where the LLM fits (and where it does not).** The deterministic core — **L0 → L1 → L2/L3 → L5 → L6 → L7 → L8** — never calls a model. The LLM appears at exactly **two opt-in touchpoints**, both `GENERATED`-quarantined: **relation extraction** (`--llm-extract`, an *input* enricher that runs **before** resolution/analytics so its entities are ranked, clustered, and laid out like any other) and **synthesis** (`--llm` / `--narrate`, an *output* pass that summarizes finished communities or narrates a cited answer). Turn both off and the build is byte-identical (G1); the next section traces the extraction path end to end.
+
+## How a build actually runs (the backend workflow)
+
+`textgraph build` is a single deterministic function (`textgraph/pipeline.py::build`) that runs the layers **in this exact order**. Each step is a pure function of the step before it plus the pinned config hash — that is what makes the output byte-identical (G1) and incremental (G5). Steps marked *opt-in* are skipped entirely unless their flag is set, so the default build touches no model and no network.
+
+| # | Stage | What it does | Tag | Default |
+|---|-------|--------------|-----|---------|
+| 1 | **L0 ingest** | Each file → `CanonicalDoc` (UTF-8 + raw-byte offset map) + block tree + hierarchical **chunks** (the unit the LLM later reads). | — | on |
+| 2 | **L1 structure** | Zero-model parse: sections, links, definitions, citations, Rationale/Requirement/Decision nodes. | `STRUCTURAL` | on |
+| 3 | **L2 + L3 encoder IE** | Deterministic entities (Org/Person/Money/Date/…) + typed relations (`TRANSFERRED`, `CONTROLS`, `DIRECTOR_OF`, …); coref-lite; negation/modality preserved. | `EXTRACTED` / `INFERRED` | on |
+| 4 | **🧠 LLM relation extraction** | *(opt-in `--llm-extract`)* runs the LLM over the L0 chunks and adds the relations the deterministic pass missed — **detailed below**. | `GENERATED` | off |
+| 5 | **🔗 Co-occurrence backbone** | *(opt-in `--co-occurrence`)* links entities co-mentioned in one chunk, cited by the shared span, so a relation-sparse corpus still forms a connected graph. | `STRUCTURAL` | off |
+| 6 | **L5 entity resolution** | Alias entities (`Acme Corp` / `ACME`) collapse to one canonical identity via reversible `SAME_AS`. Runs **after** steps 4–5, so LLM/co-occurrence entities are resolved too. | `INFERRED` | on |
+| 7 | **L6 claims + temporal** | Every relation becomes a citable `Claim` with a `[t_valid, t_invalid)` window; a dated correction **invalidates** (never deletes) via a cited `SUPERSEDES` edge. Conflict detection/resolution runs here. | `INFERRED` | on |
+| 8 | **L7 analytics + layout** | Weighted PageRank, Brandes betweenness, label-propagation communities, deterministic force-layout coordinates, god nodes, bridges, `CONTRADICTS`. **A build invariant asserts every entity leaves this stage ranked, clustered, and positioned** — the guard that keeps LLM entities from becoming "floating dots." | `INFERRED` | on |
+| 9 | **L8 retrieval graph** | Emits `Chunk` nodes + `chunk —MENTIONS→ entity` links: the HippoRAG-style dual-node graph the eight typed tools search (BM25 + Personalized PageRank + RRF). | `STRUCTURAL` | on |
+| 10 | **🧠 L4 LLM synthesis** | *(opt-in `--llm`)* summarizes the finished communities into `GENERATED` `Summary` nodes. Independent of extraction. | `GENERATED` | off |
+| 11 | **L9 artifacts** | Byte-stable `graph.json`, `GRAPH_REPORT.md` (now with a **graph-health** panel), self-contained `graph.html`, `schema.yaml`, `manifest.json`. | — | on |
+
+### How the LLM relation extraction works (step 4, in detail)
+
+This is the pass that turns a pile of prose into a NotebookLM-style **meaning graph** — `X →TRANSFERRED→ Y`, `A →CONTROLS→ B` — while keeping every model-authored edge quarantined and cited. It lives in `textgraph/l4_llm_optional/extract.py` and is driven from `pipeline._run_llm_extract`.
+
+```mermaid
+sequenceDiagram
+    participant P as pipeline (build)
+    participant C as chunks (from L0)
+    participant Ca as prompt cache
+    participant M as LLM (OpenAI-compatible)
+    participant G as graph
+
+    P->>C: read (chunk_id, text, byte-span) — deterministic L0 chunks
+    loop each chunk, until --llm-extract-budget
+        P->>Ca: key = hash(model + chunk text)
+        alt cache miss
+            P->>M: system prompt + chunk (max 2000 chars)
+            M-->>P: JSON [{subject, predicate, object}, …]
+            P->>Ca: store response (so re-runs are free & deterministic)
+        else cache hit
+            Ca-->>P: stored response
+        end
+        P->>P: parse triples · UPPER_SNAKE predicates · cap 12/chunk
+        loop each triple
+            P->>G: resolve subject & object by name-key
+            Note over P,G: name matches an existing entity → REUSE its id (merge)<br/>else mint a typeless entity:LLM: node
+            P->>G: add GENERATED edge S -PRED-> O, cited to the chunk span
+        end
+    end
+    Note over G: the new nodes+edges now flow through<br/>L5 resolution → L7 analytics → L8 — ranked, clustered, laid out
+```
+
+Concretely, for each chunk (bounded by `--llm-extract-budget`, default 40, so cost is capped and auditable — G7):
+
+1. **Prompt & cache.** A strict system prompt asks for *only* a compact JSON array of `{subject, predicate, object}` triples with `UPPER_SNAKE_CASE` predicates. The request is keyed by `hash(model + chunk text)` and cached on disk, so a re-run makes **zero** new calls and produces the **same** graph — the property that lets an LLM pass stay deterministic given a fixed model.
+2. **Parse.** The response is parsed tolerantly (markdown fences, stray prose stripped); predicates are normalized to `UPPER_SNAKE_CASE`; at most 12 triples per chunk so one noisy passage can't flood the graph.
+3. **Merge-by-construction.** Each endpoint name is normalized to a key. **If the deterministic pipeline already produced an entity with that key, the triple reuses that node's id** — so the LLM relation attaches to the real, ranked, laid-out entity instead of spawning a duplicate dot. Otherwise a typeless `entity:LLM:` node is minted (L5 then fuzzy-links the near-misses). Provenance lives on `source: "llm"` + the `GENERATED` edge tag — never on the entity type.
+4. **Emit, cited.** A `GENERATED` relation edge `subject —PRED→ object` is created, confidence `0.5`, carrying the **byte span of the chunk it came from** — a coarse but real, re-verifiable citation (G3).
+5. **Flow downstream.** Because this all happens **before** L5/L7, those new entities go through entity resolution, PageRank, community detection, and force-layout exactly like deterministic ones. That ordering (fixed in v4.7.0) is why LLM relations now appear as first-class, positioned, labelled nodes rather than a ring of unranked dots at the origin.
+
+**The quarantine guarantee.** Merging node *identity* never launders an edge's tag: the `GENERATED` marker lives on the **edge**, so a model-authored relation between two otherwise-`EXTRACTED` entities stays `GENERATED` and filterable. In the console, the confidence-tag filter can hide every `GENERATED` edge in one click; in `graph.json`, they carry `tag: "GENERATED"`. With `--llm-extract` off, the pass is a complete no-op and the build is byte-identical.
+
+### Run it
+
+```bash
+export API_KEY=…                        # read from the environment ONLY — never persisted, never in the config hash
+export MODEL_BASE_URL=https://…/v1      # any OpenAI-compatible /chat/completions — OpenAI, vLLM, Ollama, LM Studio
+export MODEL_NAME=your-model            # e.g. a local Nemotron / Llama, or gpt-4o-mini
+
+# Build a meaning-rich graph: deterministic core + LLM relations + co-occurrence backbone.
+textgraph build ./case-files --llm-extract --llm-extract-budget 200 --co-occurrence -o ./case-out
+
+# Serve it — every LLM-extracted X -PRED-> Y relation is shown, GENERATED-tagged and cited.
+textgraph console ./case-out
+```
+
+`--llm-extract-budget N` dials the density (more chunks read → more relations, all cached). `--co-occurrence` is independent and free (no model) — it guarantees connectivity even before any LLM relations exist. The API key is read from the environment only; it never enters `graph.json`, the config hash, or the manifest.
 
 ## Status
 

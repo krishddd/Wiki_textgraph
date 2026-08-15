@@ -40,6 +40,14 @@
   code{ background:color-mix(in srgb, var(--acc) 10%, transparent); color:var(--fg);
     padding:2px 7px; border-radius:6px; font-size:13.5px; }
   .install{ margin:8px 0 0; }
+  .how{ margin:52px 0 0; border-top:1px solid var(--line); padding-top:36px; }
+  .how h2{ font-size:clamp(22px,3.4vw,28px); letter-spacing:-.02em; margin:0 0 12px; }
+  .how > p{ color:var(--fg2); max-width:720px; margin:0 0 18px; }
+  .how ol{ margin:0; padding-left:22px; }
+  .how ol li{ margin:0 0 12px; color:var(--fg2); font-size:15px; }
+  .how ol li strong{ color:var(--fg); }
+  .how .run{ margin:22px 0 0; overflow-x:auto; }
+  .how .run code{ display:block; white-space:nowrap; padding:12px 16px; font-size:13px; }
   footer{ margin-top:56px; color:var(--mut); font-size:13px; border-top:1px solid var(--line);
     padding-top:20px; }
   footer a{ color:var(--fg2); }
@@ -70,12 +78,38 @@
   <div class="grid">
     <div class="card"><h3>Every claim is cited</h3><p>Each edge carries a re-verifiable
       <code>[doc:byte-span]</code> citation — re-hash it against the source and it still matches.</p></div>
+    <div class="card"><h3>Deterministic pipeline</h3><p>A pure layer stack —
+      <code>ingest → structure → encoder&nbsp;IE → resolution → claims → analytics → retrieval</code> —
+      that never calls a model. Same corpus, byte-identical graph, gated in CI.</p></div>
+    <div class="card"><h3>The LLM augments, never grounds</h3><p>Two opt-in touchpoints only:
+      <code>--llm-extract</code> reads chunks and adds relations the deterministic pass missed;
+      <code>--llm</code> summarizes finished communities. Both <strong>run before/after the core,
+      stay <code>GENERATED</code>-tagged and byte-cited</strong>, and vanish when off.</p></div>
     <div class="card"><h3>Decisions &amp; provenance</h3><p>WHY/DECISION/ADR markers become a
       queryable causal chain; export a W3C PROV-O audit trail.</p></div>
     <div class="card"><h3>Conflicts, never silent</h3><p>Contradictory single-truth claims are
       surfaced for review, resolved only on an explicit, non-destructive policy.</p></div>
     <div class="card"><h3>Bring your own scale</h3><p>Optional GQL, vision retrieval, access
       control, and Graph-of-Thoughts reasoning — each an opt-in module.</p></div>
+  </div>
+
+  <div class="how">
+    <h2>How a build runs</h2>
+    <p>Every layer is a pure function of the one below it plus a pinned config hash — the property
+    that makes the graph reproducible and incremental. The LLM appears at exactly two opt-in,
+    quarantined touchpoints; turn them off and the build is byte-identical.</p>
+    <ol>
+      <li><strong>L0 ingest</strong> — files become a canonical UTF-8 doc with a raw-byte offset map and hierarchical chunks.</li>
+      <li><strong>L1 structure</strong> — zero-model parse: sections, links, definitions, citations, rationale &amp; requirements (<code>STRUCTURAL</code>).</li>
+      <li><strong>L2 / L3 encoder IE</strong> — deterministic entities + typed relations, coref-lite, negation/modality preserved (<code>EXTRACTED</code>).</li>
+      <li><strong>🧠 LLM relation extraction</strong> <em>(opt-in <code>--llm-extract</code>)</em> — the LLM reads each chunk and returns
+        <code>{subject, predicate, object}</code> triples; each endpoint <strong>merges onto an existing
+        entity by name</strong> (no duplicate nodes) or mints a new one, and every edge is
+        <code>GENERATED</code>-tagged and cited to the chunk's byte span. Prompt-cached, budget-capped, deterministic given a fixed model.</li>
+      <li><strong>🔗 Co-occurrence backbone</strong> <em>(opt-in <code>--co-occurrence</code>)</em> — links entities co-mentioned in a chunk so a relation-sparse corpus still forms a connected, clustered graph (<code>STRUCTURAL</code>, cited).</li>
+      <li><strong>L5 resolution → L6 claims → L7 analytics → L8 retrieval</strong> — resolution, bi-temporal claims, PageRank/communities/layout, and the dual-node retrieval graph. Because extraction runs <em>before</em> this, LLM entities are ranked, clustered and positioned like any other.</li>
+    </ol>
+    <p class="run"><code>textgraph build ./case-files --llm-extract --co-occurrence -o case-out &amp;&amp; textgraph console case-out</code></p>
   </div>
 
   <footer>

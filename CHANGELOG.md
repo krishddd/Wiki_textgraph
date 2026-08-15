@@ -6,6 +6,21 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.7.1] - 2026-08-15
+
+### Documentation
+- **Documented the real backend workflow and how the LLM is actually used.** The README's
+  architecture diagram was corrected to show the LLM at its two true opt-in touchpoints —
+  relation extraction (`--llm-extract`, an *input* enricher that now runs **before** entity
+  resolution/analytics) and synthesis (`--llm`, an *output* pass) — instead of the old,
+  misleading "L4 between L3 and L5" placement. Added a **"How a build actually runs"** section:
+  the full 11-step pipeline order with per-step confidence tags, and a step-by-step (with
+  sequence diagram) of the LLM relation-extraction path — chunk → prompt/cache → JSON triples →
+  merge-by-construction onto existing entities → `GENERATED` edges cited to the chunk span →
+  flow through L5/L7/L8 — plus the quarantine guarantee and how to run it. The GitHub Pages
+  landing page gained a matching "How a build runs" section and an LLM-usage card. Docs only;
+  no code or artifact change.
+
 ## [4.7.0] - 2026-08-15
 
 ### Fixed
