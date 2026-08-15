@@ -212,6 +212,8 @@ flowchart TD
 
 ## Status
 
+🟢 **v4.7.0 — connected graphs, not floating dots.** A pipeline-ordering fix makes LLM-extracted entities first-class — resolved, ranked, clustered and laid out like every other node (previously they landed at the origin, unranked, as a field of dots). New `build --co-occurrence` links entities co-mentioned in a chunk with byte-cited `STRUCTURAL` edges so a relation-sparse corpus still forms a connected, clustered map. The console fades unconnected nodes by default (toggle **F**), always labels the top entities, and `GRAPH_REPORT.md` gains a graph-health panel (orphan %, duplicate-name candidates). All opt-in; the deterministic baseline is unchanged.
+
 🟢 **v4.6.0 — openCypher export → Neo4j.** `textgraph export --format cypher` emits a deterministic load script that recreates the graph — citations and confidence tags included — in Neo4j / Memgraph / AGE / Neptune. The DB is a downstream materialization target; the build stays local & deterministic.
 
 🟢 **v4.5.0 — graph interaction polish.** Click glides the camera with a selection halo, click-again / Escape undoes, the top search pans to matches, and Group lays communities out as separated readable clusters.

@@ -269,6 +269,7 @@ SKELETON_HTML = """
     <button class="rail-btn" id="r-fit" title="fit graph to screen">&#9633;</button>
     <button class="rail-btn" id="r-ego" title="ego / distance view">&#9673;</button>
     <button class="rail-btn" id="r-group" title="grouped (community) view">&#9635;</button>
+    <button class="rail-btn on" id="r-focus" title="focus: fade unconnected nodes (F)">&#9678;</button>
     <button class="rail-btn" id="r-panel" title="expand graph to full width / show panel">&#8596;</button>
     <span class="rail-sp"></span>
     <button class="rail-btn" id="r-theme" title="toggle light / dark">&#9681;</button>
@@ -364,7 +365,10 @@ const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(),
   predEdges:new Set(), date:null, grouped:false,
-  ego:false, egoAnchor:null, egoDepth:3, egoDist:null, egoAdj:null };
+  ego:false, egoAnchor:null, egoDepth:3, egoDist:null, egoAdj:null,
+  // derived each load: degree map, always-labelled top-PageRank set, median edge length
+  // (for long-chord fading), orphan count, and the focus-mode toggle (fade unconnected).
+  deg:{}, topRank:new Set(), edgeLenMed:0, orphanCount:0, focusOrphans:true };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -399,9 +403,32 @@ function fit(){ if(!S.g||!S.g.nodes.length) return;
   S.scale=Math.min(sx,sy,3); S.tx=r.width/2-((minx+maxx)/2)*S.scale;
   S.ty=r.height/2-((miny+maxy)/2)*S.scale; draw(); }
 const SX = n => n.x*S.scale + S.tx, SY = n => n.y*S.scale + S.ty;
-const rad = n => 3.5 + Math.sqrt(n.pagerank)*46;
+// Radius rewards centrality AND connectivity, so a relation-bearing node is never a bare
+// 3.5px dot lost among the orphans (the "floating dots" complaint).
+const rad = n => 3.5 + Math.sqrt(n.pagerank)*46 + Math.min(6, (S.deg[n.id]||0)*1.1);
 function visible(n){ return !S.hidden.has(n.community); }
 function dim(n){ return (S.match && !S.match.has(n.id)); }
+// A degree-0 node in focus mode fades to the background — unless it's a current match,
+// selection, or path/ego pick, which always stay lit and clickable.
+function isOrphan(n){ return !(S.deg[n.id]); }
+function orphanDimmed(n){
+  return S.focusOrphans && isOrphan(n) && !(S.match && S.match.has(n.id))
+    && !(S.sel && S.sel.id===n.id) && !S.pick.includes(n.id);
+}
+// Recompute the per-load derived structures: degree, the always-labelled top-PageRank set,
+// median edge length (long-chord fade threshold), and the orphan tally. Call after layout.
+function computeDerived(){
+  if(!S.g) return;
+  const deg={}; S.g.nodes.forEach(n=>deg[n.id]=0);
+  for(const e of S.g.edges){ if(deg[e.source]!=null) deg[e.source]++; if(deg[e.target]!=null) deg[e.target]++; }
+  S.deg=deg;
+  S.orphanCount=S.g.nodes.filter(n=>!deg[n.id]).length;
+  const ranked=[...S.g.nodes].sort((a,b)=>(b.pagerank||0)-(a.pagerank||0)||(a.id<b.id?-1:1));
+  S.topRank=new Set(ranked.slice(0,25).map(n=>n.id));
+  const lens=[]; for(const e of S.g.edges){ const a=S.byId[e.source], b=S.byId[e.target];
+    if(a&&b) lens.push(Math.hypot(a.x-b.x, a.y-b.y)); }
+  lens.sort((x,y)=>x-y); S.edgeLenMed=lens.length?lens[Math.floor(lens.length/2)]:0;
+}
 function edgeActive(e){ if(S.date===null) return true;
   if(e.t_valid && e.t_valid > S.date) return false;
   if(e.t_invalid && S.date >= e.t_invalid) return false;
@@ -440,7 +467,12 @@ function draw(){
     const a=byId[e.source], b=byId[e.target]; if(!a||!b||!visible(a)||!visible(b)) continue;
     const inPath = S.pathEdges.has(e.source+'>'+e.target)||S.pathEdges.has(e.target+'>'+e.source);
     const active = edgeActive(e);
-    const alpha = (dim(a)||dim(b)) ? 0.05 : (active ? 0.42 : 0.06);
+    // Long-chord fade: an edge stretching far past the typical length reads as a line "just
+    // passing through". Unless it's highlighted, fade it hard so structure stays legible.
+    const longChord = !inPath && S.edgeLenMed>0 &&
+      Math.hypot(a.x-b.x, a.y-b.y) > S.edgeLenMed*3.2;
+    let alpha = (dim(a)||dim(b)) ? 0.05 : (active ? 0.42 : 0.06);
+    if(longChord && !dim(a) && !dim(b)) alpha=Math.min(alpha,0.05);
     ctx.beginPath(); ctx.moveTo(SX(a),SY(a)); ctx.lineTo(SX(b),SY(b));
     ctx.strokeStyle = inPath?accent:('rgba('+ergb+','+alpha+')');
     ctx.lineWidth = inPath?2.5:1; ctx.stroke();
@@ -461,19 +493,26 @@ function draw(){
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
     const x=SX(n),y=SY(n),rr=rad(n); const d=dim(n);
+    const faded=orphanDimmed(n);                 // focus mode: unconnected -> background
     const isSel=S.sel&&S.sel.id===n.id;
     if(isSel){ ctx.save(); ctx.globalAlpha=0.22; ctx.beginPath(); ctx.arc(x,y,rr+9,0,7);
       ctx.fillStyle=accent; ctx.fill(); ctx.restore(); }   // soft selection halo
     ctx.beginPath(); ctx.arc(x,y,rr,0,7); ctx.fillStyle=nodeColor(n);
-    ctx.globalAlpha = d?0.14:1; ctx.fill();
+    ctx.globalAlpha = d?0.14:(faded?0.10:1); ctx.fill();
     if(isSel){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=selColor; ctx.stroke(); }
     if(S.pick.includes(n.id)){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=accent; ctx.stroke(); }
     ctx.globalAlpha=1;
-    if(rr*S.scale>6 && !d){ ctx.fillStyle=labelColor; ctx.font='11px ui-sans-serif,system-ui';
+    // Always label the top-PageRank nodes (scan-at-a-glance); others only when zoomed in.
+    // Never label a dimmed/faded node.
+    if(!d && !faded && (S.topRank.has(n.id) || rr*S.scale>6)){
+      ctx.fillStyle=labelColor; ctx.font='11px ui-sans-serif,system-ui';
       ctx.fillText(n.name.slice(0,24), x+rr+4, y+3.5); }
   }
-  note.textContent = S.g.truncated ? `showing ${S.g.shown} of ${S.g.total} entities (top by PageRank)`
+  const base = S.g.truncated ? `showing ${S.g.shown} of ${S.g.total} entities (top by PageRank)`
     : `${S.g.nodes.length} entities · ${S.g.edges.length} relations shown`;
+  note.textContent = S.orphanCount
+    ? `${base} · ${S.orphanCount} unconnected ${S.focusOrphans?'faded':'shown'} (F)`
+    : base;
 }
 
 function hit(mx,my){ let best=null,bd=1e9;
@@ -508,8 +547,11 @@ addEventListener('mouseup',e=>{
     else if(!S.pathMode) clearSelection();   // click on empty canvas = deselect
   }
   drag=null; c.classList.remove('grabbing'); });
-addEventListener('keydown',e=>{ if(e.key==='Escape' && document.activeElement.tagName!=='INPUT'){
-  if(S.ego) setEgo(false); else clearSelection(); } });
+addEventListener('keydown',e=>{
+  if(document.activeElement.tagName==='INPUT') return;
+  if(e.key==='Escape'){ if(S.ego) setEgo(false); else clearSelection(); }
+  if(e.key==='f'||e.key==='F'){ S.focusOrphans=!S.focusOrphans; syncRail&&syncRail(); draw(); }
+});
 addEventListener('mousemove',e=>{
   const r=c.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
   if(drag){ drag.moved+=Math.abs(e.movementX)+Math.abs(e.movementY);
@@ -747,7 +789,12 @@ function relayout(){
 
 function buildSidebar(){
   const cw=document.getElementById('comms'); cw.innerHTML='';
-  const CAP=40, comms=S.g.communities, shown=comms.slice(0,CAP);   // cap the roster; 100s of rows is noise
+  // Singleton communities are just isolated entities — hundreds of one-node "clusters" are
+  // noise, not structure. Show only the real (size>=2) macro-clusters, then a single summary
+  // row for everything that stands alone.
+  const CAP=40, all=S.g.communities;
+  const macro=all.filter(cm=>cm.size>=2), singles=all.filter(cm=>cm.size<2);
+  const shown=macro.slice(0,CAP);
   for(const cm of shown){ const row=document.createElement('div'); row.className='crow';
     row.innerHTML=`<input type="checkbox" checked><span class="dot" style="background:${color(cm.community_id)}"></span><span class="lbl">${esc(cm.label||('#'+cm.community_id))}</span><span class="ct">${cm.size}</span>`;
     const cb=row.querySelector('input');
@@ -755,9 +802,13 @@ function buildSidebar(){
       if(cb.checked) S.hidden.delete(cm.community_id); else S.hidden.add(cm.community_id);
       document.getElementById('all').checked=S.hidden.size===0; draw(); };
     cw.appendChild(row); }
-  if(comms.length>CAP){ const more=document.createElement('div'); more.className='crow';
-    more.style.cursor='default'; more.innerHTML=`<span class="lbl mut">+ ${comms.length-CAP} smaller clusters</span>`;
+  if(macro.length>CAP){ const more=document.createElement('div'); more.className='crow';
+    more.style.cursor='default'; more.innerHTML=`<span class="lbl mut">+ ${macro.length-CAP} smaller clusters</span>`;
     cw.appendChild(more); }
+  if(singles.length){ const row=document.createElement('div'); row.className='crow';
+    row.style.cursor='default';
+    row.innerHTML=`<span class="dot" style="background:var(--mut)"></span><span class="lbl mut">${singles.length} isolated entities</span>`;
+    cw.appendChild(row); }
   const tw=document.getElementById('tags'); tw.innerHTML='';
   for(const t of TAGS){ const el=document.createElement('span'); el.className='tag'; el.textContent=t;
     el.style.borderColor='var(--line)';
@@ -792,6 +843,7 @@ function syncRail(){
   const solo=document.getElementById('body').classList.contains('solo');
   document.getElementById('r-ego').classList.toggle('on', S.ego);
   document.getElementById('r-group').classList.toggle('on', S.grouped);
+  document.getElementById('r-focus').classList.toggle('on', S.focusOrphans);
   document.getElementById('r-panel').classList.toggle('on', solo);
 }
 document.getElementById('fit').onclick=fit;
@@ -808,6 +860,7 @@ document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
 document.getElementById('r-fit').onclick=fit;
 document.getElementById('r-ego').onclick=()=>document.getElementById('egobtn').click();
 document.getElementById('r-group').onclick=()=>document.getElementById('groupbtn').click();
+document.getElementById('r-focus').onclick=()=>{ S.focusOrphans=!S.focusOrphans; syncRail(); draw(); };
 document.getElementById('r-panel').onclick=()=>document.getElementById('panel').click();
 document.getElementById('r-theme').onclick=()=>document.getElementById('theme').click();
 // Collapsible inspector sections: a header folds every following sibling up to the next
@@ -899,7 +952,7 @@ async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
   S.egoAdj=null; S._preGroup=null;  // caches stale after a rebuild
   if(S.ego && S.egoAnchor && !S.byId[S.egoAnchor]) S.egoAnchor=null;  // focus removed
-  relayout(); if(S.grouped) groupLayout();
+  relayout(); if(S.grouped) groupLayout(); computeDerived();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
   if(S.ego) reEgo();
 }
@@ -979,7 +1032,7 @@ async function removeDoc(name){
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
-  relayout();
+  relayout(); computeDerived();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); initAsk(); buildDocs(); resize(); fit();
 })();
 """

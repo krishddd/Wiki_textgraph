@@ -19,15 +19,17 @@ from textgraph.l0_ingest import ingest_path
 from textgraph.l0_ingest.base import UnsupportedFormat
 from textgraph.l1_structure import parse_corpus
 from textgraph.l1_structure.decisions import derive_decisions
+from textgraph.l1_structure.emit import normalize_key
 from textgraph.l3_encoder_ie import emit_ie, run_ie
 from textgraph.l5_entity_resolution import build_records, emit_er, run_er
 from textgraph.l6_graph_model import apply_temporal, reify_claims
 from textgraph.l6_graph_model.conflicts import detect_conflicts, resolve_conflicts
+from textgraph.l6_graph_model.cooccurrence import cooccurrence_edges
 from textgraph.l7_analytics import Analytics, compute_analytics
 from textgraph.l7_analytics.enrich import contradiction_edges, enrich_nodes
 from textgraph.l8_retrieval.emit_chunks import emit_chunks
 from textgraph.l9_artifacts.graph_json import build_graph_document, dump_graph_bytes
-from textgraph.store.base import Edge, Node, SourceSpan
+from textgraph.store.base import Edge, Node
 from textgraph.store.memory import InMemoryGraphStore
 
 # Extensions we attempt to ingest. Everything else is skipped so a corpus dir can
@@ -112,14 +114,20 @@ def _run_l4(
 
 
 def _run_llm_extract(
+    results: list[IngestResult],
     nodes: list[Node],
-    edges: list[Edge],
     config: Config,
     cache_dir: str | Path | None,
 ) -> tuple[list[Node], list[Edge]]:
-    """Resolve the LLM client + cache and run GENERATED relation extraction; ([], []) if skipped."""
+    """Resolve the LLM client + cache and run GENERATED relation extraction; ([], []) if skipped.
+
+    Reads chunk text straight from the L0 ``results`` (not L8 ``Chunk`` nodes), so it can run
+    *before* entity resolution / analytics / layout — the whole point of the reorder: LLM
+    entities then flow through those passes and never end up as unranked, unplaced dots.
+    """
     import tempfile
 
+    from textgraph.l1_structure.emit import source_span
     from textgraph.l4_llm_optional import PromptCache, resolve_client
     from textgraph.l4_llm_optional.extract import extract_llm_relations
 
@@ -132,19 +140,24 @@ def _run_llm_extract(
         else Path(tempfile.mkdtemp(prefix="textgraph-llm-"))
     )
     cache = PromptCache(llm_cache_dir)
-    # Chunk text + the span it cites (from its incoming CONTAINS edge), for coarse provenance.
-    chunk_ids = {n.node_id for n in nodes if "Chunk" in n.labels}
-    by_id = {n.node_id: n for n in nodes}
-    chunk_span: dict[str, SourceSpan] = {}
-    for e in edges:
-        if e.object in chunk_ids and e.source_spans:
-            chunk_span.setdefault(e.object, e.source_spans[0])
+    # (chunk_id, text, cited span) triples, straight from the deterministic L0 chunks.
     chunks = [
-        (cid, str(by_id[cid].properties.get("text", "")), chunk_span[cid])
-        for cid in sorted(chunk_ids)
-        if cid in chunk_span
+        (ch.chunk_id, str(ch.text), source_span(ir, ch.span)) for ir in results for ch in ir.chunks
     ]
-    return extract_llm_relations(chunks, client, cache, max_calls=config.llm_extract_max_calls)
+    # Merge-by-construction map: existing entity name-key -> its id, so LLM triples attach to
+    # the deterministic node instead of a parallel `entity:LLM:` dot.
+    existing = {
+        normalize_key(str(n.properties.get("name", ""))): n.node_id
+        for n in nodes
+        if "Entity" in n.labels and n.properties.get("name")
+    }
+    return extract_llm_relations(
+        chunks,
+        client,
+        cache,
+        max_calls=config.llm_extract_max_calls,
+        existing_entities=existing,
+    )
 
 
 def build(
@@ -244,6 +257,40 @@ def build(
     merged_edges = {e.edge_id: e for e in edges} | ie_edges
     nodes = sorted(merged_nodes.values(), key=lambda n: n.node_id)
     edges = sorted(merged_edges.values(), key=lambda e: e.edge_id)
+
+    # LLM relation enrichment (opt-in, GENERATED). Runs HERE — before entity resolution,
+    # analytics, and layout — so every LLM-contributed entity is resolved, ranked, clustered
+    # and positioned like any other node, instead of arriving after those passes as an
+    # unranked dot at the origin. Triples merge onto existing entities by name-key; the rest
+    # mint typeless `entity:LLM:` nodes that L5 then fuzzy-links. Quarantined by tag (G4),
+    # bounded by budget (G7); a no-op unless `--llm-extract` is set, so the default build and
+    # its determinism/provenance gates are untouched.
+    gen_relation_count = 0
+    if config.llm_extract:
+        gen_nodes, gen_edges = _run_llm_extract(results, nodes, config, cache_dir)
+        gen_relation_count = len(gen_edges)
+        if gen_nodes or gen_edges:
+            nodes = sorted(
+                ({n.node_id: n for n in nodes} | {n.node_id: n for n in gen_nodes}).values(),
+                key=lambda n: n.node_id,
+            )
+            edges = sorted(
+                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in gen_edges}).values(),
+                key=lambda e: e.edge_id,
+            )
+
+    # Co-occurrence backbone (opt-in, STRUCTURAL). Also runs before L5/L7 so analytics,
+    # communities and layout see a connected graph rather than a dust of orphans. Cited by
+    # the shared chunk span; a no-op unless `--co-occurrence` is set (baseline gate untouched).
+    cooccurrence_count = 0
+    if config.co_occurrence:
+        co_edges = cooccurrence_edges(results, nodes, edges)
+        cooccurrence_count = len(co_edges)
+        if co_edges:
+            edges = sorted(
+                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in co_edges}).values(),
+                key=lambda e: e.edge_id,
+            )
 
     # L5 — entity resolution: link alias entities to canonical nodes via SAME_AS.
     er_ms = 0.0
@@ -352,6 +399,18 @@ def build(
         community_count = len(analytics.community_labels)
         l7_ms = (time.perf_counter() - t5) * 1000
 
+        # Invariant (guards the reorder that fixed the "floating dots" bug): once analytics
+        # has run, every Entity must be laid out and clustered. A node with no position or
+        # community == -1 slipped in *after* L7 — exactly the class of bug this release fixes.
+        for n in nodes:
+            if "Entity" not in n.labels:
+                continue
+            props = n.properties
+            assert "x" in props and "y" in props, f"entity {n.node_id} left L7 without a position"
+            assert int(props.get("community", -1)) >= 0, (
+                f"entity {n.node_id} left L7 with community == -1 (added after analytics?)"
+            )
+
     # L8 — dual-node retrieval graph: emit Chunk nodes + entity<->chunk links.
     l8_ms = 0.0
     chunk_count = 0
@@ -368,24 +427,6 @@ def build(
             key=lambda e: e.edge_id,
         )
         l8_ms = (time.perf_counter() - t6) * 1000
-
-    # LLM relation enrichment (opt-in, GENERATED). Runs the LLM over chunks to add relations
-    # the deterministic extractors missed; quarantined by tag, bounded by budget (G7). Gated
-    # on `llm_extract` alone (independent of `llm_enabled`, which drives L4 summaries) so
-    # `--llm-extract` adds only extraction relations — not community summaries.
-    gen_relation_count = 0
-    if config.llm_extract and config.emit_chunks:
-        gen_nodes, gen_edges = _run_llm_extract(nodes, edges, config, cache_dir)
-        gen_relation_count = len(gen_edges)
-        if gen_edges:
-            nodes = sorted(
-                ({n.node_id: n for n in nodes} | {n.node_id: n for n in gen_nodes}).values(),
-                key=lambda n: n.node_id,
-            )
-            edges = sorted(
-                ({e.edge_id: e for e in edges} | {e.edge_id: e for e in gen_edges}).values(),
-                key=lambda e: e.edge_id,
-            )
 
     # L4 — optional LLM synthesis (opt-in, GENERATED-tagged, quarantined). Runs last so
     # it can summarize the finished communities; skipped (never fails) if unconfigured.
@@ -446,6 +487,7 @@ def build(
             "chunks": chunk_count,
             "summaries": summary_count,
             "llm_relations": gen_relation_count,
+            "cooccurrence": cooccurrence_count,
         },
         analytics=analytics,
     )

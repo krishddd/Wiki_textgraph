@@ -69,6 +69,81 @@ def suggested_questions(nodes: list[Node], edges: list[Edge], diag: Diagnostics)
     return questions[:10]
 
 
+_NON_RELATION_PREDS = frozenset(
+    {"SAME_AS", "MENTIONS", "HAS_CHUNK", "SUBJECT_OF", "HAS_OBJECT", "CONTAINS"}
+)
+
+
+def _graph_health_section(nodes: list[Node], edges: list[Edge]) -> list[str]:
+    """A compact health panel: the metrics that reveal a sparse or duplicated graph.
+
+    These are the exact signals the 'floating dots' audit turned on — orphan rate,
+    singleton-community rate, unlaid/unranked nodes, and duplicate-name candidates — surfaced
+    so a thin graph is legible at a glance instead of only visible in the viewer.
+    """
+    entities = [n for n in nodes if "Entity" in n.labels]
+    total = len(entities)
+    if not total:
+        return []
+
+    eids = {n.node_id for n in entities}
+    deg = dict.fromkeys(eids, 0)
+    for e in edges:
+        if e.predicate in _NON_RELATION_PREDS:
+            continue
+        if e.subject in deg:
+            deg[e.subject] += 1
+        if e.object in deg:
+            deg[e.object] += 1
+    orphans = sum(1 for v in deg.values() if v == 0)
+
+    comm_size: dict[int, int] = {}
+    for n in entities:
+        cid = int(n.properties.get("community", -1))
+        comm_size[cid] = comm_size.get(cid, 0) + 1
+    singletons = sum(1 for s in comm_size.values() if s == 1)
+    n_comm = len(comm_size)
+
+    unlaid = sum(1 for n in entities if "x" not in n.properties or "y" not in n.properties)
+    unranked = sum(1 for n in entities if int(n.properties.get("community", -1)) < 0)
+
+    # Duplicate-name candidates: distinct entity ids that share a normalized name.
+    by_key: dict[str, int] = {}
+    for n in entities:
+        key = str(n.properties.get("name", "")).strip().lower()
+        if key:
+            by_key[key] = by_key.get(key, 0) + 1
+    dup_names = sum(c - 1 for c in by_key.values() if c > 1)
+
+    def pct(x: int) -> str:
+        return f"{100.0 * x / total:.0f}%"
+
+    lines = ["", "## Graph health", "", "| metric | value |", "| --- | --- |"]
+    lines.append(f"| entities | {total} |")
+    lines.append(f"| orphans (degree 0) | {orphans} ({pct(orphans)}) |")
+    lines.append(
+        f"| singleton communities | {singletons} of {n_comm} "
+        f"({pct(singletons) if total else '0%'}) |"
+    )
+    lines.append(f"| duplicate-name candidates | {dup_names} |")
+    if unlaid or unranked:
+        lines.append(f"| unlaid / unranked (bug) | {unlaid} / {unranked} |")
+    hints = []
+    if orphans > total * 0.4:
+        hints.append(
+            "Most entities are unconnected — build with `--co-occurrence` (or `--llm-extract`) "
+            "to form a connected, clustered graph."
+        )
+    if dup_names:
+        hints.append(
+            "Some entities share a name — consider entity resolution (the `[er]` extra) to merge "
+            "aliases."
+        )
+    if hints:
+        lines += ["", *[f"> {h}" for h in hints]]
+    return lines
+
+
 def render_report(
     *,
     results: list[IngestResult],
@@ -107,6 +182,8 @@ def render_report(
     lines += ["", "## Edge types", "", "| predicate | count |", "| --- | --- |"]
     for pred in sorted(pred_counts):
         lines.append(f"| {pred} | {pred_counts[pred]} |")
+
+    lines += _graph_health_section(nodes, edges)
 
     # Entities (Phase 2): grouped by type, top by degree.
     _RELATION_PREDS = (

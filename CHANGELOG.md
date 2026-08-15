@@ -6,6 +6,43 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-08-15
+
+### Fixed
+- **The "floating dots" bug — LLM-extracted entities are now first-class.** LLM relation
+  extraction ran *after* entity resolution, analytics, and layout, so every entity it
+  contributed left the pipeline unranked (`pagerank == 0`), unclustered (`community == -1`),
+  and unplaced (`x == y == 0`) — a field of dots at the origin with long chords crossing the
+  canvas. Extraction now runs **before** L5/L7, so those entities flow through resolution,
+  PageRank, community detection and force-layout like any other node. On a 470-entity case
+  graph this was 153 entities (32%) sitting at the origin. A build invariant now asserts no
+  entity leaves L7 without a position and a real community, so the bug cannot silently return.
+- **No more duplicate `entity:LLM:` dots.** A triple endpoint whose name matches an entity the
+  deterministic pipeline already produced now **reuses that node's id** (merge-by-construction)
+  instead of spawning a parallel node that split a single thing's relations across two dots.
+  Near-misses are still fuzzy-linked by L5 entity resolution.
+- **`LLM` is no longer shown as an entity type.** It was a provenance stamp (`etype: "LLM"`)
+  leaking into the type legend; provenance stays on `source: "llm"` + the `GENERATED` edge tag,
+  and merged nodes inherit their real type.
+
+### Added
+- **Co-occurrence backbone (`textgraph build --co-occurrence`).** For a corpus that names many
+  entities but states few explicit relations, this adds `STRUCTURAL` `CO_OCCURS` edges between
+  entities co-mentioned in the same chunk — cited by the shared chunk's byte span — so
+  analytics, communities and layout see a **connected, clustered** graph instead of a dust of
+  orphans. Deterministic and opt-in (the baseline determinism gate is untouched). New
+  `textgraph/l6_graph_model/cooccurrence.py`. Distinct from the console's view-only fallback:
+  these are real graph edges the analytics actually run on.
+- **Graph console: focus mode + readability.** Unconnected nodes fade to the background by
+  default (toggle with the ◉ rail button or **F**), with a live "N unconnected" count in the
+  status line, so structure is what you see first. The top-25 PageRank nodes are always
+  labelled (no zoom needed); node radius now also reflects degree; over-long "passing" edges
+  fade; and the community roster collapses hundreds of singleton clusters into one "N isolated
+  entities" row.
+- **Graph-health panel in `GRAPH_REPORT.md`.** Orphan %, singleton-community %, duplicate-name
+  candidates, and an unlaid/unranked bug tripwire — the exact signals from the quality audit,
+  with a one-line hint to enable `--co-occurrence` / `[er]` when the graph is thin.
+
 ## [4.6.0] - 2026-08-14
 
 ### Added

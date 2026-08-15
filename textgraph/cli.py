@@ -663,6 +663,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
         llm_enabled=bool(args.llm),
         llm_extract=bool(args.llm_extract),
         llm_extract_max_calls=int(getattr(args, "llm_extract_budget", 40)),
+        co_occurrence=bool(getattr(args, "co_occurrence", False)),
         resolve_conflicts_strategy=args.resolve_conflicts or "",
         source_credibility=cred,
     )
@@ -787,6 +788,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="max chunks the LLM extractor reads (default 40). Raise it for a denser, "
         "NotebookLM-style relation map on larger corpora (more LLM calls, cached).",
+    )
+    p_build.add_argument(
+        "--co-occurrence",
+        dest="co_occurrence",
+        action="store_true",
+        help="opt-in: add STRUCTURAL CO_OCCURS edges between entities co-mentioned in a "
+        "chunk, so a relation-sparse corpus still forms a connected, clustered graph "
+        "(deterministic, byte-cited).",
     )
     p_build.add_argument(
         "--resolve-conflicts",

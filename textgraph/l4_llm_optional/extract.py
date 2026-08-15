@@ -54,9 +54,22 @@ def _parse_triples(raw: str) -> list[tuple[str, str, str]]:
     return out[:_MAX_TRIPLES_PER_CHUNK]
 
 
-def _entity(name: str) -> Node:
-    nid = "entity:LLM:" + normalize_key(name)
-    return Node(nid, ("Entity",), {"name": name, "etype": "LLM", "source": "llm"})
+def _resolve(name: str, existing_by_key: dict[str, str], new_nodes: dict[str, Node]) -> str:
+    """Return the graph id for ``name``, merging into a deterministic twin when one exists.
+
+    If the corpus already produced an entity with the same normalized key (e.g. the L3
+    extractor found ``Drive Planning`` too), reuse *its* id so the LLM relation attaches to
+    the existing, ranked, laid-out node instead of a duplicate dot. Otherwise mint a
+    typeless ``entity:LLM:`` node — no ``etype`` stamp (``etype`` is what a thing *is*, not
+    where it came from; provenance lives on ``source`` + the ``GENERATED`` edge tag). Entity
+    resolution (L5), which now runs after this pass, still fuzzy-links the near-misses.
+    """
+    key = normalize_key(name)
+    if key in existing_by_key:
+        return existing_by_key[key]
+    nid = "entity:LLM:" + key
+    new_nodes.setdefault(nid, Node(nid, ("Entity",), {"name": name, "source": "llm"}))
+    return nid
 
 
 def extract_llm_relations(
@@ -65,12 +78,18 @@ def extract_llm_relations(
     cache: PromptCache,
     *,
     max_calls: int = 40,
+    existing_entities: dict[str, str] | None = None,
 ) -> tuple[list[Node], list[Edge]]:
     """Run the LLM over ``(chunk_id, text, span)`` items; emit GENERATED nodes + edges.
 
     Deterministic given a fixed model + cache: prompts are cached by content, results are
     sorted, and ids are content-addressed. Stops after ``max_calls`` uncached chunks.
+
+    ``existing_entities`` maps ``normalize_key(name) -> node_id`` for entities the
+    deterministic pipeline already produced; a triple endpoint whose key is present reuses
+    that id so LLM relations merge onto real nodes rather than spawning parallel dots.
     """
+    existing_by_key = existing_entities or {}
     nodes: dict[str, Node] = {}
     edges: dict[str, Edge] = {}
     calls = 0
@@ -90,17 +109,18 @@ def extract_llm_relations(
                 continue
             cache.put(key, cached)
         for subj, pred, obj in _parse_triples(cached):
-            sn, on = _entity(subj), _entity(obj)
-            nodes.setdefault(sn.node_id, sn)
-            nodes.setdefault(on.node_id, on)
-            eid = "edge:" + hash_text(f"{sn.node_id}|{pred}|{on.node_id}|{span.doc_id}")
+            sid = _resolve(subj, existing_by_key, nodes)
+            oid = _resolve(obj, existing_by_key, nodes)
+            if sid == oid:
+                continue  # a self-loop after merge carries no information
+            eid = "edge:" + hash_text(f"{sid}|{pred}|{oid}|{span.doc_id}")
             edges.setdefault(
                 eid,
                 Edge(
                     edge_id=eid,
-                    subject=sn.node_id,
+                    subject=sid,
                     predicate=pred,
-                    object=on.node_id,
+                    object=oid,
                     tag=ConfidenceTag.GENERATED,
                     confidence=0.5,
                     evidence_count=1,

@@ -84,6 +84,36 @@ def test_extract_is_cached(tmp_path: Path) -> None:
     assert client2.calls == 0
 
 
+def test_extract_merges_onto_existing_entity(tmp_path: Path) -> None:
+    # A triple endpoint whose normalized name matches an entity the deterministic pipeline
+    # already produced must REUSE that id (no parallel `entity:LLM:` dot) — the fix for the
+    # duplicate-node sparsity. "Acme Corp" is known; "Beta Ltd" is new.
+    client = _StubClient('[{"subject":"Acme Corp","predicate":"pays","object":"Beta Ltd"}]')
+    cache = PromptCache(tmp_path)
+    chunks = [("chunk:1", "Acme Corp pays Beta Ltd a large sum every quarter here.", _span())]
+    existing = {"acme corp": "entity:Organization:acme corp"}
+    nodes, edges = extract_llm_relations(chunks, client, cache, existing_entities=existing)
+    assert len(edges) == 1
+    e = edges[0]
+    assert e.subject == "entity:Organization:acme corp"  # merged onto the deterministic node
+    assert e.object.startswith("entity:LLM:")  # the unknown endpoint is a fresh LLM node
+    # The known entity is NOT re-emitted as a duplicate node.
+    assert all(n.node_id != "entity:Organization:acme corp" for n in nodes)
+
+
+def test_extract_drops_self_loop_after_merge(tmp_path: Path) -> None:
+    # If both endpoints resolve to the same node, the edge carries no information.
+    client = _StubClient('[{"subject":"Acme","predicate":"is","object":"Acme Corp"}]')
+    existing = {"acme": "entity:Organization:acme", "acme corp": "entity:Organization:acme"}
+    _nodes, edges = extract_llm_relations(
+        [("chunk:1", "Acme is Acme Corp, the same firm, mentioned twice here.", _span())],
+        client,
+        PromptCache(tmp_path),
+        existing_entities=existing,
+    )
+    assert edges == []
+
+
 def test_extract_respects_call_budget(tmp_path: Path) -> None:
     client = _StubClient('[{"subject":"A","predicate":"x","object":"B"}]')
     chunks = [
@@ -123,6 +153,27 @@ def test_llm_extract_count_matches_generated_edges(monkeypatch: pytest.MonkeyPat
     assert r.graph_stats.get("summaries", 0) == 0  # extraction did NOT trigger summaries
     assert not [n for n in r.nodes if "Summary" in n.labels]
     assert all(e.properties.get("source") == "llm" for e in generated)
+
+
+def test_llm_entities_are_ranked_clustered_and_laid_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # THE regression guard for the "floating dots" bug: because extraction now runs BEFORE
+    # analytics/layout, every LLM-contributed entity must leave the pipeline positioned,
+    # ranked, and in a real community. A node at pagerank==0 / community==-1 / no position
+    # would mean the pass slipped back after L7 — exactly the class of bug this release fixes.
+    import textgraph.l4_llm_optional as l4
+
+    monkeypatch.setattr(l4, "resolve_client", lambda config: _TripleClient())
+    r = build(DOCS, config=Config(llm_extract=True))
+    llm_nodes = [n for n in r.nodes if n.properties.get("source") == "llm"]
+    assert llm_nodes, "the stub should have produced at least one new LLM entity"
+    for n in llm_nodes:
+        assert "x" in n.properties and "y" in n.properties  # laid out
+        assert int(n.properties.get("community", -1)) >= 0  # clustered
+        assert "pagerank" in n.properties  # ranked
+    # And no LLM node carries the old provenance-as-type stamp.
+    assert all(n.properties.get("etype") != "LLM" for n in r.nodes)
 
 
 def test_summaries_are_decoupled_from_extraction(monkeypatch: pytest.MonkeyPatch) -> None:

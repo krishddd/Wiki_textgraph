@@ -107,6 +107,12 @@ class Config:
     # relations the deterministic extractors missed. Opt-in, on top of llm_enabled.
     llm_extract: bool = False
     llm_extract_max_calls: int = 40  # bound on uncached extraction calls per build (G7)
+    # Co-occurrence backbone (input): when the corpus names entities but states few hard
+    # relations, link entities co-mentioned in the same chunk with STRUCTURAL CO_OCCURS
+    # edges, so analytics/communities/layout see a connected graph instead of a dust of
+    # orphans. Deterministic and byte-cited (the shared chunk span); off by default so the
+    # baseline determinism gate is unchanged. Distinct from the console's view-only fallback.
+    co_occurrence: bool = False
     llm_max_tokens: int = 256
     llm_temperature: float = 0.0  # deterministic-leaning; responses are also cached
     # Free-form, pinned model ids per layer (filled in as layers are added).
