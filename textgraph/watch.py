@@ -35,6 +35,7 @@ def watch(
     interval: float = 2.0,
     iterations: int = 0,
     on_build: Callable[[BuildResult], None] | None = None,
+    on_diff: Callable[[BuildResult, BuildResult], None] | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> str | None:
     """Watch ``root``; rebuild into ``out_dir`` on each content change.
@@ -42,6 +43,9 @@ def watch(
     ``iterations`` bounds the number of poll cycles (0 = run forever); tests pass a
     finite count. Returns the last-seen corpus signature. ``sleep`` is injectable so
     tests need not actually wait.
+
+    ``on_diff(prev, curr)`` fires on every rebuild *after the first*, with the previous and
+    current builds, so a caller can diff them (for alerts/watchlists) without re-plumbing.
     """
     out_dir = Path(out_dir)
     cache_dir = Path(cache_dir) if cache_dir is not None else out_dir / ".cache"
@@ -55,6 +59,7 @@ def watch(
                 "(else its own artifacts get re-ingested)"
             )
     prev_sig: str | None = None
+    prev_result: BuildResult | None = None
     count = 0
     while iterations == 0 or count < iterations:
         sig = corpus_signature(root)
@@ -74,6 +79,9 @@ def watch(
             prev_sig = sig
             if on_build is not None:
                 on_build(result)
+            if on_diff is not None and prev_result is not None:
+                on_diff(prev_result, result)
+            prev_result = result
         count += 1
         if iterations == 0 or count < iterations:
             sleep(interval)

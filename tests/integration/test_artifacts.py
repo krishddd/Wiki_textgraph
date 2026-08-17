@@ -85,6 +85,19 @@ def test_graph_html_ships_the_visualization_upgrades(tmp_path: Path) -> None:
     assert 'id="minimap"' in html and 'id="tplay"' in html and 'id="heatbtn"' in html
 
 
+def test_graph_html_gates_annotations_offline(tmp_path: Path) -> None:
+    # The annotation editor is a live-server feature (writes to the sidecar). Offline it must
+    # be feature-gated on TG.annotate, which the offline adapter does not define — so the
+    # editor never renders and nothing tries to POST.
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    assert "function annotationEditor(nid)" in html
+    assert "typeof TG.annotate!=='function'" in html  # gate present
+    assert (
+        "TG.annotate" not in html.split("const TG = {")[1].split("};")[0]
+    )  # not in offline adapter
+
+
 def test_graph_html_degrades_ask_dock_features_offline(tmp_path: Path) -> None:
     # The Ask dock's server-only features (multi-turn chat, citation source panel) must not
     # break the offline viewer: the citation click-through gates on TG.source, and the

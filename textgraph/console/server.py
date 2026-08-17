@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from textgraph.console.annotations import AnnotationStore
 from textgraph.console.api import route
 from textgraph.console.session import SessionStore
 from textgraph.l8_retrieval.engine import QueryEngine
@@ -69,6 +70,7 @@ class _State:
     token: str | None = None
     ingest_lock: threading.Lock = field(default_factory=threading.Lock)
     sessions: SessionStore = field(default_factory=SessionStore)
+    annotations: AnnotationStore = field(default_factory=lambda: AnnotationStore(None))
 
 
 def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
@@ -112,7 +114,17 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             path = urlparse(self.path).path
             # /api/config reports server-level flags the read-only route() can't know.
             if path == "/api/config":
-                self._json(200, {"ingest": state.allow_ingest, "auth": bool(state.token)})
+                self._json(
+                    200,
+                    {
+                        "ingest": state.allow_ingest,
+                        "auth": bool(state.token),
+                        "annotate": True,  # annotations are always available (sidecar only)
+                    },
+                )
+                return
+            if path == "/api/annotations":
+                self._json(200, state.annotations.to_payload())
                 return
             if path == "/api/export":
                 self._export()
@@ -155,6 +167,9 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed.path == "/api/remove":
                 self._remove(raw)
+                return
+            if parsed.path == "/api/annotate":
+                self._annotate(raw)
                 return
             # Other POSTs (the chat) carry JSON/urlencoded params merged into route().
             params: dict[str, str] = {}
@@ -231,6 +246,23 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 state.sessions.clear()  # drop conversation memory tied to the old graph
             self._json(200, {"ok": True, "removed": name, "nodes": len(res.nodes)})
 
+        def _annotate(self, raw: bytes) -> None:
+            # Annotations are a sidecar overlay; they never touch graph.json, so they're always
+            # allowed (no --allow-ingest gate). Body: {node, status, note}.
+            try:
+                body = json.loads(raw or b"{}")
+            except (ValueError, UnicodeDecodeError):
+                self._json(400, {"ok": False, "error": "invalid JSON"})
+                return
+            node = str(body.get("node", "")).strip()
+            if not node:
+                self._json(400, {"ok": False, "error": "no node id"})
+                return
+            stored = state.annotations.set(
+                node, status=str(body.get("status", "none")), note=str(body.get("note", ""))
+            )
+            self._json(200, {"ok": True, "node": node, "annotation": stored})
+
         def log_message(self, *args: object) -> None:
             pass  # keep the console quiet
 
@@ -245,14 +277,20 @@ def serve(
     source: str | Path | None = None,
     allow_ingest: bool = False,
     token: str | None = None,
+    annotations_path: str | Path | None = None,
 ) -> None:  # pragma: no cover - binds a socket
     """Serve the console until interrupted (Ctrl-C).
 
     Pass ``source`` + ``allow_ingest=True`` to enable file-attach ingestion; ``token`` turns
-    on bearer-token auth on ``/api/*`` (recommended before binding a non-localhost host).
+    on bearer-token auth on ``/api/*`` (recommended before binding a non-localhost host);
+    ``annotations_path`` persists analyst annotations to a sidecar JSON (never touches
+    ``graph.json``).
     """
+    from textgraph.console.annotations import AnnotationStore
+
     cache_dir = tempfile.mkdtemp(prefix="tg-console-") if (allow_ingest and source) else None
     state = _State(engine, str(source) if source else None, allow_ingest, cache_dir, token)
+    state.annotations = AnnotationStore(annotations_path)
     server = ThreadingHTTPServer((host, port), _make_handler(state))
     extra = ("  · ingest ON" if state.allow_ingest else "") + ("  · auth ON" if token else "")
     print(f"TextGraph console: http://{host}:{port}  (Ctrl-C to stop){extra}")

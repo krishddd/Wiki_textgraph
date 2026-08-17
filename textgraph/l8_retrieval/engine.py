@@ -1074,6 +1074,28 @@ class QueryEngine:
                 pairs.append(ContradictionPair(a, b))
         return ContradictionsResult(pairs=pairs)
 
+    def resolution_hints(self, *, context: SecurityContext | None = None) -> list[dict[str, Any]]:
+        """For each contradiction, a deterministic *hint* on which claim likely supersedes.
+
+        Read-only and non-destructive (§6.4): a suggestion plus rationale, never a mutation.
+        The analyst applies it via an explicit ``build --resolve-conflicts`` pass, which writes
+        a cited ``SUPERSEDES`` edge. Returns one row per contradicted pair, each with the two
+        claims and the recommendation.
+        """
+        from textgraph.l6_graph_model.resolution import resolution_hint
+
+        out: list[dict[str, Any]] = []
+        for pair in self.contradictions(context=context).pairs:
+            hint = resolution_hint(pair.claim_a, pair.claim_b)
+            out.append(
+                {
+                    "claim_a": pair.claim_a.to_dict(),
+                    "claim_b": pair.claim_b.to_dict(),
+                    "hint": hint.to_dict(),
+                }
+            )
+        return out
+
     def conflicts(self, *, context: SecurityContext | None = None) -> ConflictsResult:
         """Single-truth conflicts (same subject+predicate, different objects, overlapping).
 

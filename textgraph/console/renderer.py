@@ -288,6 +288,24 @@ RENDERER_CSS = """
   .chain .step { font-size:12px; margin:5px 0; padding-left:9px; border-left:2px solid var(--line);
     color:var(--fg2); }
   .chain .step b { color:var(--fg); font-weight:600; }
+  /* Contradiction resolution hints */
+  .chain .cx { margin:2px 0; }
+  .chain .cx .ca, .chain .cx .cb { display:inline-block; width:15px; height:15px; line-height:15px;
+    text-align:center; border-radius:4px; font-size:10px; font-weight:700; margin-right:5px; color:#fff; }
+  .chain .cx .ca { background:var(--mut); } .chain .cx .cb { background:var(--acc); }
+  .chain .hint { margin-top:4px; font-size:11.5px; }
+  .hint-rec { display:inline-block; padding:1px 7px; border-radius:20px; font-size:10.5px;
+    font-weight:600; background:var(--acc); color:#fff; margin-right:6px; }
+  .hint-rec.none { background:var(--mut); }
+  /* Analyst annotation editor in the inspector */
+  .annot { margin-top:14px; padding-top:12px; border-top:1px dashed var(--line); }
+  .annot .ah { font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); margin-bottom:6px; }
+  .annsel { width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:8px;
+    background:var(--card); color:var(--fg); font:inherit; font-size:13px; margin-bottom:7px; }
+  .annnote { width:100%; min-height:52px; padding:7px 9px; border:1px solid var(--line);
+    border-radius:8px; background:var(--card); color:var(--fg); font:inherit; font-size:13px;
+    resize:vertical; box-sizing:border-box; }
+  .annrow { display:flex; align-items:center; gap:9px; margin-top:7px; }
   #askbar { display:flex; gap:8px; padding:11px 13px; border-top:1px solid var(--line);
     align-items:center; }
   #attach, #save { display:none; cursor:pointer; font-size:17px; line-height:1; padding:7px 9px;
@@ -438,7 +456,9 @@ const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   deg:{}, topRank:new Set(), edgeLenMed:0, orphanCount:0, focusOrphans:true,
   // v4.10: contradiction heatmap toggle (+ max count, for the colour scale) and the
   // timeline play state (interval id + keyframe cursor).
-  heat:false, heatMax:0, playing:false, playTimer:null };
+  heat:false, heatMax:0, playing:false, playTimer:null,
+  // v4.12: analyst annotations overlay (node id -> {status, note}); sidecar, never graph.json.
+  ann:{} };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -617,6 +637,13 @@ function draw(){
     if(isSel){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=selColor; ctx.stroke(); }
     if(S.pick.includes(n.id)){ ctx.globalAlpha=1; ctx.lineWidth=2.5; ctx.strokeStyle=accent; ctx.stroke(); }
     ctx.globalAlpha=1;
+    // Analyst annotation marker: a small coloured ring badge (confirmed/disputed/pending).
+    const an=S.ann[n.id];
+    if(an && an.status && an.status!=='none' && !d){
+      const col={confirmed:'#2bb7a3',disputed:'#e0555b',pending:'#f2c14e'}[an.status]||'#8a94a6';
+      ctx.beginPath(); ctx.arc(x+rr*0.72, y-rr*0.72, 3.4, 0, 7);
+      ctx.fillStyle=col; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#fff'; ctx.stroke();
+    }
     // Always label the top-PageRank nodes (scan-at-a-glance); others only when zoomed in.
     // Never label a dimmed/faded node.
     if(!d && !faded && (S.topRank.has(n.id) || rr*S.scale>6)){
@@ -821,7 +848,36 @@ async function inspect(n){
   if((data.claims||[]).length){ for(const c of data.claims){
     h+=`<div class="fact ${c.status==='superseded'?'sup':''}">${esc(c.subject)} —${esc(c.predicate)}→ ${esc(c.object)}${c.polarity==='neg'?' (negated)':''}<br>${win(c)}<div class="cite">${esc(citeStr(c.citations))}</div></div>`; }
   } else h+='<div class="empty">no claims</div>';
+  h+=annotationEditor(n.id);
   d.innerHTML=h;
+  wireAnnotationEditor(n.id);
+}
+// Analyst annotation editor: a status selector + note, saved to the sidecar. Live server only.
+function annotationEditor(nid){
+  if(typeof TG==='undefined' || typeof TG.annotate!=='function') return '';
+  const a=S.ann[nid]||{status:'none',note:''};
+  const opt=(v,label)=>`<option value="${v}"${a.status===v?' selected':''}>${label}</option>`;
+  return `<div class="annot"><div class="ah">Analyst note</div>`
+    +`<select id="annstatus" class="annsel">`
+    +opt('none','— unset —')+opt('confirmed','Confirmed')+opt('disputed','Disputed')+opt('pending','Pending')
+    +`</select>`
+    +`<textarea id="annnote" class="annnote" placeholder="add a note (saved to the annotations sidecar)…">${esc(a.note||'')}</textarea>`
+    +`<div class="annrow"><button type="button" id="annsave" class="minibtn">Save note</button>`
+    +`<span id="annstate" class="mut"></span></div></div>`;
+}
+function wireAnnotationEditor(nid){
+  const sel=document.getElementById('annstatus'), note=document.getElementById('annnote'),
+    save=document.getElementById('annsave'), st=document.getElementById('annstate');
+  if(!save) return;
+  const doSave=async()=>{
+    st.textContent='saving…';
+    try{ const r=await TG.annotate(nid, sel.value, note.value);
+      if(r&&r.ok){ if(r.annotation.status==='none'&&!r.annotation.note) delete S.ann[nid];
+        else S.ann[nid]=r.annotation; st.textContent='saved'; draw(); }
+      else st.textContent='save failed';
+    }catch(e){ st.textContent='save failed'; }
+  };
+  save.onclick=doSave; sel.onchange=doSave;
 }
 async function runPath(){
   const [s,t]=S.pick; const res=await TG.path(s,t);
@@ -1154,6 +1210,17 @@ function detailHtml(ans){
     const steps=d.map(s=>`<div class="step"><b>${esc(s.from)}</b> &mdash;${esc(s.relation)}&rarr; <b>${esc(s.to)}</b> <span style="color:var(--mut)">(${esc(s.direction)})</span></div>`).join('');
     return `<details class="chain" open><summary>causal chain · ${d.length} hop(s)</summary>${steps}</details>`;
   }
+  if(ans.tool==='contradictions' && d[0] && d[0].a){
+    const clm=c=>`${esc(c.subject)} ${esc(c.predicate)} ${esc(c.object)}${c.polarity==='neg'?' <span style="color:var(--sup)">(negated)</span>':''}${c.t_valid?` <span style="color:var(--mut)">[${esc(c.t_valid)}]</span>`:''}`;
+    const steps=d.map(p=>{
+      const h=p.hint||{}; const rec=h.recommend==='a'?'A':h.recommend==='b'?'B':null;
+      const badge=rec?`<span class="hint-rec">recommends ${rec}</span>`:`<span class="hint-rec none">manual review</span>`;
+      return `<div class="step"><div class="cx"><span class="ca">A</span> ${clm(p.a)}</div>`
+        +`<div class="cx"><span class="cb">B</span> ${clm(p.b)}</div>`
+        +`<div class="hint">${badge} <span class="mut">${esc(h.reason||'')}</span></div></div>`;
+    }).join('');
+    return `<details class="chain" open><summary>${d.length} contradiction(s) · resolution hints</summary>${steps}</details>`;
+  }
   if(ans.tool==='conflicts'){
     const steps=d.map(c=>`<div class="step"><b>[${esc(c.severity)}]</b> ${esc(c.subject)} <b>${esc(c.predicate)}</b> {${esc((c.objects||[]).join(', '))}}${c.resolved_object?` &rarr; <b>${esc(c.resolved_object)}</b>`:''}</div>`).join('');
     return `<details class="chain" open><summary>${d.length} conflict(s)</summary>${steps}</details>`;
@@ -1339,5 +1406,10 @@ async function removeDoc(name){
   relayout(); computeDerived();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); initAsk(); buildDocs(); resize(); fit();
   wirePredButtons();
+  loadAnnotations();
 })();
+async function loadAnnotations(){
+  if(typeof TG==='undefined' || typeof TG.annotations!=='function') return;
+  try{ const r=await TG.annotations(); if(r&&r.annotations){ S.ann=r.annotations; draw(); } }catch(e){}
+}
 """

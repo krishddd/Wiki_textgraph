@@ -414,6 +414,10 @@ def _contradictions(engine: QueryEngine) -> ChatAnswer:
     res = engine.contradictions()
     if not res.pairs:
         return ChatAnswer(text="No contradictions found.", tool="contradictions")
+    # Pair each contradiction with a deterministic resolution hint (which claim likely
+    # supersedes, and why) — read-only; the analyst applies it explicitly.
+    from textgraph.l6_graph_model.resolution import resolution_hint
+
     text = (
         f"{len(res.pairs)} contradiction(s): "
         + "; ".join(
@@ -424,7 +428,15 @@ def _contradictions(engine: QueryEngine) -> ChatAnswer:
     return ChatAnswer(
         text=text,
         tool="contradictions",
-        detail=[{"a": p.claim_a.to_dict(), "b": p.claim_b.to_dict()} for p in res.pairs],
+        evidence=[c for p in res.pairs for c in (p.claim_a.citations + p.claim_b.citations)],
+        detail=[
+            {
+                "a": p.claim_a.to_dict(),
+                "b": p.claim_b.to_dict(),
+                "hint": resolution_hint(p.claim_a, p.claim_b).to_dict(),
+            }
+            for p in res.pairs
+        ],
     )
 
 

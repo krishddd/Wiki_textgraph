@@ -6,6 +6,41 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-08-17
+
+### Added — the diff primitive (what changed between two builds)
+- **`graph_diff()`** (`textgraph/l9_artifacts/diff.py`): a deterministic, read-only set-difference
+  between two builds — added/removed entities and relations, changed relations (confidence, tag,
+  evidence) and claims (validity window, polarity), new/resolved contradictions, and community
+  membership moves. Reliable because ids are content-addressed, so the same fact keeps the same
+  id across builds; **community ids (renumbered per build) are diffed by membership, never by id.**
+- **`textgraph diff A B`** — CLI over the primitive. Each side may be a `graph.json`, a directory
+  containing one, a `.duckdb` store, or a corpus (built on the fly). `--json` for pipelines,
+  `--entities NAMES` to restrict the diff to a watchlist.
+- **`textgraph watch --webhook URL`** — the one opt-in network feature: on each rebuild after the
+  first, diff the previous and current graphs and POST a Slack/Teams-compatible summary. Failures
+  are logged, never fatal (`textgraph/alerts.py`). **`--watchlist FILE`** restricts alerts to a
+  named set of entities. A new `on_diff` hook on `watch()` powers both.
+
+### Added — the analyst loop
+- **Contradiction resolution hints** (`textgraph/l6_graph_model/resolution.py`,
+  `QueryEngine.resolution_hints()`): for each `CONTRADICTS` pair, a deterministic recommendation of
+  which claim likely supersedes — by **recency** (a dated correction wins) then **confidence** —
+  with a rationale. **Read-only and non-destructive**; the console's contradictions view now shows
+  a "recommends A/B" badge and the reason. Applying it stays an explicit, cited `SUPERSEDES` step.
+- **Analyst annotation sidecar** (`textgraph/console/annotations.py`): mark an entity
+  `confirmed` / `disputed` / `pending` and attach a note, from the node inspector. Stored in a
+  separate `annotations.json` (`console --annotations FILE`) — **`graph.json` is never touched and
+  stays byte-identical (G1).** Annotated nodes carry a coloured marker on the canvas. The seed of
+  collaborative review: immutable shared graph, mutable overlay.
+- **`textgraph cache status PATH`**: report how warm the LLM prompt cache is (entries, size) so an
+  analyst can tell before a meeting whether an `--llm` rebuild will be free or spend calls. Only
+  real cache entries are counted, so a build-output dir's `graph.json` is never mistaken for a
+  warm cache.
+
+All of this is deterministic and read-only except the annotation sidecar, which only ever writes
+its own file. `graph.json` and the determinism gate are untouched.
+
 ## [4.10.0] - 2026-08-17
 
 ### Added — reading the map (graph visualization)

@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from textgraph import __version__
 from textgraph.l5_entity_resolution import build_records, render_audit, run_er
@@ -396,18 +397,47 @@ def _cmd_watch(args: argparse.Namespace) -> int:
     if not root.exists():
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
-    from textgraph.watch import watch
+    from textgraph.watch import BuildResult, watch
 
-    def _report(result: object) -> None:
-        r = result  # BuildResult
-        print(
-            f"rebuilt: {len(r.nodes)} nodes, {len(r.edges)} edges "  # type: ignore[attr-defined]
-            f"-> {args.output}"
-        )
+    def _report(result: BuildResult) -> None:
+        print(f"rebuilt: {len(result.nodes)} nodes, {len(result.edges)} edges -> {args.output}")
+
+    # Optional entity watchlist — restrict the diff/alerts to these names.
+    watchlist: set[str] | None = None
+    if getattr(args, "watchlist", None):
+        wl = Path(args.watchlist)
+        if not wl.is_file():
+            print(f"error: watchlist file not found: {wl}", file=sys.stderr)
+            return 2
+        # One entity name per line, or a JSON array — accept both.
+        text = wl.read_text(encoding="utf-8").strip()
+        if text.startswith("["):
+            import json
+
+            watchlist = {str(x).strip() for x in json.loads(text) if str(x).strip()}
+        else:
+            watchlist = {ln.strip() for ln in text.splitlines() if ln.strip()}
+        print(f"watchlist: {len(watchlist)} entit{'y' if len(watchlist) == 1 else 'ies'}")
+
+    on_diff = None
+    if getattr(args, "webhook", None) or watchlist:
+        from textgraph.alerts import build_payload, post_webhook
+        from textgraph.l9_artifacts.diff import graph_diff
+
+        def _on_diff(prev: BuildResult, curr: BuildResult) -> None:
+            d = graph_diff(prev.nodes, prev.edges, curr.nodes, curr.edges, entities=watchlist)
+            if d.is_empty:
+                return
+            print(f"change: {d.summary()}")
+            if args.webhook:
+                ok = post_webhook(args.webhook, build_payload(d, source=str(root)))
+                print(f"  webhook {'posted' if ok else 'FAILED'} -> {args.webhook}")
+
+        on_diff = _on_diff
 
     print(f"watching {root} (every {args.interval}s; Ctrl-C to stop)...")
     try:
-        watch(root, args.output, interval=args.interval, on_build=_report)
+        watch(root, args.output, interval=args.interval, on_build=_report, on_diff=on_diff)
     except KeyboardInterrupt:
         print("\nstopped.")
     return 0
@@ -557,6 +587,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
         source=root,
         allow_ingest=args.allow_ingest and root.is_dir(),
         token=args.token or None,
+        annotations_path=args.annotations or None,
     )
     return 0
 
@@ -605,6 +636,119 @@ def _cmd_export(args: argparse.Namespace) -> int:
         print(f"wrote {out} ({len(body)} bytes)")
     else:
         sys.stdout.write(body.decode("utf-8"))
+    return 0
+
+
+def _load_nodes_edges(path: Path) -> tuple[list[Any], list[Any]]:
+    """Load ``(nodes, edges)`` from a built ``graph.json`` (or a dir containing one), a
+    ``.duckdb`` store, or by building a corpus directory. The flexible input the diff and
+    other read tools accept."""
+    if path.is_file() and path.suffix == ".json":
+        from textgraph.l9_artifacts.graph_json import load_graph_json
+
+        return load_graph_json(path)
+    if path.is_dir() and (path / "graph.json").is_file():
+        from textgraph.l9_artifacts.graph_json import load_graph_json
+
+        return load_graph_json(path / "graph.json")
+    if path.is_file() and path.suffix == ".duckdb":
+        from textgraph.store.duckdb_store import load_graph
+
+        return load_graph(path)
+    result = build(path)
+    return result.nodes, result.edges
+
+
+def _cmd_diff(args: argparse.Namespace) -> int:
+    import json
+
+    from textgraph.l9_artifacts.diff import graph_diff
+
+    a, b = Path(args.old), Path(args.new)
+    for p in (a, b):
+        if not p.exists():
+            print(f"error: path does not exist: {p}", file=sys.stderr)
+            return 2
+    old_nodes, old_edges = _load_nodes_edges(a)
+    new_nodes, new_edges = _load_nodes_edges(b)
+
+    watch: set[str] | None = None
+    if args.entities:
+        watch = {e.strip() for e in args.entities.split(",") if e.strip()}
+
+    d = graph_diff(old_nodes, old_edges, new_nodes, new_edges, entities=watch)
+
+    if args.json:
+        print(json.dumps(d.to_dict(), ensure_ascii=False, indent=2))
+        return 0
+
+    if d.is_empty:
+        print("No changes.")
+        return 0
+
+    def _section(title: str, rows: list[str]) -> None:
+        if rows:
+            print(f"\n{title} ({len(rows)}):")
+            for r in rows:
+                print(f"  {r}")
+
+    print(f"Summary: {d.summary()}")
+    _section("+ Added entities", d.added_entities)
+    _section("- Removed entities", d.removed_entities)
+    _section(
+        "+ Added relations",
+        [f"{r['source']} -{r['predicate']}-> {r['target']}" for r in d.added_relations],
+    )
+    _section(
+        "- Removed relations",
+        [f"{r['source']} -{r['predicate']}-> {r['target']}" for r in d.removed_relations],
+    )
+    _section(
+        "~ Changed",
+        [
+            f"{r['source']} -{r['predicate']}-> {r['target']}: "
+            + ", ".join(f"{k} {v[0]} -> {v[1]}" for k, v in r["changes"].items())
+            for r in d.changed_relations
+        ],
+    )
+    _section(
+        "! New contradictions",
+        [f"{r['a']}  <>  {r['b']}" for r in d.added_contradictions],
+    )
+    _section(
+        "= Resolved contradictions",
+        [f"{r['a']}  <>  {r['b']}" for r in d.removed_contradictions],
+    )
+    _section(
+        "~ Community moves",
+        [
+            f"{m['entity']}: joined {len(m['joined'])}, left {len(m['left'])}"
+            for m in d.community_moves
+        ],
+    )
+    return 0
+
+
+def _cmd_cache_status(args: argparse.Namespace) -> int:
+    import json
+
+    from textgraph.l4_llm_optional.cache import cache_stats
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"error: path does not exist: {path}", file=sys.stderr)
+        return 2
+    stats = cache_stats(path)
+    if args.json:
+        print(json.dumps(stats, ensure_ascii=False, indent=2))
+        return 0
+    if not stats["warm"]:
+        print(f"cache is COLD (no entries under {stats['dir']}).")
+        print("An --llm / --llm-extract rebuild will spend calls.")
+        return 0
+    kb = int(stats["bytes"]) / 1024  # type: ignore[call-overload]
+    print(f"cache is WARM: {stats['entries']} cached prompt(s), {kb:.1f} KB at {stats['dir']}.")
+    print("An --llm / --llm-extract rebuild reuses these; no new calls for cached chunks.")
     return 0
 
 
@@ -739,6 +883,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_export.add_argument("-o", "--output", help="write to this file instead of stdout")
     p_export.set_defaults(func=_cmd_export)
+
+    p_diff = sub.add_parser(
+        "diff",
+        help="diff two builds — what entities/relations/contradictions changed between them",
+    )
+    p_diff.add_argument("old", help="the earlier build (graph.json, a dir with one, or a corpus)")
+    p_diff.add_argument("new", help="the later build (graph.json, a dir with one, or a corpus)")
+    p_diff.add_argument("--json", action="store_true", help="machine-readable diff for pipelines")
+    p_diff.add_argument(
+        "--entities",
+        metavar="NAMES",
+        help="comma-separated entity names — restrict the diff to this watchlist",
+    )
+    p_diff.set_defaults(func=_cmd_diff)
+
+    p_cache = sub.add_parser("cache", help="LLM prompt-cache utilities")
+    cache_sub = p_cache.add_subparsers(dest="cache_cmd", required=True)
+    p_cache_status = cache_sub.add_parser(
+        "status", help="report how warm the LLM prompt cache is (entries, size)"
+    )
+    p_cache_status.add_argument(
+        "path", help="a cache dir, or a build-output dir (looks for .cache/llm beneath it)"
+    )
+    p_cache_status.add_argument("--json", action="store_true", help="machine-readable output")
+    p_cache_status.set_defaults(func=_cmd_cache_status)
 
     p_doctor = sub.add_parser(
         "doctor", help="read-only environment health check (Python, extras, determinism)"
@@ -940,6 +1109,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_watch.add_argument("path", help="corpus directory to watch")
     p_watch.add_argument("-o", "--output", default="textgraph-out", help="artifact directory")
     p_watch.add_argument("--interval", type=float, default=2.0, help="poll interval seconds")
+    p_watch.add_argument(
+        "--webhook",
+        metavar="URL",
+        help="POST a JSON diff summary here on each change (Slack/Teams-compatible; opt-in)",
+    )
+    p_watch.add_argument(
+        "--watchlist",
+        metavar="FILE",
+        help="entity names (one per line or JSON array) — alert only on changes touching these",
+    )
     p_watch.set_defaults(func=_cmd_watch)
 
     p_vision = sub.add_parser(
@@ -1011,6 +1190,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--token",
         default="",
         help="require this bearer token on /api/* (recommended before --host 0.0.0.0)",
+    )
+    p_console.add_argument(
+        "--annotations",
+        default="",
+        metavar="FILE",
+        help="persist analyst annotations (confirmed/disputed/pending + notes) to this sidecar "
+        "JSON; never touches graph.json. Omit to keep annotations in-memory for the session.",
     )
     p_console.set_defaults(func=_cmd_console)
 

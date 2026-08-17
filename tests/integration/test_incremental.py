@@ -96,6 +96,35 @@ def test_watch_rebuilds_once_when_nothing_changes(tmp_path: Path) -> None:
     assert (out / "graph.json").exists()
 
 
+def test_watch_on_diff_fires_with_the_change(tmp_path: Path) -> None:
+    # The on_diff hook powers webhook/watchlist alerts: it must fire on a rebuild AFTER the
+    # first, receiving the previous and current builds so a caller can diff them.
+    from textgraph.l9_artifacts.diff import graph_diff
+
+    work = tmp_path / "corpus"
+    shutil.copytree(DOCS, work)
+    out = tmp_path / "out"
+    diffs: list[str] = []
+
+    def _on_diff(prev: object, curr: object) -> None:
+        d = graph_diff(prev.nodes, prev.edges, curr.nodes, curr.edges)  # type: ignore[attr-defined]
+        diffs.append(d.summary())
+
+    calls = {"n": 0}
+
+    def _sleep(_s: float) -> None:
+        # After the first cycle, add a document so the second cycle rebuilds and diffs.
+        calls["n"] += 1
+        if calls["n"] == 1:
+            (work / "extra.md").write_text(
+                "# New\nZeta Corp transferred $7,000 to Acme Corp.\n", encoding="utf-8"
+            )
+
+    watch(work, out, interval=0, iterations=3, on_diff=_on_diff, sleep=_sleep)
+    assert diffs, "on_diff should fire once the corpus changes"
+    assert diffs[0] != "no changes"  # the added document produced a real diff
+
+
 def test_watch_signature_changes_on_edit(tmp_path: Path) -> None:
     work = tmp_path / "corpus"
     shutil.copytree(DOCS, work)
