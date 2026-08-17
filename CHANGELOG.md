@@ -6,6 +6,28 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-08-15
+
+### Added
+- **Relation-type filter in the graph console.** A **Relation types** panel lists every
+  predicate in the view as a chip with its edge count (most frequent first) — click to show or
+  hide that relation type. Two shortcuts: **All**, and **Semantic only**, which hides the dense
+  `CO_OCCURS` backbone and leaves just the meaning relations (`TRANSFERRED`, `DIRECTOR_OF`, …);
+  pressing it again restores, so the button is its own undo. Previously the graph could only be
+  filtered by confidence tag (`STRUCTURAL`/`EXTRACTED`/`INFERRED`/`GENERATED`), which cannot
+  separate a co-occurrence scaffold from a stated relation — both are `STRUCTURAL`.
+- The filter is **view-only** and never touches `graph.json`. It ships in the offline
+  `graph.html` artifact too, since both surfaces share the renderer. Deselected relation types
+  survive a rebuild, so a `watch` reload no longer silently undoes an analyst's filtering.
+
+### Changed
+- Drawing, degree, neighbours and ego-distance now all route through one `edgeShown()` test
+  (confidence tag **and** relation type), so the filters can never disagree with each other:
+  hiding the backbone re-derives degree, which correctly re-reveals which nodes are held up by
+  *semantic* relations alone (on the bundled case corpus: 293 connected → 21, and the footer
+  reports `13 of 683 relations shown`). Node radius, top-N labelling and the unconnected-fade
+  count follow the same recomputation.
+
 ## [4.7.1] - 2026-08-15
 
 ### Documentation

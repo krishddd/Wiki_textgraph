@@ -60,6 +60,20 @@ def test_graph_html_is_the_interactive_offline_viewer(tmp_path: Path) -> None:
     assert "function draw()" in html and "initTime" in html  # the shared renderer
 
 
+def test_graph_html_ships_the_relation_type_filter(tmp_path: Path) -> None:
+    # The relation-type filter is view-only, so it must ride along in the offline viewer
+    # too. Every consumer has to go through edgeShown() — if drawing filtered edges but
+    # degree/neighbours/ego did not, the "unconnected" tally would contradict the canvas.
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    assert "function edgeShown(e)" in html
+    assert "function buildPredBar()" in html
+    assert "function semanticOnly()" in html
+    assert "const BACKBONE = 'CO_OCCURS'" in html
+    # Drawing, degree, neighbours and ego adjacency all route through the one predicate.
+    assert html.count("if(!edgeShown(e)) continue;") >= 4
+
+
 def test_every_non_generated_edge_has_a_citation(tmp_path: Path) -> None:
     paths = _write(tmp_path)
     graph = json.loads(paths.graph_json.read_text(encoding="utf-8"))

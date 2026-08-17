@@ -190,6 +190,15 @@ RENDERER_CSS = """
   .tag { font-size:11.5px; padding:4px 11px; border-radius:20px; border:1px solid var(--line);
     cursor:pointer; user-select:none; transition:opacity .12s; }
   .tag.off { opacity:.4; text-decoration:line-through; }
+  /* Relation-type filter: chips carry a count, plus All / Semantic-only shortcuts. The
+     backbone chip is dotted so the dense CO_OCCURS scaffold reads as structural, not semantic. */
+  .tag .n { color:var(--mut); font-variant-numeric:tabular-nums; margin-left:5px; }
+  .tag.backbone { border-style:dashed; }
+  #preds { max-height:19vh; overflow-y:auto; }
+  .predbtns { display:flex; gap:7px; padding:0 18px 8px; }
+  .minibtn { font-size:11px; padding:3px 10px; border-radius:20px; border:1px solid var(--line);
+    background:transparent; color:var(--fg2); cursor:pointer; font-family:inherit; }
+  .minibtn:hover { border-color:var(--acc); color:var(--fg); }
   #detail { padding:12px 18px 24px; border-top:1px solid var(--line); margin-top:6px;
     flex:1; overflow-y:auto; min-height:0; }
   #detail .title { font-weight:650; font-size:15px; margin-bottom:2px; letter-spacing:-.01em; }
@@ -348,6 +357,12 @@ SKELETON_HTML = """
       <div id="tops"></div>
       <h2>Confidence tags</h2>
       <div class="tags" id="tags"></div>
+      <h2>Relation types <span id="predhint" class="mut"></span></h2>
+      <div class="predbtns">
+        <button type="button" id="predall" class="minibtn">All</button>
+        <button type="button" id="predsem" class="minibtn">Semantic only</button>
+      </div>
+      <div class="tags" id="preds"></div>
       <h2 id="docshdr" style="display:none">Documents <span id="doccount" class="mut"></span></h2>
       <div id="docs"></div>
       <div id="detail"><div class="empty">Click a node to inspect its cited claims.</div></div>
@@ -362,10 +377,16 @@ RENDERER_JS = r"""
 const PALETTE = ['#4f6bff','#f59e42','#e0555b','#2bb7a3','#7bc043','#f2c14e','#c98bd6',
   '#ef8fb4','#9b7b5b','#8a94a6','#3aa0ff','#ff7a59','#59c1ff','#b08cff'];
 const TAGS = ['STRUCTURAL','EXTRACTED','INFERRED','GENERATED'];
+// The co-occurrence backbone is deliberately dense (it exists to connect the map), so it is
+// the one predicate worth hiding in bulk — "Semantic only" leaves just the meaning relations.
+const BACKBONE = 'CO_OCCURS';
 const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   q:'', match:null, sel:null, pathMode:false, pick:[], pathEdges:new Set(),
   predEdges:new Set(), date:null, grouped:false,
   ego:false, egoAnchor:null, egoDepth:3, egoDist:null, egoAdj:null,
+  // Relation-type filter: `preds` holds the predicates currently shown (all, on load).
+  // Filtering by predicate is view-only — it never touches graph.json.
+  preds:new Set(), predCounts:{},
   // derived each load: degree map, always-labelled top-PageRank set, median edge length
   // (for long-chord fading), orphan count, and the focus-mode toggle (fade unconnected).
   deg:{}, topRank:new Set(), edgeLenMed:0, orphanCount:0, focusOrphans:true };
@@ -415,19 +436,44 @@ function orphanDimmed(n){
   return S.focusOrphans && isOrphan(n) && !(S.match && S.match.has(n.id))
     && !(S.sel && S.sel.id===n.id) && !S.pick.includes(n.id);
 }
-// Recompute the per-load derived structures: degree, the always-labelled top-PageRank set,
-// median edge length (long-chord fade threshold), and the orphan tally. Call after layout.
+// The single test for "is this edge in the current view" — confidence tag AND relation type.
+// Every consumer (drawing, degree, neighbours, ego) goes through it, so the filters can
+// never disagree with each other.
+function edgeShown(e){ return S.tags.has(e.tag) && S.preds.has(e.predicate); }
+// Recompute the derived structures: degree, the always-labelled top-PageRank set, median
+// edge length (long-chord fade threshold), and the orphan tally. Degree counts only edges
+// that pass the filters, so hiding the CO_OCCURS backbone correctly re-reveals which nodes
+// are held up by *semantic* relations alone. Call after layout and after any filter change.
 function computeDerived(){
   if(!S.g) return;
   const deg={}; S.g.nodes.forEach(n=>deg[n.id]=0);
-  for(const e of S.g.edges){ if(deg[e.source]!=null) deg[e.source]++; if(deg[e.target]!=null) deg[e.target]++; }
+  for(const e of S.g.edges){ if(!edgeShown(e)) continue;
+    if(deg[e.source]!=null) deg[e.source]++; if(deg[e.target]!=null) deg[e.target]++; }
   S.deg=deg;
   S.orphanCount=S.g.nodes.filter(n=>!deg[n.id]).length;
   const ranked=[...S.g.nodes].sort((a,b)=>(b.pagerank||0)-(a.pagerank||0)||(a.id<b.id?-1:1));
   S.topRank=new Set(ranked.slice(0,25).map(n=>n.id));
-  const lens=[]; for(const e of S.g.edges){ const a=S.byId[e.source], b=S.byId[e.target];
+  const lens=[]; for(const e of S.g.edges){ if(!edgeShown(e)) continue;
+    const a=S.byId[e.source], b=S.byId[e.target];
     if(a&&b) lens.push(Math.hypot(a.x-b.x, a.y-b.y)); }
   lens.sort((x,y)=>x-y); S.edgeLenMed=lens.length?lens[Math.floor(lens.length/2)]:0;
+}
+// Tally the predicates present in the payload and seed the filter to "everything on".
+// Across a rebuild we keep whatever the analyst had switched *off* (for predicates that
+// still exist), so a reload doesn't silently undo their filtering.
+function computePredicates(){
+  const prev=S.predCounts, hadFilter=S.preds.size>0;
+  const off=new Set(hadFilter ? Object.keys(prev).filter(p=>!S.preds.has(p)) : []);
+  const counts={}; for(const e of S.g.edges) counts[e.predicate]=(counts[e.predicate]||0)+1;
+  S.predCounts=counts;
+  S.preds=new Set(Object.keys(counts).filter(p=>!off.has(p)));
+}
+// Apply a relation-type change: degree/orphan/labels all shift with it, so recompute, and
+// drop the ego adjacency cache so hop bands re-derive from the visible edges.
+function applyPredFilter(){
+  S.egoAdj=null; computeDerived();
+  if(S.ego && S.egoAnchor) reEgo();
+  buildPredBar(); draw();
 }
 function edgeActive(e){ if(S.date===null) return true;
   if(e.t_valid && e.t_valid > S.date) return false;
@@ -463,7 +509,7 @@ function draw(){
   const selColor = cssv('--fg')||'#111';
   if(S.grouped) drawGroups(labelColor);
   for(const e of S.g.edges){
-    if(!S.tags.has(e.tag)) continue;
+    if(!edgeShown(e)) continue;
     const a=byId[e.source], b=byId[e.target]; if(!a||!b||!visible(a)||!visible(b)) continue;
     const inPath = S.pathEdges.has(e.source+'>'+e.target)||S.pathEdges.has(e.target+'>'+e.source);
     const active = edgeActive(e);
@@ -508,8 +554,11 @@ function draw(){
       ctx.fillStyle=labelColor; ctx.font='11px ui-sans-serif,system-ui';
       ctx.fillText(n.name.slice(0,24), x+rr+4, y+3.5); }
   }
+  // Count what's actually on screen, so the footer tracks the tag/relation-type filters.
+  let shownEdges=0; for(const e of S.g.edges) if(edgeShown(e)) shownEdges++;
+  const filtered = shownEdges!==S.g.edges.length ? ` of ${S.g.edges.length}` : '';
   const base = S.g.truncated ? `showing ${S.g.shown} of ${S.g.total} entities (top by PageRank)`
-    : `${S.g.nodes.length} entities · ${S.g.edges.length} relations shown`;
+    : `${S.g.nodes.length} entities · ${shownEdges}${filtered} relations shown`;
   note.textContent = S.orphanCount
     ? `${base} · ${S.orphanCount} unconnected ${S.focusOrphans?'faded':'shown'} (F)`
     : base;
@@ -566,15 +615,18 @@ c.addEventListener('wheel',e=>{ e.preventDefault(); _anim++; const r=c.getBoundi
   S.tx=mx-(mx-S.tx)*f; S.ty=my-(my-S.ty)*f; S.scale*=f; draw(); },{passive:false});
 
 function neighborsOf(id){ const set=new Set([id]); const edges=new Set();
-  for(const e of S.g.edges){ if(!S.tags.has(e.tag)) continue;
+  for(const e of S.g.edges){ if(!edgeShown(e)) continue;
     if(e.source===id){ set.add(e.target); edges.add(e.source+'>'+e.target); }
     else if(e.target===id){ set.add(e.source); edges.add(e.source+'>'+e.target); } }
   return {set,edges}; }
 
 // -- Ego / distance intelligence: colour the graph by hops from a focus node ----
 function egoAdjacency(){
+  // Built from the *filtered* edge set (and cached), so hop distance reflects the relation
+  // types on screen. `applyPredFilter` drops the cache so the bands recompute.
   if(S.egoAdj) return S.egoAdj; const m={};
-  for(const e of S.g.edges){ (m[e.source]=m[e.source]||[]).push(e.target);
+  for(const e of S.g.edges){ if(!edgeShown(e)) continue;
+    (m[e.source]=m[e.source]||[]).push(e.target);
     (m[e.target]=m[e.target]||[]).push(e.source); }
   S.egoAdj=m; return m;
 }
@@ -812,8 +864,46 @@ function buildSidebar(){
   const tw=document.getElementById('tags'); tw.innerHTML='';
   for(const t of TAGS){ const el=document.createElement('span'); el.className='tag'; el.textContent=t;
     el.style.borderColor='var(--line)';
-    el.onclick=()=>{ if(S.tags.has(t)){S.tags.delete(t);el.classList.add('off');} else {S.tags.add(t);el.classList.remove('off');} draw(); };
+    el.onclick=()=>{ if(S.tags.has(t)){S.tags.delete(t);el.classList.add('off');} else {S.tags.add(t);el.classList.remove('off');}
+      computeDerived(); draw(); };
     tw.appendChild(el); }
+  buildPredBar();
+}
+// Relation-type chips, most frequent first, each with its edge count. Clicking one toggles
+// that predicate across the whole view (drawing, degree, neighbours, ego).
+function buildPredBar(){
+  const pw=document.getElementById('preds'); if(!pw) return;
+  pw.innerHTML='';
+  const preds=Object.keys(S.predCounts).sort((a,b)=>
+    S.predCounts[b]-S.predCounts[a] || (a<b?-1:1));
+  for(const p of preds){
+    const el=document.createElement('span');
+    el.className='tag'+(p===BACKBONE?' backbone':'')+(S.preds.has(p)?'':' off');
+    el.innerHTML=`${esc(p.replace(/_/g,' '))}<span class="n">${S.predCounts[p]}</span>`;
+    el.title=`${p} — ${S.predCounts[p]} edge${S.predCounts[p]===1?'':'s'}`;
+    el.onclick=()=>{ if(S.preds.has(p)) S.preds.delete(p); else S.preds.add(p); applyPredFilter(); };
+    pw.appendChild(el);
+  }
+  const hint=document.getElementById('predhint');
+  if(hint){ const on=S.preds.size, all=preds.length;
+    hint.textContent = on===all ? `${all}` : `${on}/${all}`; }
+}
+function setPreds(keep){        // keep: predicate -> boolean
+  const preds=Object.keys(S.predCounts);
+  S.preds=new Set(preds.filter(keep));
+  applyPredFilter();
+}
+// "Semantic only" drops the co-occurrence scaffold and leaves the meaning relations — the
+// fastest way to go from a dense backbone to the story the corpus actually states.
+function semanticOnly(){ setPreds(p=>p!==BACKBONE); }
+function wirePredButtons(){
+  const all=document.getElementById('predall'), sem=document.getElementById('predsem');
+  if(all) all.onclick=()=>setPreds(()=>true);
+  if(sem) sem.onclick=()=>{
+    // Toggle: a second press restores everything, so the button is its own undo.
+    if(!S.preds.has(BACKBONE) && S.preds.size===Object.keys(S.predCounts).length-1) setPreds(()=>true);
+    else semanticOnly();
+  };
 }
 function initTime(){
   const dates = S.g.dates || [];
@@ -952,6 +1042,7 @@ async function reloadGraph(){
   S.g=await TG.graph(); S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
   S.egoAdj=null; S._preGroup=null;  // caches stale after a rebuild
   if(S.ego && S.egoAnchor && !S.byId[S.egoAnchor]) S.egoAnchor=null;  // focus removed
+  computePredicates();
   relayout(); if(S.grouped) groupLayout(); computeDerived();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); fit();
   if(S.ego) reEgo();
@@ -1032,7 +1123,9 @@ async function removeDoc(name){
 (async function init(){
   S.g=await TG.graph();
   S.byId={}; S.g.nodes.forEach(n=>S.byId[n.id]=n);
+  computePredicates();
   relayout(); computeDerived();
   buildStats(); buildSidebar(); buildTops(); buildLegend(); initTime(); initAsk(); buildDocs(); resize(); fit();
+  wirePredButtons();
 })();
 """
