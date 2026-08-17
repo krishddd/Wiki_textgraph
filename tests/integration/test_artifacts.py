@@ -74,6 +74,17 @@ def test_graph_html_ships_the_relation_type_filter(tmp_path: Path) -> None:
     assert html.count("if(!edgeShown(e)) continue;") >= 4
 
 
+def test_graph_html_ships_the_visualization_upgrades(tmp_path: Path) -> None:
+    # Timeline animation, contradiction heatmap and the mini-map are all client-side, so they
+    # ride along in the offline viewer with no server.
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    assert "function playTimeline()" in html and "function stopTimeline()" in html
+    assert "function heatColor(n)" in html and "function setHeat(on)" in html
+    assert "function drawMinimap(" in html and "function minimapPanTo(" in html
+    assert 'id="minimap"' in html and 'id="tplay"' in html and 'id="heatbtn"' in html
+
+
 def test_graph_html_degrades_ask_dock_features_offline(tmp_path: Path) -> None:
     # The Ask dock's server-only features (multi-turn chat, citation source panel) must not
     # break the offline viewer: the citation click-through gates on TG.source, and the

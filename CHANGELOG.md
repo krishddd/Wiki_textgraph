@@ -6,6 +6,27 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.10.0] - 2026-08-17
+
+### Added — reading the map (graph visualization)
+- **Timeline animation.** A play/pause button on the time slider steps through the claim
+  keyframes so edges appear and disappear as claims become valid/invalid — the bi-temporal data
+  animated instead of scrubbed by hand. Deterministic keyframe order; scrubbing by hand pauses
+  playback; it stops at the final keyframe.
+- **Contradiction heatmap.** A **Heat** toolbar toggle tints each entity by how many contested
+  (`CONTRADICTS`) claims it carries — deep red for the most-contested, neutral grey for the rest —
+  so an investigator sees the contested zones at a glance instead of reading the report. Backed
+  by a new per-entity `contradictions` count in the `/api/graph` payload (a `CONTRADICTS` edge is
+  attributed back to the entity each contested claim is *about*). One colour encoding at a time:
+  turning on Heat turns off Ego and vice-versa.
+- **Mini-map.** A corner overview (shown once a graph exceeds ~12 nodes) draws the whole graph at
+  a glance with a viewport rectangle; click or drag it to recentre the main view. Heatmap-aware,
+  so contested zones show in the overview too.
+
+All three are client-side and ship in the offline `graph.html` as well; `graph.json` is
+untouched and determinism is unaffected. The only backend change is the additive
+`contradictions` field on graph-view nodes.
+
 ## [4.9.0] - 2026-08-17
 
 ### Added — the Ask dock becomes an investigation conversation

@@ -121,6 +121,13 @@ RENDERER_CSS = """
   #time input[type=range] { width:220px; accent-color:var(--acc); }
   #time .lbl { font-variant-numeric:tabular-nums; min-width:82px; text-align:center; font-size:13px; }
   #time .lbl.sup { color:var(--sup); }
+  #tplay { border:none; background:transparent; color:var(--fg2); cursor:pointer; font-size:13px;
+    width:22px; height:22px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  #tplay:hover { background:var(--acc-soft); color:var(--acc); }
+  /* Mini-map overview — bottom-right of the stage, drag to pan. */
+  #minimap { position:absolute; right:12px; bottom:12px; z-index:5; display:none; cursor:pointer;
+    background:color-mix(in srgb,var(--card) 88%,transparent); border:1px solid var(--line);
+    border-radius:10px; box-shadow:var(--shadow); }
   #tip { position:absolute; pointer-events:none; padding:6px 10px; background:var(--panel);
     border:1px solid var(--line); border-radius:9px; font-size:12px; display:none; z-index:6;
     box-shadow:var(--shadow); max-width:260px; }
@@ -327,6 +334,7 @@ SKELETON_HTML = """
       <button class="btn" id="egobtn" title="ego / distance view — colour nodes by hops from a focus node">Ego</button>
       <button class="btn" id="pathbtn" title="click two nodes to trace a path">Path</button>
       <button class="btn" id="groupbtn" title="outline communities (grouped view)">Group</button>
+      <button class="btn" id="heatbtn" title="contradiction heatmap — tint entities by contested claims">Heat</button>
     </div>
     <div class="seg">
       <span class="seg-l">View</span>
@@ -345,10 +353,11 @@ SKELETON_HTML = """
         <div id="egobar"></div>
         <div id="note"></div>
         <div id="time">
-          <span>&#9201;</span>
+          <button id="tplay" title="play the timeline">&#9654;</button>
           <input type="range" id="tslider" min="0" value="0" step="1">
           <span class="lbl" id="tlabel">all time</span>
         </div>
+        <canvas id="minimap" title="overview — drag to pan"></canvas>
       </div>
       <div id="ask">
         <div id="askhead"><span class="dot"></span>Ask the graph<span class="chev">&#9662;</span></div>
@@ -426,7 +435,10 @@ const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   preds:new Set(), predCounts:{},
   // derived each load: degree map, always-labelled top-PageRank set, median edge length
   // (for long-chord fading), orphan count, and the focus-mode toggle (fade unconnected).
-  deg:{}, topRank:new Set(), edgeLenMed:0, orphanCount:0, focusOrphans:true };
+  deg:{}, topRank:new Set(), edgeLenMed:0, orphanCount:0, focusOrphans:true,
+  // v4.10: contradiction heatmap toggle (+ max count, for the colour scale) and the
+  // timeline play state (interval id + keyframe cursor).
+  heat:false, heatMax:0, playing:false, playTimer:null };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -439,12 +451,22 @@ const OTHER_COLOR = '#8a94a6';
 const EGO_COLORS = { anchor:'#f2c14e', h1:'#2bb7a3', h23:'#7bc043', h46:'#4f6bff' };
 function egoColor(d){ return d===0?EGO_COLORS.anchor : d===1?EGO_COLORS.h1 : d<=3?EGO_COLORS.h23 : EGO_COLORS.h46; }
 function nodeColor(n){
+  if(S.heat && n) return heatColor(n);   // contradiction heatmap overrides the type palette
   if(S.ego && S.egoDist && n){ const d=S.egoDist.get(n.id); if(d!=null) return egoColor(d); }
   return TYPE_COLOR[n && n.etype] || OTHER_COLOR;
 }
 function esc(s){ return String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 function buildLegend(){
   const el=document.getElementById('legend'); if(!el||!S.g) return;
+  if(S.heat){   // heatmap legend: how many entities carry contested claims, and the scale
+    const flagged=S.g.nodes.filter(n=>n.contradictions>0).length;
+    if(!flagged){ el.innerHTML=`<span class="lg mut">no contradictions in view</span>`; return; }
+    el.innerHTML=`<span class="lg"><span class="dot" style="background:${heatColor({contradictions:S.heatMax})}"></span>most contested</span>`
+      +`<span class="lg"><span class="dot" style="background:${heatColor({contradictions:1})}"></span>contested</span>`
+      +`<span class="lg"><span class="dot" style="background:${heatColor({contradictions:0})}"></span>none</span>`
+      +`<span class="lg mut">${flagged} contested entit${flagged===1?'y':'ies'}</span>`;
+    return;
+  }
   const counts={}; for(const n of S.g.nodes){ const t=n.etype||'Other'; counts[t]=(counts[t]||0)+1; }
   const types=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
   el.innerHTML=types.map(t=>`<span class="lg"><span class="dot" style="background:${nodeColor({etype:t})}"></span>${esc(t)} <span class="mut">${counts[t]}</span></span>`).join('');
@@ -494,6 +516,16 @@ function computeDerived(){
     const a=S.byId[e.source], b=S.byId[e.target];
     if(a&&b) lens.push(Math.hypot(a.x-b.x, a.y-b.y)); }
   lens.sort((x,y)=>x-y); S.edgeLenMed=lens.length?lens[Math.floor(lens.length/2)]:0;
+  S.heatMax=S.g.nodes.reduce((m,n)=>Math.max(m, n.contradictions||0), 0);
+}
+// Contradiction heatmap tint: entities with contested claims glow red (deeper = more), the
+// rest fade to a neutral grey so the eye lands on the contested zones.
+function heatColor(n){
+  const c=n.contradictions||0;
+  if(!c) return '#8f97a6';
+  const t=S.heatMax>0 ? c/S.heatMax : 1;          // 0..1 by relative contradiction load
+  const r=Math.round(224), g=Math.round(120-70*t), b=Math.round(110-70*t);
+  return `rgb(${r},${g},${b})`;
 }
 // Tally the predicates present in the payload and seed the filter to "everything on".
 // Across a rebuild we keep whatever the analyst had switched *off* (for predicates that
@@ -599,6 +631,49 @@ function draw(){
   note.textContent = S.orphanCount
     ? `${base} · ${S.orphanCount} unconnected ${S.focusOrphans?'faded':'shown'} (F)`
     : base;
+  drawMinimap(r);
+}
+
+// -- Mini-map: a corner overview with a viewport rectangle, essential past ~500 nodes -----
+// Returns the world->minimap transform so click/drag can invert it to a pan.
+function minimapTransform(mmw, mmh){
+  const ns=S.g.nodes; if(!ns.length) return null;
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  for(const n of ns){ if(n.x<minx)minx=n.x; if(n.x>maxx)maxx=n.x; if(n.y<miny)miny=n.y; if(n.y>maxy)maxy=n.y; }
+  const pad=8, sx=(mmw-2*pad)/((maxx-minx)||1), sy=(mmh-2*pad)/((maxy-miny)||1);
+  const s=Math.min(sx,sy);
+  const ox=pad+(mmw-2*pad-(maxx-minx)*s)/2, oy=pad+(mmh-2*pad-(maxy-miny)*s)/2;
+  return { s, mx:v=>ox+(v-minx)*s, my:v=>oy+(v-miny)*s, minx, miny, ox, oy };
+}
+function drawMinimap(stageRect){
+  const mm=document.getElementById('minimap'); if(!mm) return;
+  if(!S.g||S.g.nodes.length<12){ mm.style.display='none'; return; }  // pointless for tiny graphs
+  mm.style.display='block';
+  const dpr=devicePixelRatio||1, W=150, H=108;
+  if(mm.width!==W*dpr){ mm.width=W*dpr; mm.height=H*dpr; mm.style.width=W+'px'; mm.style.height=H+'px'; }
+  const m=mm.getContext('2d'); m.setTransform(dpr,0,0,dpr,0,0); m.clearRect(0,0,W,H);
+  const t=minimapTransform(W,H); if(!t) return;
+  // Nodes as faint dots (heatmap-aware, so contested zones show in the overview too).
+  for(const n of S.g.nodes){ if(!visible(n)) continue;
+    m.beginPath(); m.arc(t.mx(n.x), t.my(n.y), 1.4, 0, 7);
+    m.fillStyle=nodeColor(n); m.globalAlpha=(S.heat&&!n.contradictions)?0.35:0.75; m.fill(); }
+  m.globalAlpha=1;
+  // Viewport rectangle: invert the main SX/SY (screen = world*scale + t) back to world, then
+  // to minimap space.
+  const wx0=(0-S.tx)/S.scale, wy0=(0-S.ty)/S.scale;
+  const wx1=(stageRect.width-S.tx)/S.scale, wy1=(stageRect.height-S.ty)/S.scale;
+  const rx=t.mx(wx0), ry=t.my(wy0), rw=(wx1-wx0)*t.s, rh=(wy1-wy0)*t.s;
+  m.strokeStyle=cssv('--acc')||'#4f6bff'; m.lineWidth=1.4;
+  m.strokeRect(Math.max(0,rx), Math.max(0,ry), Math.min(W,rw), Math.min(H,rh));
+}
+// Click / drag on the mini-map recentres the main view on that world point.
+function minimapPanTo(clientX, clientY){
+  const mm=document.getElementById('minimap'); const r=mm.getBoundingClientRect();
+  const t=minimapTransform(r.width, r.height); if(!t) return;
+  const lx=clientX-r.left, ly=clientY-r.top;
+  const wx=t.minx+(lx-t.ox)/t.s, wy=t.miny+(ly-t.oy)/t.s;   // minimap -> world
+  const sr=c.getBoundingClientRect();
+  _anim++; S.tx=sr.width/2-wx*S.scale; S.ty=sr.height/2-wy*S.scale; draw();
 }
 
 function hit(mx,my){ let best=null,bd=1e9;
@@ -647,6 +722,13 @@ addEventListener('mousemove',e=>{
   if(n){ tip.style.display='block'; tip.style.left=(mx+14)+'px'; tip.style.top=(my+8)+'px';
     tip.innerHTML=`<b>${esc(n.name)}</b>${n.community_label?' · '+esc(n.community_label):''}`; c.style.cursor='pointer'; }
   else { tip.style.display='none'; c.style.cursor=drag?'grabbing':'grab'; } });
+// Mini-map: click or drag to recentre the main view on that overview point.
+(function(){ const mm=document.getElementById('minimap'); if(!mm) return; let mdrag=false;
+  mm.addEventListener('mousedown',e=>{ e.preventDefault(); e.stopPropagation(); mdrag=true;
+    minimapPanTo(e.clientX,e.clientY); });
+  addEventListener('mousemove',e=>{ if(mdrag) minimapPanTo(e.clientX,e.clientY); });
+  addEventListener('mouseup',()=>{ mdrag=false; });
+})();
 c.addEventListener('wheel',e=>{ e.preventDefault(); _anim++; const r=c.getBoundingClientRect();
   const mx=e.clientX-r.left,my=e.clientY-r.top, f=e.deltaY<0?1.1:1/1.1;
   S.tx=mx-(mx-S.tx)*f; S.ty=my-(my-S.ty)*f; S.scale*=f; draw(); },{passive:false});
@@ -699,6 +781,7 @@ function reEgo(){
   S.sel=S.byId[S.egoAnchor]||null; renderEgoBar(); draw();
 }
 function setEgo(on){
+  if(on && S.heat) setHeat(false);   // one colour encoding at a time
   S.ego=on; document.getElementById('egobtn').classList.toggle('on',on);
   const r=document.getElementById('r-ego'); if(r) r.classList.toggle('on',on);
   document.getElementById('legend').style.display = on ? 'none' : '';  // bands replace type legend
@@ -944,14 +1027,36 @@ function wirePredButtons(){
 }
 function initTime(){
   const dates = S.g.dates || [];
-  if(!dates.length) return;
   const box=document.getElementById('time'), sl=document.getElementById('tslider'),
-    lab=document.getElementById('tlabel');
+    lab=document.getElementById('tlabel'), play=document.getElementById('tplay');
+  if(!dates.length){ box.style.display='none'; stopTimeline(); return; }
   box.style.display='flex'; sl.max=String(dates.length); sl.value='0';
-  sl.oninput=()=>{ const i=+sl.value; S.date = i===0 ? null : dates[i-1];
+  // Apply keyframe index i (0 = all time, 1..n = up to dates[i-1]).
+  const setDate=(i)=>{ sl.value=String(i); S.date = i===0 ? null : dates[i-1];
     lab.textContent = S.date || 'all time';
     const anySup = S.date && S.g.edges.some(e=>e.t_invalid && S.date>=e.t_invalid);
     lab.classList.toggle('sup', !!anySup); draw(); };
+  sl.oninput=()=>{ stopTimeline(); setDate(+sl.value); };  // scrubbing by hand pauses playback
+  S._setDate=setDate;
+  play.onclick=()=>{ S.playing ? stopTimeline() : playTimeline(); };
+}
+// Timeline animation: step through the keyframes so edges appear/disappear as claims become
+// valid/invalid. Deterministic order (the sorted `dates`); wraps from the end back to "all time".
+function playTimeline(){
+  const dates=S.g.dates||[]; if(dates.length<1||!S._setDate) return;
+  S.playing=true; document.getElementById('tplay').innerHTML='&#10073;&#10073;';  // pause glyph
+  document.getElementById('tplay').title='pause';
+  if(+document.getElementById('tslider').value>=dates.length) S._setDate(0);  // restart from start
+  S.playTimer=setInterval(()=>{
+    const sl=document.getElementById('tslider'); const next=+sl.value+1;
+    if(next>dates.length){ stopTimeline(); return; }   // stop at the final keyframe
+    S._setDate(next);
+  }, 1100);
+}
+function stopTimeline(){
+  if(S.playTimer){ clearInterval(S.playTimer); S.playTimer=null; }
+  S.playing=false; const play=document.getElementById('tplay');
+  if(play){ play.innerHTML='&#9654;'; play.title='play the timeline'; }
 }
 
 function applyTheme(t){ document.documentElement.setAttribute('data-theme',t);
@@ -983,6 +1088,14 @@ document.getElementById('groupbtn').onclick=()=>{ S.grouped=!S.grouped;
   if(S.grouped) groupLayout(); else ungroupLayout(); fit(); };
 document.getElementById('egobtn').onclick=()=>setEgo(!S.ego);
 document.getElementById('pathbtn').onclick=()=>setPathMode(!S.pathMode);
+document.getElementById('heatbtn').onclick=()=>setHeat(!S.heat);
+// Contradiction heatmap: recolour nodes by contested-claim load, and swap the legend for a
+// red intensity scale. No-op-friendly: when nothing contradicts, every node is neutral.
+function setHeat(on){
+  S.heat=on; document.getElementById('heatbtn').classList.toggle('on',on);
+  if(on && S.ego) setEgo(false);   // one colour encoding at a time
+  buildLegend(); draw();
+}
 // Left-rail shortcuts proxy to the header controls (single source of truth for behaviour).
 document.getElementById('r-fit').onclick=fit;
 document.getElementById('r-ego').onclick=()=>document.getElementById('egobtn').click();

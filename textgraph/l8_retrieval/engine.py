@@ -263,6 +263,21 @@ class QueryEngine:
         prioritized = [nid for nid in ranked if nid in rel_endpoints]
         prioritized += [nid for nid in ranked if nid not in rel_endpoints]
         kept = set(prioritized[:max_nodes])
+        # Per-entity contradiction load: how many CONTRADICTS edges touch a claim *about*
+        # this entity. Powers the console's contradiction heatmap so an investigator can see
+        # the contested zones at a glance instead of reading the report. CONTRADICTS links
+        # two Claim nodes; each claim's ``subject`` names the entity it asserts about.
+        contra_count: dict[str, int] = {}
+        for e in self._edges:
+            if e.predicate != "CONTRADICTS":
+                continue
+            for claim_id in (e.subject, e.object):
+                claim = self._node.get(claim_id)
+                if claim is None:
+                    continue
+                subj = str(claim.properties.get("subject", ""))
+                if subj in kept:
+                    contra_count[subj] = contra_count.get(subj, 0) + 1
         nodes = [
             {
                 "id": nid,
@@ -273,6 +288,7 @@ class QueryEngine:
                 "community_label": str(self._node[nid].properties.get("community_label", "")),
                 "pagerank": round(float(self._node[nid].properties.get("pagerank", 0.0)), 6),
                 "etype": str(self._node[nid].properties.get("etype", "")),
+                "contradictions": contra_count.get(nid, 0),
             }
             for nid in sorted(kept)
         ]

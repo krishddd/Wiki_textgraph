@@ -32,6 +32,26 @@ def test_cooccurrence_backbone_connects_a_relationless_graph() -> None:
     assert all(e["tag"] == "STRUCTURAL" for e in cooc)
 
 
+def test_graph_view_reports_per_entity_contradiction_counts() -> None:
+    # The contradiction heatmap needs a per-node contested-claim count. A CONTRADICTS edge
+    # links two Claim nodes; each claim's `subject` names the entity it is about, so the
+    # count is attributed back to the entity. The temporal fixture states a fact and a dated
+    # correction of it, producing one CONTRADICTS pair about a single entity.
+    r = build(TEMPORAL)
+    gv = QueryEngine(r.nodes, r.edges).graph_view(max_nodes=600)
+    assert all("contradictions" in n for n in gv["nodes"])  # field always present (0 default)
+    flagged = {n["name"]: n["contradictions"] for n in gv["nodes"] if n["contradictions"]}
+    assert flagged, "temporal fixture should surface at least one contested entity"
+    assert all(v > 0 for v in flagged.values())
+
+
+def test_graph_view_contradiction_counts_zero_without_conflicts() -> None:
+    # The plain docs build has no dated corrections, so nothing is contested.
+    r = build(DOCS)
+    gv = QueryEngine(r.nodes, r.edges).graph_view(max_nodes=600)
+    assert all(n["contradictions"] == 0 for n in gv["nodes"])
+
+
 def test_cooccurrence_backbone_suppressed_when_relations_exist() -> None:
     # The normal build has real relations, so the co-occurrence fallback must stay off.
     r = build(DOCS)
