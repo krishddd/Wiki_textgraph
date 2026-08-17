@@ -29,3 +29,7 @@ graph.html
 # Build output (never commit)
 textgraph-out/
 *-out/
+
+# Large binary research docs (host outside git — they cause GitHub 504s)
+TextGraph_Engineering_Blueprint.pdf
+TextGraph Architecture Gap Analysis.docx
