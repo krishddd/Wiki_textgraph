@@ -42,6 +42,89 @@ TEMPORAL = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "temporal
 SECURE = str(Path(__file__).parent.parent / "fixtures" / "corpora" / "secure")
 
 
+def _mk_corpus(tmp_path: Path, name: str, text: str) -> Path:
+    d = tmp_path / name
+    d.mkdir()
+    (d / "f.md").write_text(text, encoding="utf-8")
+    return d
+
+
+def test_diff_command_reports_changes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    a = _mk_corpus(tmp_path, "a", "# Case\nAcme Corp controls Beta Ltd.\n")
+    b = _mk_corpus(
+        tmp_path,
+        "b",
+        "# Case\nAcme Corp controls Beta Ltd.\nZeta Corp transferred $9 to Acme Corp.\n",
+    )
+    assert main(["diff", str(a), str(b)]) == 0
+    out = capsys.readouterr().out
+    assert "Zeta Corp" in out and "TRANSFERRED" in out
+
+
+def test_diff_command_json_and_no_changes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    a = _mk_corpus(tmp_path, "a", "# Case\nAcme Corp controls Beta Ltd.\n")
+    assert main(["diff", str(a), str(a), "--json"]) == 0
+    import json
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["counts"]["added_entities"] == 0
+    # And the human path on identical inputs.
+    assert main(["diff", str(a), str(a)]) == 0
+    assert "No changes." in capsys.readouterr().out
+
+
+def test_diff_command_missing_path_errors(tmp_path: Path) -> None:
+    a = _mk_corpus(tmp_path, "a", "# Case\nAcme Corp controls Beta Ltd.\n")
+    assert main(["diff", str(a), str(tmp_path / "nope")]) == 2
+
+
+def test_federate_command_finds_and_profiles_shared_entities(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    a = tmp_path / "caseA"
+    b = tmp_path / "caseB"
+    for d, text in (
+        (a, "# A\nJohn Doe is director of Acme Corp.\n"),
+        (b, "# B\nJohn Doe transferred $500 to Delta Trust.\n"),
+    ):
+        assert main(["build", str(_mk_corpus(tmp_path, d.name + "src", text)), "-o", str(d)]) == 0
+    ga, gb = str(a / "graph.json"), str(b / "graph.json")
+    assert main(["federate", ga, gb]) == 0
+    assert "John Doe" in capsys.readouterr().out
+    # dossier
+    assert main(["federate", ga, gb, "--entity", "John Doe"]) == 0
+    dossier = capsys.readouterr().out
+    assert "DIRECTOR_OF" in dossier and "TRANSFERRED" in dossier
+    # json + a missing entity + min-cases that excludes everything
+    assert main(["federate", ga, gb, "--json"]) == 0
+    assert main(["federate", ga, gb, "--entity", "Nobody"]) == 0
+    assert "not found" in capsys.readouterr().out
+    assert main(["federate", ga, gb, "--min-cases", "3"]) == 0
+    assert "No entities shared" in capsys.readouterr().out
+
+
+def test_federate_command_missing_path_errors(tmp_path: Path) -> None:
+    assert main(["federate", str(tmp_path / "nope.json"), str(tmp_path / "also.json")]) == 2
+
+
+def test_cache_status_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # Cold dir.
+    (tmp_path / "graph.json").write_text('{"nodes":[]}', encoding="utf-8")
+    assert main(["cache", "status", str(tmp_path)]) == 0
+    assert "COLD" in capsys.readouterr().out
+    # Warm cache + JSON.
+    cache = tmp_path / "llm"
+    cache.mkdir()
+    (cache / ("a" * 64 + ".json")).write_text('{"response":"x"}', encoding="utf-8")
+    assert main(["cache", "status", str(tmp_path), "--json"]) == 0
+    import json
+
+    assert json.loads(capsys.readouterr().out)["warm"] is True
+    assert main(["cache", "status", str(tmp_path / "nope")]) == 2
+
+
 def test_secure_command_enforces_policy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     import json
 
