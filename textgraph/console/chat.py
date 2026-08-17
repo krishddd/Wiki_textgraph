@@ -7,10 +7,11 @@ frontend which nodes and edges to highlight. There is **no LLM**: the answer tex
 straight from the cited tool result, so the whole feature is deterministic and works
 offline (G1/G2). Every factual line carries the tool's ``[doc:span]`` citations (G3).
 
-Multi-turn is stateless on the server: the client sends the previous answer's primary
-entity as ``focus``, and follow-ups ("why?", "who controls it?") resolve their missing
-entity against it. The reasoner is built once per engine and reused (no per-message
-re-index), and inherits the engine's access-control posture on every call.
+Multi-turn: when the console passes a :class:`~textgraph.console.session.ChatSession`, a
+follow-up that leans on the previous turn ("why?", "who else is connected to them?")
+resolves its missing/anaphoric entity against that history; a bare ``focus`` string still
+works for stateless callers. The reasoner is built once per engine and reused (no
+per-message re-index), and inherits the engine's access-control posture on every call.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from textgraph.console.session import ChatSession, Turn, resolve_followup
 from textgraph.got.reason import GraphOfThoughts
 from textgraph.gql.engine import GQLEngine
 from textgraph.gql.errors import GQLError
@@ -58,6 +60,10 @@ class ChatAnswer:
     detail: list[dict[str, Any]] = field(default_factory=list)
     confidence: float = 1.0
     abstained: bool = False
+    # Follow-up chips (deterministic) + a small "how this was answered" trace for the
+    # routing inspector. Populated by `answer()`, not by the individual tool handlers.
+    suggestions: list[str] = field(default_factory=list)
+    routing: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +75,8 @@ class ChatAnswer:
             "detail": self.detail,
             "confidence": round(self.confidence, 3),
             "abstained": self.abstained,
+            "suggestions": self.suggestions,
+            "routing": self.routing,
         }
 
 
@@ -119,16 +127,55 @@ def answer(
     mode: str = "adaptive",
     tool: str = "auto",
     focus: str | None = None,
+    session: ChatSession | None = None,
 ) -> ChatAnswer:
     """Route ``question`` to a graph tool and return a grounded, cited :class:`ChatAnswer`.
 
     The reply is scored for grounding: a *factual* answer with no citation evidence **abstains**
     ("insufficient evidence") rather than surfacing an unsupported guess (Sprint 3.3).
+
+    When a :class:`ChatSession` is supplied, a follow-up that leans on the previous turn
+    ("who else is connected to them?") is resolved against it before routing, and the turn is
+    remembered afterwards — turning the eight one-shot tools into a conversation.
     """
     q = question.strip()
     if not q:
         return ChatAnswer(text="Ask a question about the graph.", tool="auto")
-    return _grounded(_dispatch(engine, q, mode=mode, tool=tool, focus=focus))
+
+    # Multi-turn memory: resolve anaphora against the session, and fall back to the session's
+    # remembered focus when the caller didn't pass one.
+    follow = resolve_followup(q, session, name_of=engine._name)
+    routed_q = follow.question
+    if follow.tool and tool == "auto":
+        tool = follow.tool
+    if focus is None:
+        focus = follow.focus
+
+    ans = _grounded(_dispatch(engine, routed_q, mode=mode, tool=tool, focus=focus))
+
+    # Routing inspector: how this answer was produced (shown collapsibly in the dock).
+    ans.routing = {
+        "tool": ans.tool,
+        "forced": tool if tool != "auto" else None,
+        "focus": engine._name(ans.focus) if ans.focus else None,
+        "rewritten": follow.resolved,
+        "question": routed_q if routed_q != q else None,
+    }
+    from textgraph.console.suggest import suggest  # local: suggest imports ChatAnswer
+
+    ans.suggestions = suggest(engine, ans)
+    if session is not None:
+        session.remember(
+            Turn(
+                question=q,
+                tool=ans.tool,
+                focus=ans.focus,
+                nodes=tuple(ans.highlight_nodes),
+                answer=ans.text,
+                citations=tuple(c.ref() for c in ans.evidence),
+            )
+        )
+    return ans
 
 
 def _dispatch(

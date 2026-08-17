@@ -74,6 +74,19 @@ def test_graph_html_ships_the_relation_type_filter(tmp_path: Path) -> None:
     assert html.count("if(!edgeShown(e)) continue;") >= 4
 
 
+def test_graph_html_degrades_ask_dock_features_offline(tmp_path: Path) -> None:
+    # The Ask dock's server-only features (multi-turn chat, citation source panel) must not
+    # break the offline viewer: the citation click-through gates on TG.source, and the
+    # offline adapter defines no such method, so chips stay inert text and the dock hides.
+    paths = _write(tmp_path)
+    html = paths.graph_html.read_text(encoding="utf-8")
+    assert "typeof TG.source==='function'" in html  # click-through is feature-gated
+    assert (
+        "TG.source" not in html.split("const TG = {")[1].split("};")[0]
+    )  # offline adapter lacks it
+    assert 'id="srcpanel"' in html  # the panel scaffold ships (inert offline)
+
+
 def test_every_non_generated_edge_has_a_citation(tmp_path: Path) -> None:
     paths = _write(tmp_path)
     graph = json.loads(paths.graph_json.read_text(encoding="utf-8"))

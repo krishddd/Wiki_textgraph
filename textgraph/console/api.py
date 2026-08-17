@@ -14,6 +14,8 @@ import json
 from typing import Any
 
 from textgraph.console.page import render_page
+from textgraph.console.session import SessionStore
+from textgraph.console.source import read_span
 from textgraph.l8_retrieval.engine import QueryEngine
 from textgraph.mcp.tools import call_tool, tool_specs
 
@@ -63,8 +65,20 @@ def export_graph_bytes(engine: QueryEngine) -> bytes:
     return dump_graph_bytes(doc)
 
 
-def route(engine: QueryEngine, path: str, params: dict[str, str]) -> tuple[int, str, bytes]:
-    """Map a request ``(path, query params)`` to ``(status, content_type, body)``."""
+def route(
+    engine: QueryEngine,
+    path: str,
+    params: dict[str, str],
+    *,
+    sessions: SessionStore | None = None,
+    source: str | None = None,
+) -> tuple[int, str, bytes]:
+    """Map a request ``(path, query params)`` to ``(status, content_type, body)``.
+
+    ``sessions`` carries multi-turn Ask-dock memory (keyed by a client ``session_id``);
+    ``source`` is the corpus dir, needed to serve the bytes behind a citation. Both are
+    optional so the pure route stays testable and degrades gracefully when absent.
+    """
     if path in ("/", "/index.html"):
         return 200, "text/html; charset=utf-8", render_page().encode("utf-8")
     if path == "/api/tools":
@@ -76,15 +90,34 @@ def route(engine: QueryEngine, path: str, params: dict[str, str]) -> tuple[int, 
         return _json(200, engine.graph_view(max_nodes=max_nodes))
     if path == "/api/inspect":
         return _json(200, engine.inspect(params.get("node", "")))
-    if path == "/api/chat":
+    if path == "/api/source":
+        start = end = 0
+        with contextlib.suppress(TypeError, ValueError):
+            start = int(params.get("start", "0"))
+            end = int(params.get("end", "0"))
+        return _json(
+            200,
+            read_span(
+                engine,
+                source,
+                params.get("doc", ""),
+                start,
+                end,
+                expected_hash=params.get("hash") or None,
+            ),
+        )
+    # /api/chat and its documented alias /api/ask are the same handler.
+    if path in ("/api/chat", "/api/ask"):
         from textgraph.console.chat import answer
 
+        session = sessions.get(params.get("session_id")) if sessions else None
         chat_result = answer(
             engine,
             params.get("q", ""),
             mode=params.get("mode", "adaptive"),
             tool=params.get("tool", "auto"),
             focus=params.get("focus") or None,
+            session=session,
         )
         return _json(200, chat_result.to_dict())
     if path == "/api/call":

@@ -6,6 +6,31 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.9.0] - 2026-08-17
+
+### Added — the Ask dock becomes an investigation conversation
+- **Multi-turn memory.** The Ask dock now keeps a bounded, per-tab conversation history on the
+  server. A follow-up that leans on the previous turn — *"who else is connected to **them**?"* —
+  resolves the pronoun against the last entity in focus and answers about it, instead of
+  abstaining for lack of a subject. Resolution is **rule-based and deterministic** (no LLM), so
+  it works in the zero-LLM default. A rebuild (in-UI ingest/remove) clears the memory, since node
+  ids may change. New `textgraph.console.session` module (`ChatSession`, `SessionStore`,
+  `resolve_followup`).
+- **Citation click-through.** Clicking a `[doc:start-end]` citation opens a source panel showing
+  the exact cited bytes in context, with the surrounding text dimmed and the span highlighted.
+  The bytes are **re-hashed against the source on read** and shown as *verified* — a since-edited
+  file is reported as a mismatch, never silently shown. New `GET /api/source` +
+  `textgraph.console.source`. **Degrades gracefully**: a console with no corpus dir (a bare
+  `graph.json` / `.duckdb`), or the offline `graph.html`, keeps the old inert text citation.
+- **Suggested follow-ups.** After each answer, up to three chip-style next questions derived
+  **deterministically from the returned nodes/edges** (expand the focus, connect two entities the
+  answer surfaced, pivot to why/timeline/contradictions). Clicking one asks it. New
+  `textgraph.console.suggest`.
+- **Routing inspector.** A collapsible "how this was answered" line under each answer: the tool
+  chosen, the resolved focus, and — when a follow-up was rewritten — the question actually run.
+- **`POST /api/ask`** documented alias for `/api/chat`, accepting a `session_id`, so external
+  callers (dashboards, bots, notebooks) get the same multi-turn, cited answers.
+
 ## [4.8.0] - 2026-08-15
 
 ### Added

@@ -45,7 +45,7 @@ RENDERER_CSS = """
 
   /* Studio shell: a slim left rail + (app bar / body) stacked to its right. */
   #app { display:grid; grid-template-columns:56px 1fr; grid-template-rows:auto 1fr;
-    height:100vh; }
+    height:100vh; position:relative; }  /* positioning context for the slide-in source panel */
 
   /* Left rail — brand mark + vertical mode shortcuts (Semantica-style studio nav). */
   #rail { grid-row:1 / 3; display:flex; flex-direction:column; align-items:center; gap:6px;
@@ -244,6 +244,38 @@ RENDERER_CSS = """
   .msg .cites { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
   .cite-chip { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:2px 7px;
     border-radius:6px; background:var(--acc-soft); color:var(--acc); }
+  .cite-chip.live { cursor:pointer; }
+  .cite-chip.live:hover { background:var(--acc); color:#fff; }
+  .cite-chip.live:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+  /* Deterministic follow-up chips under an answer. */
+  .msg .suggs { margin-top:9px; display:flex; flex-wrap:wrap; gap:6px; }
+  .sugg { font-size:11.5px; padding:5px 10px; border-radius:20px; border:1px solid var(--line);
+    background:transparent; color:var(--fg2); cursor:pointer; font-family:inherit; text-align:left; }
+  .sugg:hover { border-color:var(--acc); color:var(--fg); }
+  /* Routing inspector — how this answer was produced. */
+  .routing { margin-top:8px; }
+  .routing summary { cursor:pointer; color:var(--mut); font-size:11.5px; }
+  .routing .rrow { display:flex; gap:8px; font-size:11.5px; margin:4px 0 0; }
+  .routing .rrow span { color:var(--mut); min-width:58px; }
+  .routing .rrow b { color:var(--fg2); font-weight:600; }
+  /* Source panel: slides in over the graph to show the cited bytes. */
+  #srcpanel { position:absolute; top:0; right:0; bottom:0; width:min(440px,86%); z-index:40;
+    background:var(--card); border-left:1px solid var(--line); box-shadow:-14px 0 40px rgba(0,0,0,.16);
+    transform:translateX(102%); transition:transform .22s ease; display:flex; flex-direction:column; }
+  #srcpanel.open { transform:translateX(0); }
+  .srchead { display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--line);
+    font-size:13px; font-weight:600; }
+  #srctitle { flex:1; overflow:hidden; text-overflow:ellipsis; }
+  #srcclose { border:none; background:transparent; color:var(--mut); cursor:pointer; font-size:15px; }
+  #srcclose:hover { color:var(--fg); }
+  #srcbody { padding:16px; overflow:auto; font:13px/1.7 ui-monospace,Menlo,monospace;
+    white-space:pre-wrap; word-break:break-word; }
+  #srcbody .ctx { color:var(--mut); }
+  #srcbody mark { background:var(--acc-soft); color:var(--fg); padding:1px 2px; border-radius:3px;
+    box-shadow:0 0 0 1px var(--acc) inset; }
+  #srctitle .ok { color:#2bb7a3; font-size:11px; font-weight:600; }
+  #srctitle .bad { color:var(--sup); font-size:11px; font-weight:600; }
+  #srctitle .mut { color:var(--mut); font-weight:400; font-size:11px; }
   .chain { margin-top:8px; }
   .chain summary { cursor:pointer; color:var(--mut); font-size:12px; }
   .chain .step { font-size:12px; margin:5px 0; padding-left:9px; border-left:2px solid var(--line);
@@ -367,6 +399,11 @@ SKELETON_HTML = """
       <div id="docs"></div>
       <div id="detail"><div class="empty">Click a node to inspect its cited claims.</div></div>
     </aside>
+  </div>
+  <div id="srcpanel">
+    <div class="srchead"><span id="srctitle"></span>
+      <button type="button" id="srcclose" title="close">&#10005;</button></div>
+    <div id="srcbody"></div>
   </div>
 </div>
 """
@@ -967,8 +1004,31 @@ document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter')
 addEventListener('resize',resize);
 
 // -- Ask dock (grounded chat) ------------------------------------------------
-function citeChips(ev){ return (ev&&ev.length) ? '<div class="cites">'+
-  ev.map(c=>`<span class="cite-chip">[${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]</span>`).join('')+'</div>' : ''; }
+// Citation chips are clickable when a server is present (TG.source) — clicking opens the
+// source panel at the exact byte span, re-verified. In the offline graph.html (no server)
+// they stay inert text, so nothing regresses.
+function citeChips(ev){ if(!(ev&&ev.length)) return '';
+  const live = typeof TG!=='undefined' && typeof TG.source==='function';
+  return '<div class="cites">'+ev.map(c=>{
+    const label=`[${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]`;
+    if(!live) return `<span class="cite-chip">${label}</span>`;
+    return `<span class="cite-chip live" role="button" tabindex="0"`
+      +` data-doc="${esc(c.doc_id)}" data-start="${c.start}" data-end="${c.end}"`
+      +` data-hash="${esc(c.hash||'')}" title="View the cited source span">${label}</span>`;
+  }).join('')+'</div>'; }
+// Deterministic follow-up chips: each fills the Ask box and sends, so a click is a question.
+function suggestChips(sugg){ if(!(sugg&&sugg.length)) return '';
+  return '<div class="suggs">'+sugg.map(s=>
+    `<button type="button" class="sugg" data-q="${esc(s)}">${esc(s)}</button>`).join('')+'</div>'; }
+// Routing inspector: a collapsed "how this was answered" line for power users.
+function routingHtml(r){ if(!r) return '';
+  const bits=[];
+  bits.push(`<div class="rrow"><span>tool</span><b>${esc(r.tool||'')}</b></div>`);
+  if(r.forced) bits.push(`<div class="rrow"><span>forced</span><b>${esc(r.forced)}</b></div>`);
+  if(r.focus) bits.push(`<div class="rrow"><span>focus</span><b>${esc(r.focus)}</b></div>`);
+  if(r.rewritten) bits.push(`<div class="rrow"><span>resolved</span><b>${esc(r.rewritten)}</b></div>`);
+  if(r.question) bits.push(`<div class="rrow"><span>as</span><b>${esc(r.question)}</b></div>`);
+  return `<details class="routing"><summary>how this was answered</summary>${bits.join('')}</details>`; }
 function chainHtml(detail){
   if(!detail||!detail.length||!detail[0].role) return '';
   const steps=detail.map(s=>`<div class="step"><b>${esc(s.role)}</b> ${esc(s.content)}</div>`).join('');
@@ -1022,10 +1082,12 @@ function applyHighlight(h, tool){
   fitNodes(h&&h.nodes); draw();
 }
 let asking=false;
-async function ask(){
-  if(asking) return; const inp=document.getElementById('askq'), q=inp.value.trim(); if(!q) return;
-  const tool=document.getElementById('asktool').value;
-  addMsg('user',esc(q)); inp.value='';
+async function ask(forced){
+  if(asking) return; const inp=document.getElementById('askq');
+  const q=(typeof forced==='string'?forced:inp.value).trim(); if(!q) return;
+  // A suggestion chip forces 'auto' routing (the phrasing already encodes the intent).
+  const tool=(typeof forced==='string')?'auto':document.getElementById('asktool').value;
+  addMsg('user',esc(q)); if(typeof forced!=='string') inp.value='';
   const send=document.getElementById('asksend'); asking=true; send.disabled=true;
   const bubble=addMsg('bot','<span style="color:var(--mut)">thinking…</span>');
   try{
@@ -1033,7 +1095,9 @@ async function ask(){
     S.lastFocus=ans.focus||S.lastFocus;
     const conf = ans.abstained ? '<span class="conf abstain">abstained</span>'
       : (typeof ans.confidence==='number' ? `<span class="conf">${Math.round(ans.confidence*100)}% grounded</span>` : '');
-    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`+chainHtml(ans.detail)+detailHtml(ans)+citeChips(ans.evidence);
+    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`
+      +chainHtml(ans.detail)+detailHtml(ans)+citeChips(ans.evidence)
+      +routingHtml(ans.routing)+suggestChips(ans.suggestions);
     applyHighlight(ans.highlight, ans.tool);
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">error: '+esc(e.message||e)+'</span>'; }
   asking=false; send.disabled=false; document.getElementById('asklog').scrollTop=1e9;
@@ -1074,6 +1138,30 @@ async function saveSnapshot(){
     bubble.innerHTML=`<div class="tooltag">export</div>Saved <b>graph.json</b> (${Math.round(blob.size/1024)} KB) to your downloads.`;
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">export failed: '+esc(e.message||e)+'</span>'; }
 }
+// -- Citation click-through: show the cited source span, re-verified server-side --------
+async function openSource(ds){
+  const panel=document.getElementById('srcpanel'), body=document.getElementById('srcbody'),
+    ttl=document.getElementById('srctitle');
+  panel.classList.add('open');
+  ttl.textContent='loading source…'; body.innerHTML='<span class="mut">reading…</span>';
+  let r; try{ r=await TG.source(ds.doc, ds.start, ds.end, ds.hash); }catch(e){ r=null; }
+  if(!r || !r.available){
+    ttl.textContent='source unavailable';
+    const why={'no-corpus':'this console has no source corpus (a graph.json / .duckdb snapshot)',
+      'source-changed':'the source file changed since the graph was built',
+      'not-on-disk':'the source file is no longer on disk','unknown-document':'unknown document'};
+    body.innerHTML=`<div class="mut">${esc((r&&why[r.reason])||'the cited bytes could not be read')}.`
+      +`<br>Citation: [${esc(ds.doc.slice(0,14))}…:${ds.start}-${ds.end}]</div>`;
+    return;
+  }
+  ttl.innerHTML=`${esc(r.name)} <span class="mut">bytes ${r.start}-${r.end}</span>`
+    +(r.verified===true?' <span class="ok">verified</span>':r.verified===false?' <span class="bad">hash mismatch</span>':'');
+  body.innerHTML=`<span class="ctx">${esc(r.before)}</span>`
+    +`<mark>${esc(r.span)}</mark><span class="ctx">${esc(r.after)}</span>`;
+  const m=body.querySelector('mark'); if(m) m.scrollIntoView({block:'center'});
+}
+function closeSource(){ document.getElementById('srcpanel').classList.remove('open'); }
+
 function initAsk(){
   const dock=document.getElementById('ask');
   if(!dock) return;
@@ -1081,8 +1169,19 @@ function initAsk(){
   if(typeof TG==='undefined' || typeof TG.chat!=='function'){ dock.style.display='none'; return; } // offline graph.html has no server
   document.getElementById('askhead').onclick=()=>{ dock.classList.toggle('collapsed');
     setTimeout(()=>{ resize(); fit(); }, 200); };  // canvas buffer must follow the height change
-  document.getElementById('asksend').onclick=ask;
+  document.getElementById('asksend').onclick=()=>ask();
   document.getElementById('askq').addEventListener('keydown',e=>{ if(e.key==='Enter') ask(); });
+  // One delegated handler for the whole log: suggestion chips ask, citation chips open source.
+  const log=document.getElementById('asklog');
+  log.addEventListener('click',e=>{
+    const sg=e.target.closest('.sugg'); if(sg){ ask(sg.dataset.q); return; }
+    const cc=e.target.closest('.cite-chip.live'); if(cc){ openSource(cc.dataset); return; }
+  });
+  log.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.key!==' ') return;
+    const cc=e.target.closest('.cite-chip.live'); if(cc){ e.preventDefault(); openSource(cc.dataset); }
+  });
+  document.getElementById('srcclose').onclick=closeSource;
   // Save snapshot is read-only, so it's always available on the live console.
   const save=document.getElementById('save'); save.style.display='inline-block'; save.onclick=saveSnapshot;
   // File-attach is available only when the server was started with --allow-ingest.

@@ -16,6 +16,8 @@ from textgraph.console.renderer import RENDERER_CSS, RENDERER_JS, SKELETON_HTML
 _API_ADAPTER = r"""
 const _TOK = new URLSearchParams(location.search).get('token');
 const _u = (u) => _TOK ? u + (u.includes('?')?'&':'?') + 'token=' + encodeURIComponent(_TOK) : u;
+// A per-tab session id so the server can thread multi-turn Ask-dock memory across requests.
+const _SID = 'sid-' + Math.random().toString(36).slice(2) + '-' + Date.now();
 const TG = {
   graph:  ()    => fetch(_u('/api/graph')).then(r=>r.json()),
   why:    (id)  => fetch(_u('/api/call?'+new URLSearchParams({tool:'why',node:id}))).then(r=>r.json()),
@@ -23,7 +25,10 @@ const TG = {
   path:   (s,t) => fetch(_u('/api/call?'+new URLSearchParams({tool:'path',source:s,target:t}))).then(r=>r.json()),
   search: (q)   => fetch(_u('/api/call?'+new URLSearchParams({tool:'search',query:q,k:'8'}))).then(r=>r.json()),
   chat:   (q,o) => fetch(_u('/api/chat'),{method:'POST',headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify(Object.assign({q}, o||{}))}).then(r=>r.json()),
+                    body:JSON.stringify(Object.assign({q, session_id:_SID}, o||{}))}).then(r=>r.json()),
+  // Fetch the source bytes behind a citation (verified server-side); null when unavailable.
+  source: (doc,start,end,hash) => fetch(_u('/api/source?'+new URLSearchParams(
+                    Object.assign({doc, start, end}, hash?{hash}:{})))).then(r=>r.json()).catch(()=>null),
   ingest: (files) => { const fd=new FormData(); for(const f of files) fd.append('file', f, f.name);
                     return fetch(_u('/api/ingest'),{method:'POST',body:fd}).then(r=>r.json()); },
 };

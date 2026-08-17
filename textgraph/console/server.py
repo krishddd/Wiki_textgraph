@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from textgraph.console.api import route
+from textgraph.console.session import SessionStore
 from textgraph.l8_retrieval.engine import QueryEngine
 
 
@@ -67,6 +68,7 @@ class _State:
     cache_dir: str | None
     token: str | None = None
     ingest_lock: threading.Lock = field(default_factory=threading.Lock)
+    sessions: SessionStore = field(default_factory=SessionStore)
 
 
 def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
@@ -85,7 +87,9 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
             parsed = urlparse(self.path)
             merged = {k: v[0] for k, v in parse_qs(parsed.query).items()}
             merged.update(params)
-            status, ctype, body = route(state.engine, parsed.path, merged)
+            status, ctype, body = route(
+                state.engine, parsed.path, merged, sessions=state.sessions, source=state.source
+            )
             self._send(status, ctype, body)
 
         def _authed(self) -> bool:
@@ -190,6 +194,7 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 old = state.engine
                 state.engine = QueryEngine(res.nodes, res.edges)
                 forget(old)  # the swapped-out engine's cached reasoner is now stale
+                state.sessions.clear()  # node ids may have changed; drop stale conversation memory
                 after = {state.engine._name(n) for n in state.engine._entity_ids}
             self._json(
                 200,
@@ -223,6 +228,7 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 old = state.engine
                 state.engine = QueryEngine(res.nodes, res.edges)
                 forget(old)
+                state.sessions.clear()  # drop conversation memory tied to the old graph
             self._json(200, {"ok": True, "removed": name, "nodes": len(res.nodes)})
 
         def log_message(self, *args: object) -> None:
