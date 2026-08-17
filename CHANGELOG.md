@@ -6,6 +6,25 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-08-17
+
+### Added — cross-graph federation (multi-case investigations)
+- **`textgraph federate A.json B.json [C…]`**: query several case graphs at once to find the
+  entities that span more than one case — the shared beneficial owner behind two frauds, the
+  account that recurs across investigations — **without merging the corpora**. Each `graph.json`
+  stays its own reproducible artifact; cross-case links are discovered, not baked in.
+- The cross-case match is **exact and deterministic**, not fuzzy: because entity `node_id`s are
+  content-addressed (a hash of type + normalized name), the same real-world entity carries the
+  same id in every corpus that names it, so linking is an id intersection — the same insight that
+  powers `graph diff`. No id-namespacing, no heuristics, no new dependencies
+  (`textgraph/l8_retrieval/federation.py`).
+- **`--entity NAME`** prints a cross-case dossier for one entity: which cases hold it and its
+  relations in each (e.g. `DIRECTOR_OF Acme Corp` in case 4471, `TRANSFERRED Delta Trust` in
+  4490). **`--min-cases N`** raises the bridge threshold; **`--json`** for pipelines. Cases are
+  named by their folder (so two files both called `graph.json` don't collide).
+
+Read-only and deterministic; no artifact or `graph.json` change.
+
 ## [4.11.0] - 2026-08-17
 
 ### Added — the diff primitive (what changed between two builds)

@@ -729,6 +729,59 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_federate(args: argparse.Namespace) -> int:
+    import json
+
+    from textgraph.l8_retrieval.federation import (
+        entity_dossier,
+        load_federation,
+        shared_entities,
+    )
+
+    paths = [Path(p) for p in args.graphs]
+    for p in paths:
+        if not p.exists():
+            print(f"error: path does not exist: {p}", file=sys.stderr)
+            return 2
+    try:
+        cases = load_federation(args.graphs)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.entity:
+        dossier = entity_dossier(cases, args.entity)
+        if args.json:
+            print(json.dumps(dossier, ensure_ascii=False, indent=2))
+            return 0
+        if not dossier["found"]:
+            print(f"'{args.entity}' not found in any of the {len(cases)} cases.")
+            return 0
+        print(f"{dossier['name']} appears in {len(dossier['in_cases'])} of {len(cases)} cases:")
+        for c in dossier["cases"]:
+            print(f"\n[{c['case']}] {c['relation_count']} relation(s):")
+            for r in c["relations"]:
+                arrow = "->" if r["direction"] == "out" else "<-"
+                print(f"  {arrow} {r['predicate']} {r['other']}")
+        return 0
+
+    shared = shared_entities(cases, min_cases=args.min_cases)
+    if args.json:
+        print(json.dumps([s.to_dict() for s in shared], ensure_ascii=False, indent=2))
+        return 0
+    if not shared:
+        print(f"No entities shared across {args.min_cases}+ of the {len(cases)} cases.")
+        return 0
+    print(
+        f"{len(shared)} entit{'y' if len(shared) == 1 else 'ies'} span "
+        f"{args.min_cases}+ of the {len(cases)} cases (cross-case links):"
+    )
+    for s in shared:
+        spread = ", ".join(f"{c}:{s.degree.get(c, 0)}" for c in s.cases)
+        print(f"  {s.name}  [{len(s.cases)} cases]  ({spread})")
+    return 0
+
+
 def _cmd_cache_status(args: argparse.Namespace) -> int:
     import json
 
@@ -897,6 +950,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated entity names — restrict the diff to this watchlist",
     )
     p_diff.set_defaults(func=_cmd_diff)
+
+    p_fed = sub.add_parser(
+        "federate",
+        help="query several case graphs at once — find entities that span multiple cases",
+    )
+    p_fed.add_argument(
+        "graphs", nargs="+", help="two or more graph.json files (or dirs containing one)"
+    )
+    p_fed.add_argument(
+        "--entity", metavar="NAME", help="profile one entity across every case instead"
+    )
+    p_fed.add_argument(
+        "--min-cases",
+        type=int,
+        default=2,
+        help="an entity must span at least this many cases to be reported (default 2)",
+    )
+    p_fed.add_argument("--json", action="store_true", help="machine-readable output")
+    p_fed.set_defaults(func=_cmd_federate)
 
     p_cache = sub.add_parser("cache", help="LLM prompt-cache utilities")
     cache_sub = p_cache.add_subparsers(dest="cache_cmd", required=True)
