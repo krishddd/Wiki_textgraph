@@ -112,6 +112,20 @@ engine.conflicts()  # single-truth conflicts, surfaced not merged
 engine.trace_decision_chain("beneficial owner policy")  # decision lineage
 ```
 
+**In a Jupyter notebook** (`pip install 'textgraph-kg[notebook]'`) — the graph inline, answers as citation-bearing DataFrames:
+
+```python
+from textgraph.notebook import TextGraph
+
+tg = TextGraph("./case-files")  # build a corpus (or load a graph.json / .duckdb)
+tg.show()  # the interactive canvas, rendered in the cell
+tg.search("who moved the money")  # -> DataFrame, one [doc:start-end] citation per row
+tg.roles("Acme Corp")  # -> structurally similar entities (shell patterns)
+tg.contradictions()  # -> contested claims + a resolution hint
+```
+
+Every method returns the same bounded, cited results as the CLI/MCP tools — as a `pandas.DataFrame` (citations in a column), degrading to a list of dicts if pandas is absent. Read-only; nothing is written.
+
 **CLI** — the same tools from the shell:
 
 ```bash
@@ -303,6 +317,8 @@ textgraph console ./case-out
 `--llm-extract-budget N` dials the density (more chunks read → more relations, all cached). `--co-occurrence` is independent and free (no model) — it guarantees connectivity even before any LLM relations exist. The API key is read from the environment only; it never enters `graph.json`, the config hash, or the manifest.
 
 ## Status
+
+🟢 **v4.14.0 — Jupyter integration.** `pip install 'textgraph-kg[notebook]'` → `from textgraph.notebook import TextGraph`: `tg.show()` renders the interactive graph canvas **inline in a cell** (the same self-contained offline viewer, in a sandboxed iframe — no server), and `tg.search(...)` / `tg.roles(...)` / `tg.relations()` / `tg.contradictions()` return **citation-bearing `pandas.DataFrame`s** (one `[doc:start-end]` per row). pandas/IPython are import-guarded, so the methods degrade to lists of dicts without them and the lean core install is untouched. Read-only — nothing writes `graph.json`.
 
 🟢 **v4.13.0 — structural role similarity (shell-pattern detector).** `textgraph roles <path> "Acme Holdings"` finds the entities that play the same *structural role* — the next shell company with the same shape (one controller in, money out to several fronts), even when it shares no name, document, or neighbor with the known one. Deterministic by design: after a [design pass](docs/plans/structural-roles.md) rejected Node2Vec (stochastic, proximity-not-role, heavy dep), each entity gets a **structural signature** of local topology invariants (degree structure, centrality, clustering, relation-type mix), z-scored and compared by cosine — no RNG, no training, no new dependency, reproducible by construction. Also a **Similar roles** tool in the console. Composes with `federate` for cross-case role matching.
 

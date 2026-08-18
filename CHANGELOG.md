@@ -6,6 +6,21 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.14.0] - 2026-08-18
+
+### Added — Jupyter integration
+- **`textgraph.notebook.TextGraph`**: the graph in a notebook, citations intact. `TextGraph("./case-files")`
+  builds a corpus (or loads a `graph.json` / `.duckdb`); `tg.show()` renders the **interactive canvas inline
+  in the cell** — the same self-contained offline viewer as `graph.html`, embedded in a sandboxed iframe (no
+  server, no CDN); `tg` itself renders a compact summary card (`_repr_html_`).
+- **Citation-bearing DataFrames.** `tg.search()`, `tg.entities()`, `tg.relations()`, `tg.why()`,
+  `tg.neighbors()`, `tg.contradictions()` (with resolution hints), and `tg.roles()` each return the same
+  bounded, cited results as the CLI/MCP tools — as a `pandas.DataFrame` with a `[doc:start-end]` citation
+  column when pandas is present, degrading to a list of dicts otherwise. Read-only; nothing writes `graph.json`.
+- `pandas` and `IPython` are **import-guarded** behind the new `[notebook]` extra
+  (`pip install 'textgraph-kg[notebook]'`), so importing `textgraph.notebook` never breaks the lean core
+  install. `TextGraph.from_engine(engine)` wraps an existing build without reloading.
+
 ## [4.13.0] - 2026-08-18
 
 ### Added — structural role similarity (the shell-pattern detector)

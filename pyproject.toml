@@ -1,6 +1,6 @@
 [project]
 name = "textgraph-kg"
-version = "4.13.0"
+version = "4.14.0"
 description = "Turn any textual corpus into a queryable, byte-cited knowledge graph. Deterministic & local-first by default, explored in an interactive graph studio, with link prediction, Datalog rule reasoning, and opt-in LLM extraction, grounded answer synthesis, and semantic (embedding) search."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -73,6 +73,8 @@ security = ["openfga-sdk>=0.5.0"]
 # Framework adapters — consume the graph from LangChain / LlamaIndex, citations preserved.
 langchain = ["langchain-core>=0.3.0"]
 llamaindex = ["llama-index-core>=0.11.0"]
+# Jupyter integration — inline graph canvas + citation-bearing DataFrames (textgraph.notebook).
+notebook = ["pandas>=2.0.0", "ipython>=8.0.0"]
 # Everything the core product needs (Phases 1-6)
 full = [
     "textgraph-kg[ingest,ie,er,graph,mcp]",
@@ -142,6 +144,7 @@ files = [
     "textgraph/security",
     "textgraph/pipeline.py",
     "textgraph/doctor.py",
+    "textgraph/notebook.py",
 ]
 warn_unused_ignores = true
 disallow_untyped_defs = true
@@ -150,7 +153,7 @@ disallow_untyped_defs = true
 module = [
     "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
     "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*", "colpali_engine.*",
-    "openfga_sdk.*", "langchain_core.*", "llama_index.*",
+    "openfga_sdk.*", "langchain_core.*", "llama_index.*", "pandas.*", "IPython.*",
 ]
 ignore_missing_imports = true
 
