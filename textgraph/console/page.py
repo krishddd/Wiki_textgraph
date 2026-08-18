@@ -31,11 +31,15 @@ const TG = {
                     Object.assign({doc, start, end}, hash?{hash}:{})))).then(r=>r.json()).catch(()=>null),
   ingest: (files) => { const fd=new FormData(); for(const f of files) fd.append('file', f, f.name);
                     return fetch(_u('/api/ingest'),{method:'POST',body:fd}).then(r=>r.json()); },
-  // Analyst annotations (sidecar overlay; never touches graph.json).
-  annotations: () => fetch(_u('/api/annotations')).then(r=>r.json()).catch(()=>null),
+  // Collaboration overlay (sidecar; never touches graph.json): annotations + assignments +
+  // a monotonic version for cheap poll-sync + a recent-activity log.
+  collab: () => fetch(_u('/api/collab')).then(r=>r.json()).catch(()=>null),
   annotate: (node,status,note) => fetch(_u('/api/annotate'),{method:'POST',
                     headers:{'Content-Type':'application/json'},
                     body:JSON.stringify({node,status,note})}).then(r=>r.json()),
+  assign: (node,analyst) => fetch(_u('/api/assign'),{method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({node,analyst})}).then(r=>r.json()),
 };
 """
 

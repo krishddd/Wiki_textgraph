@@ -80,8 +80,11 @@ def test_annotation_store_persists_to_sidecar(tmp_path: Path) -> None:
     # A fresh store loads the persisted state.
     reloaded = AnnotationStore(sidecar)
     assert reloaded.all()["entity:beta"]["status"] == "disputed"
-    # graph.json is never touched — the sidecar is the only artifact written.
-    assert json.loads(sidecar.read_text())["entity:beta"]["note"] == "conflicting dates"
+    # graph.json is never touched — the sidecar is the only artifact written. The collaboration
+    # format nests annotations under an "annotations" key (alongside version/assignments/activity).
+    doc = json.loads(sidecar.read_text())
+    assert doc["annotations"]["entity:beta"]["note"] == "conflicting dates"
+    assert "version" in doc and "assignments" in doc
 
 
 def test_annotation_store_rejects_unknown_status() -> None:

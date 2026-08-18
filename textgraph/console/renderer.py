@@ -306,6 +306,14 @@ RENDERER_CSS = """
     border-radius:8px; background:var(--card); color:var(--fg); font:inherit; font-size:13px;
     resize:vertical; box-sizing:border-box; }
   .annrow { display:flex; align-items:center; gap:9px; margin-top:7px; }
+  .annby { font-size:11px; color:var(--mut); margin-top:6px; }
+  /* Collaboration: identity chip + team activity feed */
+  #whoami { display:none; align-items:center; font-size:12px; color:var(--fg2); padding:5px 10px;
+    border:1px solid var(--line); border-radius:20px; margin-right:4px; white-space:nowrap; }
+  #activity { max-height:20vh; overflow-y:auto; padding:0 18px 8px; }
+  .arow { font-size:12px; color:var(--fg2); padding:3px 0; border-bottom:1px solid var(--line); }
+  .arow:last-child { border-bottom:none; }
+  .arow b { color:var(--fg); }
   #askbar { display:flex; gap:8px; padding:11px 13px; border-top:1px solid var(--line);
     align-items:center; }
   #attach, #save { display:none; cursor:pointer; font-size:17px; line-height:1; padding:7px 9px;
@@ -359,6 +367,8 @@ SKELETON_HTML = """
       <button class="btn" id="fit" title="fit graph to screen">Fit</button>
       <button class="btn" id="panel" title="expand graph to full width / show panel">&#8596;</button>
     </div>
+    <span id="whoami" title="your collaboration identity (console --analyst)"></span>
+    <button class="btn" id="minebtn" style="display:none" title="show only entities assigned to me">Mine</button>
     <button class="btn icon-btn" id="theme" title="toggle light / dark">&#9681;</button>
   </header>
   <div id="body">
@@ -423,6 +433,8 @@ SKELETON_HTML = """
         <button type="button" id="predsem" class="minibtn">Semantic only</button>
       </div>
       <div class="tags" id="preds"></div>
+      <h2 id="acthdr" style="display:none">Team activity</h2>
+      <div id="activity"></div>
       <h2 id="docshdr" style="display:none">Documents <span id="doccount" class="mut"></span></h2>
       <div id="docs"></div>
       <div id="detail"><div class="empty">Click a node to inspect its cited claims.</div></div>
@@ -458,8 +470,10 @@ const S = { g:null, scale:1, tx:0, ty:0, hidden:new Set(), tags:new Set(TAGS),
   // v4.10: contradiction heatmap toggle (+ max count, for the colour scale) and the
   // timeline play state (interval id + keyframe cursor).
   heat:false, heatMax:0, playing:false, playTimer:null,
-  // v4.12: analyst annotations overlay (node id -> {status, note}); sidecar, never graph.json.
-  ann:{} };
+  // v4.12+: collaboration overlay (sidecar, never graph.json). ann: node -> {status,note,author,
+  // updated}; assign: node -> analyst; analyst: this console's declared identity; collabV: last
+  // seen version (poll-sync); activity: recent change log; mineOnly: "assigned to me" filter.
+  ann:{}, assign:{}, analyst:'', collabV:-1, activity:[], mineOnly:false };
 const c = document.getElementById('c'), ctx = c.getContext('2d');
 const tip = document.getElementById('tip'), note = document.getElementById('note');
 const color = cid => PALETTE[((cid%PALETTE.length)+PALETTE.length)%PALETTE.length];
@@ -629,7 +643,9 @@ function draw(){
   for(const n of S.g.nodes){
     if(!visible(n)) continue;
     const x=SX(n),y=SY(n),rr=rad(n); const d=dim(n);
-    const faded=orphanDimmed(n);                 // focus mode: unconnected -> background
+    // focus mode fades unconnected; "assigned to me" fades everything not owned by me.
+    const notMine = S.mineOnly && S.analyst && S.assign[n.id]!==S.analyst && !(S.sel&&S.sel.id===n.id);
+    const faded=orphanDimmed(n) || notMine;
     const isSel=S.sel&&S.sel.id===n.id;
     if(isSel){ ctx.save(); ctx.globalAlpha=0.22; ctx.beginPath(); ctx.arc(x,y,rr+9,0,7);
       ctx.fillStyle=accent; ctx.fill(); ctx.restore(); }   // soft selection halo
@@ -644,6 +660,16 @@ function draw(){
       const col={confirmed:'#2bb7a3',disputed:'#e0555b',pending:'#f2c14e'}[an.status]||'#8a94a6';
       ctx.beginPath(); ctx.arc(x+rr*0.72, y-rr*0.72, 3.4, 0, 7);
       ctx.fillStyle=col; ctx.fill(); ctx.lineWidth=1; ctx.strokeStyle='#fff'; ctx.stroke();
+    }
+    // Assignment cue: a small square badge (accent if it's mine, muted otherwise) + a name tag.
+    const who=S.assign[n.id];
+    if(who && !d){
+      const mine = S.analyst && who===S.analyst;
+      ctx.fillStyle = mine ? (cssv('--acc')||'#4f6bff') : '#8a94a6';
+      ctx.fillRect(x-rr*0.72-3, y-rr*0.72-3, 6, 6);
+      if(S.topRank.has(n.id) || rr*S.scale>6 || mine){
+        ctx.fillStyle=labelColor; ctx.font='9px ui-sans-serif,system-ui';
+        ctx.fillText('@'+who.slice(0,12), x+rr+4, y+rr+2); }
     }
     // Always label the top-PageRank nodes (scan-at-a-glance); others only when zoomed in.
     // Never label a dimmed/faded node.
@@ -853,18 +879,26 @@ async function inspect(n){
   d.innerHTML=h;
   wireAnnotationEditor(n.id);
 }
-// Analyst annotation editor: a status selector + note, saved to the sidecar. Live server only.
+// Analyst annotation + assignment editor: status, note, and who owns the entity. Saved to the
+// shared sidecar with attribution; live server only.
 function annotationEditor(nid){
   if(typeof TG==='undefined' || typeof TG.annotate!=='function') return '';
   const a=S.ann[nid]||{status:'none',note:''};
   const opt=(v,label)=>`<option value="${v}"${a.status===v?' selected':''}>${label}</option>`;
+  const by = a.author ? `<div class="annby">last edited by <b>${esc(a.author)}</b>${a.updated?' · '+esc(a.updated):''}</div>` : '';
+  const assignee = S.assign[nid]||'';
   return `<div class="annot"><div class="ah">Analyst note</div>`
     +`<select id="annstatus" class="annsel">`
     +opt('none','— unset —')+opt('confirmed','Confirmed')+opt('disputed','Disputed')+opt('pending','Pending')
     +`</select>`
-    +`<textarea id="annnote" class="annnote" placeholder="add a note (saved to the annotations sidecar)…">${esc(a.note||'')}</textarea>`
+    +`<textarea id="annnote" class="annnote" placeholder="add a note (shared with your team)…">${esc(a.note||'')}</textarea>`
     +`<div class="annrow"><button type="button" id="annsave" class="minibtn">Save note</button>`
-    +`<span id="annstate" class="mut"></span></div></div>`;
+    +`<span id="annstate" class="mut"></span></div>`+by
+    +`<div class="ah" style="margin-top:10px">Assignment</div>`
+    +`<div class="annrow"><input id="annassign" class="annsel" style="flex:1" placeholder="analyst name" value="${esc(assignee)}">`
+    +`<button type="button" id="annassignbtn" class="minibtn">Assign</button></div>`
+    +(S.analyst?`<button type="button" id="annassignme" class="minibtn" style="margin-top:6px">Assign to me</button>`:'')
+    +`</div>`;
 }
 function wireAnnotationEditor(nid){
   const sel=document.getElementById('annstatus'), note=document.getElementById('annnote'),
@@ -874,11 +908,20 @@ function wireAnnotationEditor(nid){
     st.textContent='saving…';
     try{ const r=await TG.annotate(nid, sel.value, note.value);
       if(r&&r.ok){ if(r.annotation.status==='none'&&!r.annotation.note) delete S.ann[nid];
-        else S.ann[nid]=r.annotation; st.textContent='saved'; draw(); }
+        else S.ann[nid]=r.annotation; if(r.version!=null) S.collabV=r.version; st.textContent='saved'; draw(); }
       else st.textContent='save failed';
     }catch(e){ st.textContent='save failed'; }
   };
   save.onclick=doSave; sel.onchange=doSave;
+  const assignIn=document.getElementById('annassign'), assignBtn=document.getElementById('annassignbtn');
+  const doAssign=async(who)=>{
+    try{ const r=await TG.assign(nid, who);
+      if(r&&r.ok){ if(r.assignee) S.assign[nid]=r.assignee; else delete S.assign[nid];
+        if(r.version!=null) S.collabV=r.version; assignIn.value=r.assignee||''; draw(); } }catch(e){}
+  };
+  if(assignBtn) assignBtn.onclick=()=>doAssign(assignIn.value.trim());
+  const me=document.getElementById('annassignme');
+  if(me) me.onclick=()=>doAssign(S.analyst);
 }
 async function runPath(){
   const [s,t]=S.pick; const res=await TG.path(s,t);
@@ -1414,8 +1457,40 @@ async function removeDoc(name){
   wirePredButtons();
   loadAnnotations();
 })();
+// Load the collaboration overlay and start polling so a teammate's edits appear within seconds.
 async function loadAnnotations(){
-  if(typeof TG==='undefined' || typeof TG.annotations!=='function') return;
-  try{ const r=await TG.annotations(); if(r&&r.annotations){ S.ann=r.annotations; draw(); } }catch(e){}
+  if(typeof TG==='undefined' || typeof TG.collab!=='function') return;
+  await refreshCollab(true);
+  setInterval(()=>refreshCollab(false), 4000);   // poll-sync (cheap: only redraws on a version bump)
+}
+async function refreshCollab(force){
+  try{
+    const r=await TG.collab(); if(!r) return;
+    if(!force && r.version===S.collabV) return;   // nothing changed since last poll
+    S.collabV=r.version; S.ann=r.annotations||{}; S.assign=r.assignments||{};
+    S.activity=r.activity||[]; if(r.analyst!=null) S.analyst=r.analyst;
+    renderIdentity(); renderActivity();
+    if(S.sel && document.getElementById('annstatus')) inspect(S.sel);  // refresh open editor
+    draw();
+  }catch(e){}
+}
+function renderIdentity(){
+  const el=document.getElementById('whoami'); if(!el) return;
+  el.textContent = S.analyst ? ('you: '+S.analyst) : '';
+  el.style.display = S.analyst ? 'inline-flex' : 'none';
+  const mb=document.getElementById('minebtn');
+  if(mb){ mb.style.display = S.analyst ? '' : 'none';
+    if(!mb._wired){ mb._wired=true; mb.onclick=()=>{ S.mineOnly=!S.mineOnly;
+      mb.classList.toggle('on',S.mineOnly); draw(); }; } }
+}
+function renderActivity(){
+  const box=document.getElementById('activity'); if(!box) return;
+  const byId=S.byId||{};
+  const name=nid=>(byId[nid]&&byId[nid].name)||nid;
+  const rows=(S.activity||[]).slice().reverse().slice(0,30);
+  document.getElementById('acthdr').style.display = rows.length?'':'none';
+  box.innerHTML = rows.map(a=>`<div class="arow"><b>${esc(a.author||'?')}</b> ${esc(a.action||'')} `
+    +`<span class="mut">${esc(name(a.node))}</span></div>`).join('')
+    || '<div class="mut" style="padding:4px 18px">No activity yet.</div>';
 }
 """

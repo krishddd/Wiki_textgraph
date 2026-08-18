@@ -6,6 +6,36 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-08-18
+
+**Milestone release — the roadmap of bigger bets is complete** (structural roles, cross-graph
+federation, Jupyter, and now collaborative mode). No breaking changes: the public API and the
+`graph.json` format are unchanged, and a build is byte-identical to 4.14.0.
+
+### Added — collaborative mode (multi-analyst review)
+- **Several analysts on one case, live.** Point two consoles at the same sidecar
+  (`console --annotations shared.json --analyst "Dana"` / `--analyst "Reed"`) and they collaborate:
+  each edit is **attributed** (author + timestamp), entities can be **assigned** to an analyst, and
+  a **team-activity feed** shows who did what. A colleague's change appears within seconds via
+  cheap **version-polling** (no websockets — the stdlib server is unchanged); an **"assigned to me"**
+  filter and an assignee cue on the canvas round it out.
+- **Local-first held.** `graph.json` stays the immutable shared ground truth and is never written;
+  all mutable collaboration state lives in the sidecar (explicitly non-deterministic — it has
+  authors and timestamps *because* it is not part of the reproducible build). The determinism gate
+  is untouched. Declared identity is for **attribution, not access control** (that remains `--token`
+  / the ReBAC-ABAC policy) — the docs say so plainly. See
+  [docs/plans/collaborative-mode.md](docs/plans/collaborative-mode.md).
+- **Multi-process safe.** Writes reload-before-write under a lock and reads reload-before-read, so
+  two console processes on one sidecar file see each other's edits and never clobber untouched
+  nodes. A v4.11 flat `annotations.json` loads unchanged (backward compatible).
+- New: `console --analyst NAME`, `GET /api/collab` (overlay + monotonic version), `POST /api/assign`;
+  `AnnotationStore` grew attribution, assignments, a version counter, and a bounded activity log.
+
+### Verified
+- End-to-end on the real `case` corpus + `case-out` build: two analysts (Dana/Reed) sharing a
+  sidecar — attribution, assignment, and live poll-sync all confirmed in-browser; plus a full
+  smoke of roles / federate / diff / cache / notebook on the same data.
+
 ## [4.14.0] - 2026-08-18
 
 ### Added — Jupyter integration

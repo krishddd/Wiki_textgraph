@@ -26,6 +26,13 @@ from textgraph.console.session import SessionStore
 from textgraph.l8_retrieval.engine import QueryEngine
 
 
+def _now() -> str:
+    """UTC timestamp for collaboration attribution (sidecar-only, never in graph.json)."""
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def build_engine(source: str | Path) -> QueryEngine:
     """Build a QueryEngine from a corpus dir, a ``.duckdb`` file, or a built ``graph.json``.
 
@@ -68,6 +75,7 @@ class _State:
     allow_ingest: bool
     cache_dir: str | None
     token: str | None = None
+    analyst: str = ""  # declared identity for collaboration attribution (not a security boundary)
     ingest_lock: threading.Lock = field(default_factory=threading.Lock)
     sessions: SessionStore = field(default_factory=SessionStore)
     annotations: AnnotationStore = field(default_factory=lambda: AnnotationStore(None))
@@ -120,11 +128,16 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                         "ingest": state.allow_ingest,
                         "auth": bool(state.token),
                         "annotate": True,  # annotations are always available (sidecar only)
+                        "analyst": state.analyst,  # declared collaboration identity (may be "")
                     },
                 )
                 return
             if path == "/api/annotations":
                 self._json(200, state.annotations.to_payload())
+                return
+            if path == "/api/collab":
+                # The full collaboration overlay + a monotonic version for cheap poll-sync.
+                self._json(200, state.annotations.payload(analyst=state.analyst))
                 return
             if path == "/api/export":
                 self._export()
@@ -170,6 +183,9 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed.path == "/api/annotate":
                 self._annotate(raw)
+                return
+            if parsed.path == "/api/assign":
+                self._assign(raw)
                 return
             # Other POSTs (the chat) carry JSON/urlencoded params merged into route().
             params: dict[str, str] = {}
@@ -248,7 +264,8 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
 
         def _annotate(self, raw: bytes) -> None:
             # Annotations are a sidecar overlay; they never touch graph.json, so they're always
-            # allowed (no --allow-ingest gate). Body: {node, status, note}.
+            # allowed (no --allow-ingest gate). Body: {node, status, note}. Attribution comes
+            # from the server's declared analyst, stamped with the write time.
             try:
                 body = json.loads(raw or b"{}")
             except (ValueError, UnicodeDecodeError):
@@ -259,9 +276,45 @@ def _make_handler(state: _State) -> type[BaseHTTPRequestHandler]:
                 self._json(400, {"ok": False, "error": "no node id"})
                 return
             stored = state.annotations.set(
-                node, status=str(body.get("status", "none")), note=str(body.get("note", ""))
+                node,
+                status=str(body.get("status", "none")),
+                note=str(body.get("note", "")),
+                author=state.analyst,
+                at=_now(),
             )
-            self._json(200, {"ok": True, "node": node, "annotation": stored})
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "node": node,
+                    "annotation": stored,
+                    "version": state.annotations.version,
+                },
+            )
+
+        def _assign(self, raw: bytes) -> None:
+            # Assign an entity to an analyst (sidecar only). Body: {node, analyst}.
+            try:
+                body = json.loads(raw or b"{}")
+            except (ValueError, UnicodeDecodeError):
+                self._json(400, {"ok": False, "error": "invalid JSON"})
+                return
+            node = str(body.get("node", "")).strip()
+            if not node:
+                self._json(400, {"ok": False, "error": "no node id"})
+                return
+            assignee = state.annotations.assign(
+                node, str(body.get("analyst", "")), author=state.analyst, at=_now()
+            )
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "node": node,
+                    "assignee": assignee,
+                    "version": state.annotations.version,
+                },
+            )
 
         def log_message(self, *args: object) -> None:
             pass  # keep the console quiet
@@ -278,18 +331,21 @@ def serve(
     allow_ingest: bool = False,
     token: str | None = None,
     annotations_path: str | Path | None = None,
+    analyst: str = "",
 ) -> None:  # pragma: no cover - binds a socket
     """Serve the console until interrupted (Ctrl-C).
 
     Pass ``source`` + ``allow_ingest=True`` to enable file-attach ingestion; ``token`` turns
     on bearer-token auth on ``/api/*`` (recommended before binding a non-localhost host);
-    ``annotations_path`` persists analyst annotations to a sidecar JSON (never touches
-    ``graph.json``).
+    ``annotations_path`` persists the collaboration overlay (annotations + assignments) to a
+    sidecar JSON (never touches ``graph.json``); ``analyst`` is the declared identity stamped on
+    this console's edits (collaboration attribution, not a security boundary).
     """
     from textgraph.console.annotations import AnnotationStore
 
     cache_dir = tempfile.mkdtemp(prefix="tg-console-") if (allow_ingest and source) else None
     state = _State(engine, str(source) if source else None, allow_ingest, cache_dir, token)
+    state.analyst = analyst.strip()[:120]
     state.annotations = AnnotationStore(annotations_path)
     server = ThreadingHTTPServer((host, port), _make_handler(state))
     extra = ("  · ingest ON" if state.allow_ingest else "") + ("  · auth ON" if token else "")

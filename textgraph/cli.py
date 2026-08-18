@@ -588,6 +588,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
         allow_ingest=args.allow_ingest and root.is_dir(),
         token=args.token or None,
         annotations_path=args.annotations or None,
+        analyst=args.analyst or "",
     )
     return 0
 
@@ -1301,8 +1302,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--annotations",
         default="",
         metavar="FILE",
-        help="persist analyst annotations (confirmed/disputed/pending + notes) to this sidecar "
-        "JSON; never touches graph.json. Omit to keep annotations in-memory for the session.",
+        help="persist the collaboration overlay (annotations + assignments) to this sidecar "
+        "JSON; never touches graph.json. Omit to keep it in-memory for the session. Point two "
+        "consoles at the same file to collaborate.",
+    )
+    p_console.add_argument(
+        "--analyst",
+        default="",
+        metavar="NAME",
+        help="your name, stamped on this console's edits for collaboration attribution "
+        "(not a security boundary — use --token / a policy for access control)",
     )
     p_console.set_defaults(func=_cmd_console)
 
