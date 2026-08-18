@@ -1074,6 +1074,26 @@ class QueryEngine:
                 pairs.append(ContradictionPair(a, b))
         return ContradictionsResult(pairs=pairs)
 
+    def similar_roles(self, handle: str, *, k: int = 10) -> dict[str, Any]:
+        """Entities that play the same structural role as ``handle`` (deterministic signatures).
+
+        Not proximity: two shell companies in unrelated cases with the same shape rank as
+        similar. Read-only, artifact-free. Returns the resolved anchor + ranked peers.
+        """
+        from textgraph.l7_analytics.roles import compute_signatures, role_similarity
+
+        anchor = self.resolve(handle)
+        if anchor is None or anchor not in self._entity_ids:
+            return {"anchor": handle, "found": False, "matches": []}
+        sigs = compute_signatures(list(self._node.values()), self._edges)
+        matches = role_similarity(sigs, anchor, k=k)
+        return {
+            "anchor": self._name(anchor),
+            "anchor_id": anchor,
+            "found": True,
+            "matches": matches,
+        }
+
     def resolution_hints(self, *, context: SecurityContext | None = None) -> list[dict[str, Any]]:
         """For each contradiction, a deterministic *hint* on which claim likely supersedes.
 

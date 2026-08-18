@@ -202,6 +202,8 @@ def _dispatch(
         return _contradictions(engine)
     if chosen == "predict":
         return _predict(engine, q, focus)
+    if chosen == "roles":
+        return _roles(engine, q, focus)
     if chosen == "rules":
         return _rules(engine, q)
     if chosen == "narrate":
@@ -478,6 +480,42 @@ def _predict(engine: QueryEngine, q: str, focus: str | None) -> ChatAnswer:
         highlight_nodes=nodes,
         highlight_edges=edges,
         detail=detail,
+    )
+
+
+def _roles(engine: QueryEngine, q: str, focus: str | None) -> ChatAnswer:
+    """Structural-role similarity: entities that play the same role as the named/focused one.
+
+    Deterministic signatures (not proximity, not an LLM), so it never abstains. Matches are
+    highlighted on the canvas; no citations (a role is a topological property, not a claim).
+    """
+    e = _one_entity(engine, q, focus)
+    if not e:
+        return ChatAnswer(
+            text="Name an entity to find its structural peers (e.g. 'entities like Acme Corp').",
+            tool="roles",
+        )
+    res = engine.similar_roles(e, k=10)
+    if not res["found"] or not res["matches"]:
+        return ChatAnswer(
+            text=f"No structural peers found for {engine._name(e)}.", tool="roles", focus=e
+        )
+    summary = "; ".join(f"{m['name']} ({m['similarity']:.2f})" for m in res["matches"][:6])
+    nodes = [res["anchor_id"]] + [m["node_id"] for m in res["matches"]]
+    return ChatAnswer(
+        text=f"Entities structurally like {res['anchor']}: {summary}.",
+        tool="roles",
+        focus=e,
+        highlight_nodes=nodes,
+        detail=[
+            {
+                "name": m["name"],
+                "score": m["similarity"],
+                "degree": m["total_degree"],
+                "shared": ", ".join(m["top_relations"]),
+            }
+            for m in res["matches"]
+        ],
     )
 
 

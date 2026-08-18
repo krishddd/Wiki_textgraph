@@ -6,6 +6,30 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-08-18
+
+### Added — structural role similarity (the shell-pattern detector)
+- **`textgraph roles <path> <entity>`**: find the entities that play the same *structural role*
+  as one entity — the shell-company detector. Shells replicate a shape (one controller in, money
+  out to several fronts), so role similarity surfaces the next shell even when it shares no name,
+  document, or neighbor with the known one. A **"Similar roles"** tool is also in the console Ask
+  dock (matches highlighted on the canvas).
+- **Deterministic by design — not Node2Vec.** Node2Vec is stochastic (random walks + word2vec),
+  captures *proximity* not *role*, and is a heavy dependency — all three fight the moat, so it was
+  rejected after a design pass ([docs/plans/structural-roles.md](docs/plans/structural-roles.md)).
+  Instead each entity gets a **structural signature** (RolX/struc2vec-flavored): a fixed vector of
+  local topology invariants — degree structure, PageRank/betweenness, clustering, neighbor-degree
+  stats, and the normalized mix of relation types it participates in — z-scored and compared by
+  cosine. Every feature is a closed-form, sorted function of the graph: no RNG, no training, no new
+  dependency, so the ranking is reproducible (G1). Because signatures ignore *which* nodes a node
+  connects to, two shells in unrelated cases rank as similar — the opposite of proximity search,
+  and it composes with `federate` for cross-case role matching.
+- Query-time and read-only: reads the built graph, never writes `graph.json`
+  (`textgraph/l7_analytics/roles.py`, `QueryEngine.similar_roles()`).
+
+A learned Node2Vec/struc2vec backend behind `[graph]` (seeded, best-effort reproducible) remains
+an opt-in future add for users who explicitly want learned embeddings.
+
 ## [4.12.0] - 2026-08-17
 
 ### Added — cross-graph federation (multi-case investigations)

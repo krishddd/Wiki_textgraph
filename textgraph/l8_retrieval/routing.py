@@ -29,6 +29,7 @@ TOOLS = (
     "neighbors",
     "predict",
     "rules",
+    "roles",
     "timeline",
     "contradictions",
     "conflicts",
@@ -47,6 +48,7 @@ STRATEGY: dict[str, str] = {
     "neighbors": "graph-traversal",  # one-hop expansion
     "predict": "graph-analytics",  # structural link prediction (Adamic-Adar overlap)
     "rules": "graph-analytics",  # forward-chaining Datalog inference over relations
+    "roles": "graph-analytics",  # deterministic structural-role similarity (shell patterns)
     "why": "graph-traversal",  # claim neighbourhood of one node
     "timeline": "graph-traversal",  # temporal slice of one node
     "contradictions": "graph-analytics",  # precomputed CONTRADICTS edges
@@ -113,6 +115,13 @@ def classify_query(question: str, forced: str = "auto") -> str:
         return "rules"
     if "predict" in low or "missing link" in low or "suggest link" in low or "likely link" in low:
         return "predict"
+    if (
+        "same role" in low
+        or "similar role" in low
+        or "structural role" in low
+        or "like " in low[:6]
+    ):
+        return "roles"
     if "neighbo" in low or "related to" in low:
         return "neighbors"
     if "timeline" in low or "when did" in low or "over time" in low or "history of" in low:

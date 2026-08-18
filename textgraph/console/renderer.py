@@ -392,6 +392,7 @@ SKELETON_HTML = """
             <option value="why">Why</option>
             <option value="neighbors">Neighbors</option>
             <option value="predict">Predict links</option>
+            <option value="roles">Similar roles</option>
             <option value="rules">Rules (Datalog)</option>
             <option value="timeline">Timeline</option>
             <option value="contradictions">Contradictions</option>
@@ -1233,6 +1234,11 @@ function detailHtml(ans){
     const steps=d.map(p=>`<div class="step"><b>${esc(p.source)}</b> &middot;&middot;&middot; <b>${esc(p.target)}</b> <span style="color:var(--mut)">(${(+p.score).toFixed(3)})</span>`
       +(p.shared&&p.shared.length?`<br><span style="color:var(--mut)">via ${esc(p.shared.slice(0,4).join(', '))}</span>`:'')+`</div>`).join('');
     return `<details class="chain" open><summary>${d.length} candidate link(s)</summary>${steps}</details>`;
+  }
+  if(ans.tool==='roles'){
+    const steps=d.map(r=>`<div class="step"><b>${esc(r.name)}</b> <span style="color:var(--mut)">(${(+r.score).toFixed(3)}, degree ${r.degree})</span>`
+      +(r.shared?`<br><span style="color:var(--mut)">mostly ${esc(r.shared)}</span>`:'')+`</div>`).join('');
+    return `<details class="chain" open><summary>${d.length} structural peer(s)</summary>${steps}</details>`;
   }
   if(ans.tool==='rules'){
     const steps=d.map(r=>`<div class="step"><b>${esc(r.source)}</b> &mdash;${esc(r.predicate)}&rarr; <b>${esc(r.target)}</b>`

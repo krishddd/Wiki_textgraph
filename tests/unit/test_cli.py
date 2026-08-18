@@ -109,6 +109,24 @@ def test_federate_command_missing_path_errors(tmp_path: Path) -> None:
     assert main(["federate", str(tmp_path / "nope.json"), str(tmp_path / "also.json")]) == 2
 
 
+def test_roles_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    corpus = _mk_corpus(
+        tmp_path,
+        "roles",
+        "# Case\nA Corp transferred $1 to X.\nA Corp transferred $2 to Y.\n"
+        "B Corp transferred $3 to P.\nB Corp transferred $4 to Q.\n",
+    )
+    assert main(["roles", str(corpus), "A Corp", "-k", "3"]) == 0
+    assert "similar structural role" in capsys.readouterr().out
+    assert main(["roles", str(corpus), "A Corp", "--json"]) == 0
+    import json
+
+    assert json.loads(capsys.readouterr().out)["found"] is True
+    assert main(["roles", str(corpus), "Nobody Ltd"]) == 0
+    assert "not found" in capsys.readouterr().out
+    assert main(["roles", str(tmp_path / "nope"), "X"]) == 2
+
+
 def test_cache_status_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     # Cold dir.
     (tmp_path / "graph.json").write_text('{"nodes":[]}', encoding="utf-8")

@@ -27,6 +27,18 @@ def test_classify_routes_by_intent() -> None:
     assert classify("anything", forced="search") == "search"  # explicit override wins
 
 
+def test_roles_routing_and_answer() -> None:
+    # "similar role" phrasing routes to the roles tool.
+    assert classify("entities with a similar role to Acme Corp") == "roles"
+    assert classify("structural role of Acme Corp") == "roles"
+    eng = _engine()
+    ans = answer(eng, "entities with a similar role to Acme Corp", tool="roles")
+    assert ans.tool == "roles"
+    assert not ans.abstained  # role similarity is not a factual claim -> never abstains
+    # It highlights the anchor + peers on the canvas.
+    assert ans.highlight_nodes
+
+
 def test_connection_question_returns_a_cited_path_with_highlights() -> None:
     ans = answer(_engine(), "how is Acme Corp connected to Delta Trust")
     assert ans.tool == "path"

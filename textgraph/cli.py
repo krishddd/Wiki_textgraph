@@ -729,6 +729,30 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_roles(args: argparse.Namespace) -> int:
+    import json
+
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).similar_roles(args.entity, k=args.k)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+    if not res["found"]:
+        print(f"'{args.entity}' not found.")
+        return 0
+    if not res["matches"]:
+        print(f"No other entities to compare against {res['anchor']}.")
+        return 0
+    print(f"Entities with a similar structural role to {res['anchor']}:")
+    for m in res["matches"]:
+        rels = ", ".join(m["top_relations"]) or "-"
+        print(f"  {m['similarity']:.3f}  {m['name']}  (degree {m['total_degree']}; {rels})")
+    return 0
+
+
 def _cmd_federate(args: argparse.Namespace) -> int:
     import json
 
@@ -950,6 +974,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated entity names — restrict the diff to this watchlist",
     )
     p_diff.set_defaults(func=_cmd_diff)
+
+    p_roles = sub.add_parser(
+        "roles",
+        help="find entities that play the same structural role as one entity (shell-pattern)",
+    )
+    p_roles.add_argument("path", help="corpus dir, graph.json, or .duckdb")
+    p_roles.add_argument("entity", help="the anchor entity to match structurally")
+    p_roles.add_argument("-k", type=int, default=10, help="number of matches (default 10)")
+    p_roles.add_argument("--json", action="store_true", help="machine-readable output")
+    p_roles.set_defaults(func=_cmd_roles)
 
     p_fed = sub.add_parser(
         "federate",
