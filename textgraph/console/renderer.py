@@ -248,6 +248,7 @@ RENDERER_CSS = """
     margin-bottom:4px; display:flex; gap:8px; align-items:center; }
   .msg .conf { color:var(--acc); font-weight:600; letter-spacing:0; text-transform:none; }
   .msg .conf.abstain { color:var(--sup); }
+  .msg .conf.gen { color:#c98bd6; }  /* GENERATED / LLM-composed prose */
   .msg .cites { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; }
   .cite-chip { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:2px 7px;
     border-radius:6px; background:var(--acc-soft); color:var(--acc); }
@@ -1324,7 +1325,10 @@ async function ask(forced){
     S.lastFocus=ans.focus||S.lastFocus;
     const conf = ans.abstained ? '<span class="conf abstain">abstained</span>'
       : (typeof ans.confidence==='number' ? `<span class="conf">${Math.round(ans.confidence*100)}% grounded</span>` : '');
-    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${conf}</div>${esc(ans.text)}`
+    // Natural-language (LLM) answers are GENERATED prose over cited evidence — flag them so they
+    // read as synthesis, while the citations underneath stay re-verifiable.
+    const nl = ans.narrated ? '<span class="conf gen">natural language · LLM</span>' : '';
+    bubble.innerHTML=`<div class="tooltag">${esc(ans.tool)}${nl}${conf}</div>${esc(ans.text)}`
       +chainHtml(ans.detail)+detailHtml(ans)+citeChips(ans.evidence)
       +routingHtml(ans.routing)+suggestChips(ans.suggestions);
     applyHighlight(ans.highlight, ans.tool);

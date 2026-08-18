@@ -6,6 +6,22 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-08-18
+
+### Changed — the Ask dock answers in natural language when an LLM is available
+- **Open questions are now auto-narrated into plain-English prose when an LLM endpoint is
+  configured** (`MODEL_BASE_URL` / `MODEL_NAME` / `API_KEY`). Previously the console only produced
+  terse, templated summaries (*"Distilled summary: 3 cited claim(s) about Money Laundering; gql
+  finds 728 relation triples"*) unless the user manually picked the **Narrate (LLM)** dropdown
+  option — so with an LLM available it looked like "the chat bot isn't answering in natural
+  language." Now `answer()` recomposes a reason/search reply as grounded prose over the *same*
+  cited evidence, keeping the graph highlights, marking it **`natural language · LLM`** in the
+  dock, and `GENERATED`-quarantined with the re-verifiable citations kept underneath.
+- **The offline default is unchanged**: with no LLM endpoint set, answers stay deterministic and
+  cited (`narrated=False`), so the local-first/determinism moat is untouched. A user who *forces*
+  a specific tool from the dropdown is never silently rewritten. Deterministic phrasing (e.g.
+  `stats`) was also made more conversational for the no-LLM case.
+
 ## [5.1.0] - 2026-08-18
 
 ### Added — the opt-in items (temporal algebra, vocabulary export, learned embeddings)

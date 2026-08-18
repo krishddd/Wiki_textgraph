@@ -1,6 +1,6 @@
 [project]
 name = "textgraph-kg"
-version = "5.1.0"
+version = "5.1.1"
 description = "Turn any textual corpus into a queryable, byte-cited knowledge graph. Deterministic & local-first by default, explored in an interactive graph studio, with link prediction, Datalog rule reasoning, and opt-in LLM extraction, grounded answer synthesis, and semantic (embedding) search."
 readme = "README.md"
 requires-python = ">=3.11"

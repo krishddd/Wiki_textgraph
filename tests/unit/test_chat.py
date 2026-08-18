@@ -39,6 +39,49 @@ def test_roles_routing_and_answer() -> None:
     assert ans.highlight_nodes
 
 
+def test_open_question_stays_deterministic_without_an_llm() -> None:
+    # No LLM endpoint configured -> the answer is the deterministic (templated) text, and
+    # `narrated` is False. The offline moat is preserved.
+    ans = answer(_engine(), "who transferred funds to whom")
+    assert ans.tool in ("reason", "search")
+    assert ans.narrated is False
+
+
+def test_open_question_is_narrated_when_an_llm_is_available(monkeypatch) -> None:
+    # When an LLM endpoint IS configured, an open question's terse text is recomposed as grounded
+    # natural-language prose (narrated=True), while its citations are preserved.
+    import textgraph.l4_llm_optional as l4
+    import textgraph.l8_retrieval.narrate as narr
+    from textgraph.console.chat import answer as _answer
+
+    class _NL:
+        def __init__(self, text, citations):
+            self.text = text
+            self.citations = citations
+
+    def fake_compose(client, q, passages):
+        cites = [c for _snip, cs in passages for c in cs][:2]
+        return _NL("In plain English: the money moved from Acme Corp onward to Beta Ltd.", cites)
+
+    monkeypatch.setattr(l4, "resolve_client", lambda cfg: object())  # non-None => available
+    monkeypatch.setattr(narr, "narrate", fake_compose)
+
+    ans = _answer(_engine(), "who moved the money")
+    assert ans.narrated is True
+    assert "plain English" in ans.text  # LLM prose, not the templated summary
+    assert ans.evidence  # citations preserved under the prose
+
+
+def test_forced_tool_is_not_auto_narrated(monkeypatch) -> None:
+    # A user who explicitly picks a tool (not "auto") gets that tool's deterministic answer,
+    # never a silent LLM rewrite.
+    import textgraph.l4_llm_optional as l4
+
+    monkeypatch.setattr(l4, "resolve_client", lambda cfg: object())
+    ans = answer(_engine(), "who moved the money", tool="search")
+    assert ans.narrated is False
+
+
 def test_connection_question_returns_a_cited_path_with_highlights() -> None:
     ans = answer(_engine(), "how is Acme Corp connected to Delta Trust")
     assert ans.tool == "path"

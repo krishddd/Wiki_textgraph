@@ -64,6 +64,10 @@ class ChatAnswer:
     # routing inspector. Populated by `answer()`, not by the individual tool handlers.
     suggestions: list[str] = field(default_factory=list)
     routing: dict[str, Any] = field(default_factory=dict)
+    # True when the reply text was composed by the LLM (GENERATED) over the cited evidence,
+    # rather than templated deterministically. The frontend flags it so prose is never mistaken
+    # for a re-verifiable fact — the citations underneath it still are.
+    narrated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,6 +81,7 @@ class ChatAnswer:
             "abstained": self.abstained,
             "suggestions": self.suggestions,
             "routing": self.routing,
+            "narrated": self.narrated,
         }
 
 
@@ -152,6 +157,13 @@ def answer(
         focus = follow.focus
 
     ans = _grounded(_dispatch(engine, routed_q, mode=mode, tool=tool, focus=focus))
+
+    # Natural-language upgrade: for an open question (reason/search) the deterministic text is a
+    # terse, templated summary. When an LLM endpoint is configured, recompose it as grounded prose
+    # over the same cited evidence — keeping the graph highlights, marking it GENERATED. The default
+    # stays deterministic when no LLM is set, so the offline moat is untouched.
+    if tool == "auto" and ans.tool in ("reason", "search") and not ans.abstained:
+        _narrate_over(engine, routed_q, ans)
 
     # Routing inspector: how this answer was produced (shown collapsibly in the dock).
     ans.routing = {
@@ -559,6 +571,33 @@ def _rules(engine: QueryEngine, q: str) -> ChatAnswer:
     )
 
 
+def _narrate_over(engine: QueryEngine, q: str, base: ChatAnswer) -> None:
+    """In place: replace ``base``'s terse text with grounded LLM prose, when an LLM is configured.
+
+    Preserves the deterministic answer's graph highlights and citations — only the *wording*
+    becomes natural language. A no-op (leaving the deterministic text) when no LLM endpoint is set
+    or there is nothing to ground on, so the offline default is unchanged.
+    """
+    from textgraph.core.config import Config
+    from textgraph.l4_llm_optional import resolve_client
+    from textgraph.l8_retrieval.narrate import narrate as _compose
+
+    client = resolve_client(Config())
+    if client is None:
+        return
+    res = engine.search(q, k=6)
+    passages = [(h.snippet, list(h.citations)) for h in res.hits if h.snippet]
+    if not passages:
+        return
+    composed = _compose(client, q, passages)
+    if composed is None or not composed.text.strip():
+        return
+    base.text = composed.text
+    base.narrated = True
+    if composed.citations:
+        base.evidence = list(composed.citations)
+
+
 def _narrate(engine: QueryEngine, q: str) -> ChatAnswer:
     """Opt-in LLM answer: compose a grounded, cited reply over the retrieved evidence.
 
@@ -698,11 +737,11 @@ def _communities(engine: QueryEngine) -> ChatAnswer:
 def _stats(engine: QueryEngine) -> ChatAnswer:
     res = engine.stats()
     c = res.counts
+    tops = ", ".join(e["name"] for e in res.top_entities[:5])
     text = (
-        f"{c.get('entities', 0)} entities, {c.get('edges', 0)} relations, "
-        f"{c.get('claims', 0)} claims. Top: "
-        + ", ".join(e["name"] for e in res.top_entities[:5])
-        + "."
+        f"This graph has {c.get('entities', 0)} entities connected by {c.get('edges', 0)} "
+        f"relations, with {c.get('claims', 0)} cited claims. The most central entities are "
+        f"{tops}."
     )
     return ChatAnswer(
         text=text,

@@ -6,4 +6,4 @@ grounded answer synthesis, and semantic (embedding) search on top, always
 GENERATED-quarantined. See ARCHITECTURE.md for the L0-L9 stack.
 """
 
-__version__ = "5.1.0"
+__version__ = "5.1.1"
