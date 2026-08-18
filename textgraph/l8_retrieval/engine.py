@@ -1074,24 +1074,85 @@ class QueryEngine:
                 pairs.append(ContradictionPair(a, b))
         return ContradictionsResult(pairs=pairs)
 
-    def similar_roles(self, handle: str, *, k: int = 10) -> dict[str, Any]:
-        """Entities that play the same structural role as ``handle`` (deterministic signatures).
+    def similar_roles(
+        self, handle: str, *, k: int = 10, backend: str = "deterministic"
+    ) -> dict[str, Any]:
+        """Entities that play the same structural role as ``handle``.
 
-        Not proximity: two shell companies in unrelated cases with the same shape rank as
-        similar. Read-only, artifact-free. Returns the resolved anchor + ranked peers.
+        ``backend="deterministic"`` (default) uses structural signatures — reproducible, and
+        role-not-proximity: two shell companies in unrelated cases with the same shape rank as
+        similar. ``backend="node2vec"`` is the opt-in learned embedding (``[graph]`` extra),
+        best-effort reproducible; it falls back to the deterministic backend (with a note) if the
+        extra is absent. Read-only, artifact-free.
         """
-        from textgraph.l7_analytics.roles import compute_signatures, role_similarity
-
         anchor = self.resolve(handle)
         if anchor is None or anchor not in self._entity_ids:
             return {"anchor": handle, "found": False, "matches": []}
-        sigs = compute_signatures(list(self._node.values()), self._edges)
-        matches = role_similarity(sigs, anchor, k=k)
+        used = backend
+        note = ""
+        if backend == "node2vec":
+            from textgraph.l0_ingest.base import UnsupportedFormat
+            from textgraph.l7_analytics.node2vec_roles import node2vec_similarity
+
+            try:
+                matches = node2vec_similarity(list(self._node.values()), self._edges, anchor, k=k)
+            except UnsupportedFormat as exc:
+                used, note = "deterministic", str(exc)
+                matches = None
+        else:
+            matches = None
+        if matches is None:
+            from textgraph.l7_analytics.roles import compute_signatures, role_similarity
+
+            sigs = compute_signatures(list(self._node.values()), self._edges)
+            matches = role_similarity(sigs, anchor, k=k)
+            used = "deterministic"
         return {
             "anchor": self._name(anchor),
             "anchor_id": anchor,
             "found": True,
+            "backend": used,
+            "note": note,
             "matches": matches,
+        }
+
+    def temporal_relations(
+        self, handle: str | None = None, *, include_before_after: bool = False
+    ) -> dict[str, Any]:
+        """Allen interval relations between dated claims (optionally scoped to one entity).
+
+        Turns the bi-temporal windows into precise temporal relationships — *this transfer was
+        **during** that directorship*, *the sanction **overlaps** the control period*. Read-only
+        and deterministic; ``graph.json`` is untouched.
+        """
+        from textgraph.l6_graph_model.allen import pairwise_relations
+
+        anchor = self.resolve(handle) if handle else None
+        claims: list[dict[str, Any]] = []
+        for nid, node in self._node.items():
+            if "Claim" not in node.labels:
+                continue
+            p = node.properties
+            if anchor is not None and anchor not in (p.get("subject"), p.get("object")):
+                continue
+            subj = self._name(str(p.get("subject", "")))
+            obj = self._name(str(p.get("object", "")))
+            label = f"{subj} {p.get('predicate', '')} {obj}"
+            claims.append(
+                {
+                    "id": nid,
+                    "label": label,
+                    "t_valid": p.get("t_valid"),
+                    "t_invalid": p.get("t_invalid"),
+                }
+            )
+        relations = pairwise_relations(claims, include_before_after=include_before_after)
+        return {
+            "anchor": self._name(anchor) if anchor else None,
+            "dated_claims": sum(
+                1 for c in claims if c["t_valid"] is not None or c["t_invalid"] is not None
+            ),
+            "relations": relations,
         }
 
     def resolution_hints(self, *, context: SecurityContext | None = None) -> list[dict[str, Any]]:

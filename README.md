@@ -158,6 +158,48 @@ The console is a clean, spacious viewer that surfaces your data at a glance: a r
 
 Open `GRAPH_REPORT.md` for orientation (god nodes, communities, contradictions, and **10 questions the graph can answer well**), or `graph.html` for a self-contained, click-to-source-span explorer. Agents drive the same eight typed tools over MCP — see [`textgraph.mcp`](textgraph/mcp/).
 
+## Collaborative review — a walkthrough
+
+Two analysts, Dana and Reed, work one case together. `graph.json` stays the immutable shared
+ground truth; every human judgment lives in a shared **sidecar** that both consoles read and write.
+
+**1. Build the case once** (the reproducible artifact everyone agrees on):
+
+```bash
+textgraph build ./case-files -o ./case-out       # -> case-out/graph.json
+```
+
+**2. Each analyst opens the same graph, pointing at one shared sidecar**, with their own name:
+
+```bash
+# Dana's machine (or terminal)
+textgraph console ./case-out --annotations //share/case/collab.json --analyst "Dana"
+# Reed's machine
+textgraph console ./case-out --annotations //share/case/collab.json --analyst "Reed"
+```
+
+The `--annotations` file is the only thing they share (a network path, a synced folder, or the same
+box on two ports). `--analyst` is your name for **attribution** — it is *not* access control (use
+`--token` or the [access policy](#) for that).
+
+**3. Work the case.** Click a node to open the inspector, then:
+
+- **Mark it** confirmed / disputed / pending and leave a note — stamped *"last edited by Dana"* with a time.
+- **Assign it** — type a teammate's name (or hit **Assign to me**). Assigned entities show an `@name` cue on the canvas.
+- The node's status shows as a coloured ring badge; the graph is the same for both analysts.
+
+**4. See each other, live.** Each console polls the sidecar every few seconds:
+
+- When Reed marks an entity disputed, it appears in **Dana's** console within seconds — no reload.
+- The **Team activity** panel shows the running log: *"Reed marked disputed — Beta Ltd"*, *"Dana assigned to Reed — Acme Corp"*.
+- The **Mine** button (top bar) fades everything not assigned to you, so each analyst can focus on their queue.
+
+**5. It's all in the sidecar.** `collab.json` holds the annotations, assignments, a version counter,
+and the activity log — with authors and timestamps. `graph.json` is never touched and stays
+byte-identical, so the determinism gate is unaffected and the case is still perfectly reproducible.
+A v4.11 single-analyst `annotations.json` upgrades in place. Two console processes on one file
+reload-before-write (and before-read), so they see each other and never clobber each other's work.
+
 ## Why it exists
 
 `llm-wiki` proved the value of citation-grounded, MCP-exposed knowledge retrieval. TextGraph extends that tool along three axes:
@@ -317,6 +359,8 @@ textgraph console ./case-out
 `--llm-extract-budget N` dials the density (more chunks read → more relations, all cached). `--co-occurrence` is independent and free (no model) — it guarantees connectivity even before any LLM relations exist. The API key is read from the environment only; it never enters `graph.json`, the config hash, or the manifest.
 
 ## Status
+
+🟢 **v5.1.0 — the opt-in extras: temporal algebra, vocabulary export, learned embeddings.** `textgraph allen` surfaces the 13 **Allen interval relations** between dated claims (*this transfer happened **during** that directorship*) from the bi-temporal windows — deterministic, no dependency. `textgraph export --format skos` emits the communities as a **SKOS concept scheme** (topics → entities, with `SAME_AS` aliases as `skos:altLabel`s). And `textgraph roles --backend node2vec` adds **learned Node2Vec embeddings** behind the `[graph]` extra as an opt-in alternative to the deterministic role signatures — it degrades cleanly to the default (with a note) when the extra isn't installed, so the moat's default stays reproducible. Plus a collaborative-review walkthrough in the README.
 
 🟢 **v5.0.0 — collaborative mode (multi-analyst review).** Point two consoles at the same sidecar (`console --annotations shared.json --analyst "Dana"` / `--analyst "Reed"`) and a case team works together **live**: every edit is attributed (author + time), entities can be **assigned** to an analyst, a **team-activity feed** shows who did what, and a colleague's change appears within seconds via version-polling (no websockets). `graph.json` stays the immutable shared ground truth — never written; all mutable state lives in the sidecar, so the determinism gate is untouched. Declared identity is for attribution, **not access control** (that's `--token` / the policy). A **milestone** bump: the roadmap of bigger bets (roles, federation, Jupyter, collaboration) is complete — no breaking changes, the API and `graph.json` format are unchanged.
 

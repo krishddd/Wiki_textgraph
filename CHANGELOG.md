@@ -6,6 +6,32 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-08-18
+
+### Added — the opt-in items (temporal algebra, vocabulary export, learned embeddings)
+- **Allen interval algebra** (`textgraph allen <path> [entity]`, `QueryEngine.temporal_relations`):
+  the 13 Allen relations between dated claims — *did the $1M transfer happen **during** the
+  directorship? does the sanction **overlap** the control period?* Each claim's `[t_valid,
+  t_invalid)` window is the interval (open ends → ±inf); deterministic, dependency-free, read-only
+  (`textgraph/l6_graph_model/allen.py`).
+- **SKOS export** (`textgraph export --format skos`): the graph's communities as a
+  `skos:ConceptScheme` — communities are `skos:Concept` topics (`skos:topConceptOf`), entities are
+  narrower concepts (`skos:broader`/`skos:narrower`), and **entity-resolution aliases (`SAME_AS`)
+  become `skos:altLabel`s** on the canonical concept. Deterministic Turtle, no RDF dependency
+  (`textgraph/l9_artifacts/skos.py`). Joins the existing RDF/OWL/SHACL/PROV-O/openCypher exports.
+- **Learned Node2Vec role embeddings** (`textgraph roles … --backend node2vec`,
+  `similar_roles(backend="node2vec")`): the opt-in learned alternative to the deterministic
+  structural-signature roles (v4.13). Behind the `[graph]` extra (`node2vec`); seeded + single-worker
+  for best-effort reproducibility. **The default stays deterministic** — Node2Vec is stochastic and
+  captures proximity more than role, so it complements rather than replaces the signature backend,
+  and asking for it without the extra **degrades cleanly to the deterministic backend with a note**,
+  never a stack trace (`textgraph/l7_analytics/node2vec_roles.py`; see
+  [docs/plans/structural-roles.md](docs/plans/structural-roles.md)).
+
+### Documentation
+- A step-by-step **collaborative-review walkthrough** in the README (two analysts, one shared
+  sidecar, live sync).
+
 ## [5.0.0] - 2026-08-18
 
 **Milestone release — the roadmap of bigger bets is complete** (structural roles, cross-graph

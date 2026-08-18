@@ -626,6 +626,10 @@ def _cmd_export(args: argparse.Namespace) -> int:
         from textgraph.l9_artifacts.cypher import export_cypher_bytes
 
         body = export_cypher_bytes(nodes, edges)
+    elif args.format == "skos":
+        from textgraph.l9_artifacts.skos import export_skos_bytes
+
+        body = export_skos_bytes(nodes, edges)
     else:  # pragma: no cover - argparse choices guard this
         print(f"error: unknown format: {args.format}", file=sys.stderr)
         return 2
@@ -737,20 +741,46 @@ def _cmd_roles(args: argparse.Namespace) -> int:
     if not root.exists():
         print(f"error: path does not exist: {root}", file=sys.stderr)
         return 2
-    res = _engine(root).similar_roles(args.entity, k=args.k)
+    res = _engine(root).similar_roles(args.entity, k=args.k, backend=args.backend)
     if args.json:
         print(json.dumps(res, ensure_ascii=False, indent=2))
         return 0
     if not res["found"]:
         print(f"'{args.entity}' not found.")
         return 0
+    if res.get("note"):
+        print(f"note: {res['note']}")
     if not res["matches"]:
         print(f"No other entities to compare against {res['anchor']}.")
         return 0
-    print(f"Entities with a similar structural role to {res['anchor']}:")
+    print(
+        f"Entities with a similar structural role to {res['anchor']} "
+        f"(backend: {res.get('backend', 'deterministic')}):"
+    )
     for m in res["matches"]:
         rels = ", ".join(m["top_relations"]) or "-"
         print(f"  {m['similarity']:.3f}  {m['name']}  (degree {m['total_degree']}; {rels})")
+    return 0
+
+
+def _cmd_allen(args: argparse.Namespace) -> int:
+    import json
+
+    root = Path(args.path)
+    if not root.exists():
+        print(f"error: path does not exist: {root}", file=sys.stderr)
+        return 2
+    res = _engine(root).temporal_relations(args.entity or None, include_before_after=args.all)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2))
+        return 0
+    scope = f" involving {res['anchor']}" if res["anchor"] else ""
+    if not res["relations"]:
+        print(f"No temporal relations{scope} ({res['dated_claims']} dated claim(s)).")
+        return 0
+    print(f"Allen interval relations{scope} ({res['dated_claims']} dated claims):")
+    for r in res["relations"]:
+        print(f"  {r['a']}  [{r['relation']}]  {r['b']}")
     return 0
 
 
@@ -954,10 +984,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument(
         "--format",
         default="prov-o",
-        choices=["prov-o", "rdf", "owl", "shacl", "cypher"],
+        choices=["prov-o", "rdf", "owl", "shacl", "cypher", "skos"],
         help="export format: prov-o (PROV-O JSON-LD decision trail), rdf (Turtle triple store "
         "with reified provenance), owl (OWL vocabulary), shacl (SHACL shapes), cypher "
-        "(openCypher load script for Neo4j / Memgraph / AGE). Default: prov-o.",
+        "(openCypher load script for Neo4j / Memgraph / AGE), skos (SKOS concept scheme of the "
+        "communities). Default: prov-o.",
     )
     p_export.add_argument("-o", "--output", help="write to this file instead of stdout")
     p_export.set_defaults(func=_cmd_export)
@@ -983,8 +1014,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_roles.add_argument("path", help="corpus dir, graph.json, or .duckdb")
     p_roles.add_argument("entity", help="the anchor entity to match structurally")
     p_roles.add_argument("-k", type=int, default=10, help="number of matches (default 10)")
+    p_roles.add_argument(
+        "--backend",
+        default="deterministic",
+        choices=["deterministic", "node2vec"],
+        help="deterministic structural signatures (default, reproducible) or learned Node2Vec "
+        "embeddings (opt-in, needs the [graph] extra; falls back with a note if absent)",
+    )
     p_roles.add_argument("--json", action="store_true", help="machine-readable output")
     p_roles.set_defaults(func=_cmd_roles)
+
+    p_allen = sub.add_parser(
+        "allen",
+        help="Allen interval relations between dated claims (overlaps/during/meets/...)",
+    )
+    p_allen.add_argument("path", help="corpus dir, graph.json, or .duckdb")
+    p_allen.add_argument("entity", nargs="?", default="", help="scope to claims about this entity")
+    p_allen.add_argument(
+        "--all", action="store_true", help="include the trivial before/after pairs too"
+    )
+    p_allen.add_argument("--json", action="store_true", help="machine-readable output")
+    p_allen.set_defaults(func=_cmd_allen)
 
     p_fed = sub.add_parser(
         "federate",

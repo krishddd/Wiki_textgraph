@@ -1,6 +1,6 @@
 [project]
 name = "textgraph-kg"
-version = "5.0.0"
+version = "5.1.0"
 description = "Turn any textual corpus into a queryable, byte-cited knowledge graph. Deterministic & local-first by default, explored in an interactive graph studio, with link prediction, Datalog rule reasoning, and opt-in LLM extraction, grounded answer synthesis, and semantic (embedding) search."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,7 +58,7 @@ ie = ["spacy>=3.7.0", "gliner>=0.2.0", "fastcoref>=2.1.6"]
 # Entity resolution (Phase 3)
 er = ["splink>=4.0.0", "duckdb>=1.0.0"]
 # Analytics + storage backend (Phase 4)
-graph = ["networkx>=3.2", "leidenalg>=0.10.0", "python-igraph>=0.11.0", "duckdb>=1.0.0", "pyarrow>=15.0.0"]
+graph = ["networkx>=3.2", "leidenalg>=0.10.0", "python-igraph>=0.11.0", "duckdb>=1.0.0", "pyarrow>=15.0.0", "node2vec>=0.4.6"]
 # Optional backends / surfaces
 neo4j = ["neo4j>=5.0.0"]
 mcp = ["mcp>=1.0.0"]
@@ -154,6 +154,7 @@ module = [
     "blake3.*", "yaml.*", "markdown_it.*", "pypdf.*", "gliner.*", "splink.*", "mcp.*",
     "igraph.*", "leidenalg.*", "duckdb.*", "sentence_transformers.*", "colpali_engine.*",
     "openfga_sdk.*", "langchain_core.*", "llama_index.*", "pandas.*", "IPython.*",
+    "networkx.*", "node2vec.*",
 ]
 ignore_missing_imports = true
 
@@ -173,6 +174,9 @@ omit = [
     "textgraph/store/duckdb_store.py",
     "textgraph/l3_encoder_ie/gliner_backend.py",
     "textgraph/l5_entity_resolution/splink_backend.py",
+    # Learned Node2Vec role embeddings — only runs with the [graph] extra (node2vec + gensim),
+    # which the lean CI doesn't install; the deterministic default backend is fully covered.
+    "textgraph/l7_analytics/node2vec_roles.py",
 ]
 
 [tool.coverage.report]

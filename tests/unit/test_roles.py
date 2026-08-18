@@ -63,6 +63,28 @@ def test_missing_anchor_returns_not_found(tmp_path: Path) -> None:
     assert res["matches"] == []
 
 
+def test_node2vec_backend_falls_back_cleanly_without_the_extra(tmp_path: Path) -> None:
+    # Asking for node2vec without the [graph] extra must degrade to the deterministic backend
+    # with an explanatory note, never a stack trace.
+    import importlib.util
+
+    res = _engine(tmp_path).similar_roles("Acme Holdings", k=3, backend="node2vec")
+    assert res["found"]
+    if importlib.util.find_spec("node2vec") is None:
+        assert res["backend"] == "deterministic"
+        assert "[graph]" in res["note"]
+        assert res["matches"]  # still returns useful (deterministic) results
+
+
+def test_node2vec_backend_when_available(tmp_path: Path) -> None:
+    import pytest
+
+    pytest.importorskip("node2vec")
+    res = _engine(tmp_path).similar_roles("Acme Holdings", k=3, backend="node2vec")
+    assert res["found"] and res["backend"] == "node2vec"
+    assert all("similarity" in m for m in res["matches"])
+
+
 def test_signatures_capture_the_shell_shape(tmp_path: Path) -> None:
     d = tmp_path / "c"
     d.mkdir()

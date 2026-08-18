@@ -109,6 +109,17 @@ def test_federate_command_missing_path_errors(tmp_path: Path) -> None:
     assert main(["federate", str(tmp_path / "nope.json"), str(tmp_path / "also.json")]) == 2
 
 
+def test_allen_command(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["allen", TEMPORAL]) == 0
+    out = capsys.readouterr().out
+    assert "Allen interval relations" in out and "meets" in out
+    assert main(["allen", TEMPORAL, "Acme Corp", "--json"]) == 0
+    import json
+
+    assert "relations" in json.loads(capsys.readouterr().out)
+    assert main(["allen", "nope-dir", "X"]) == 2
+
+
 def test_roles_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     corpus = _mk_corpus(
         tmp_path,
@@ -125,6 +136,9 @@ def test_roles_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
     assert main(["roles", str(corpus), "Nobody Ltd"]) == 0
     assert "not found" in capsys.readouterr().out
     assert main(["roles", str(tmp_path / "nope"), "X"]) == 2
+    # The opt-in node2vec backend degrades to deterministic (with a note) when the extra is absent.
+    assert main(["roles", str(corpus), "A Corp", "--backend", "node2vec"]) == 0
+    assert "backend:" in capsys.readouterr().out
 
 
 def test_cache_status_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
