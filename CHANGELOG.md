@@ -6,6 +6,25 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-08-21
+
+### Added — clickable-to-region citation view (to-scale page schematic)
+- **Clicking a PDF citation in the Ask dock now shows *where on the page* it is.** The source
+  panel draws a **to-scale schematic of the cited page** with the bounding box highlighted, beside
+  the cited text — closing the loop on the v5.2/v5.3 layout provenance. The schematic is rendered
+  purely client-side from the citation's own `page` + `bbox` + `page_size` (an SVG at the page's
+  true aspect ratio, PDF y-flipped), so **it needs no page-image rasterizer and no extra
+  dependency**, and it appears even when the raw bytes can't be shown (a PDF's on-disk binary
+  differs from the extracted text it's cited by).
+- **Page dimensions come from the MediaBox** (pure pypdf) and travel on the citation as a new
+  optional `SourceSpan.page_size` / `Citation.page_size` `(width, height)` in PDF points
+  (`IngestResult.page_sizes`/`page_size_for`). Additive and deterministic like the rest of the
+  layout provenance: emitted only when known, so text-only corpora and pre-5.4 graphs stay
+  byte-identical, and it round-trips through `graph.json` / DuckDB / the incremental cache / MCP
+  via the shared `store.base.span_to_dict`/`span_from_dict`.
+- A true pixel-perfect page raster (via an optional `[render]` backend such as pypdfium2) remains
+  a future opt-in; the deterministic to-scale schematic is the default that works offline.
+
 ## [5.3.0] - 2026-08-21
 
 ### Added — bounding-box provenance on PDF citations (clickable-to-region groundwork)

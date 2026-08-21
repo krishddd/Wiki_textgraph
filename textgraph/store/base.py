@@ -44,6 +44,7 @@ class SourceSpan:
     hash: str  # blake3 hex of raw[start:end]
     page: int = 0  # 1-based page for paged sources; 0 = unknown/unpaged
     bbox: tuple[float, float, float, float] | None = None  # (x0,y0,x1,y1) in PDF points
+    page_size: tuple[float, float] | None = None  # (width, height) of the page, in PDF points
 
 
 def span_to_dict(s: SourceSpan) -> dict[str, Any]:
@@ -54,12 +55,15 @@ def span_to_dict(s: SourceSpan) -> dict[str, Any]:
         d["page"] = s.page
     if s.bbox is not None:
         d["bbox"] = list(s.bbox)
+    if s.page_size is not None:
+        d["page_size"] = list(s.page_size)
     return d
 
 
 def span_from_dict(s: dict[str, Any]) -> SourceSpan:
     """Reconstruct a SourceSpan, tolerating pre-5.2 spans without page/bbox (default absent)."""
     bbox = s.get("bbox")
+    page_size = s.get("page_size")
     return SourceSpan(
         doc_id=s["doc_id"],
         start=s["start"],
@@ -67,6 +71,7 @@ def span_from_dict(s: dict[str, Any]) -> SourceSpan:
         hash=s["hash"],
         page=int(s.get("page", 0)),
         bbox=tuple(bbox) if bbox is not None else None,
+        page_size=tuple(page_size) if page_size is not None else None,
     )
 
 

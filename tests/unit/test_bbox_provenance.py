@@ -174,7 +174,7 @@ def _positioned_pdf(pages: list[str]) -> bytes:
     return head + body + xref + trailer
 
 
-def test_ingest_pdf_end_to_end_stamps_page_and_bbox() -> None:
+def test_ingest_pdf_end_to_end_stamps_page_bbox_and_page_size() -> None:
     ir = ingest_pdf(
         _positioned_pdf(["Acme Corp controls Beta Ltd.", "Gamma owns Delta Trust."]),
         "case.pdf",
@@ -186,6 +186,21 @@ def test_ingest_pdf_end_to_end_stamps_page_and_bbox() -> None:
     for _start, box in ir.bbox_map:
         x0, y0, x1, y1 = box
         assert x0 == 72.0 and y0 == 700.0 and x1 > x0 and y1 > y0
-    # A citation minted from the second block carries both page and bbox.
+    # Page sizes come from the MediaBox (Letter, 612 x 792) — one per page.
+    assert ir.page_sizes == ((612.0, 792.0), (612.0, 792.0))
+    assert ir.page_size_for(2) == (612.0, 792.0) and ir.page_size_for(3) is None
+    # A citation minted from the second block carries page, bbox, and the page size.
     sp = source_span(ir, Span(ir.blocks[1].span.start, ir.blocks[1].span.end))
-    assert sp.page == 2 and sp.bbox is not None
+    assert sp.page == 2 and sp.bbox is not None and sp.page_size == (612.0, 792.0)
+
+
+def test_page_size_roundtrips_through_serialization() -> None:
+    box = (1.0, 2.0, 3.0, 4.0)
+    c = Citation("blake3:d", 5, 9, "f" * 64, page=2, bbox=box, page_size=(612.0, 792.0))
+    assert c.to_dict()["page_size"] == [612.0, 792.0]
+    assert "page_size" not in Citation("blake3:d", 5, 9, "f" * 64).to_dict()
+
+    s = SourceSpan("blake3:d", 5, 9, "a" * 64, page=2, bbox=box, page_size=(612.0, 792.0))
+    assert span_to_dict(s)["page_size"] == [612.0, 792.0]
+    assert span_from_dict(span_to_dict(s)).page_size == (612.0, 792.0)
+    assert "page_size" not in span_to_dict(SourceSpan("blake3:d", 5, 9, "a" * 64))

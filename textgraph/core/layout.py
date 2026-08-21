@@ -104,6 +104,9 @@ class IngestResult:
     # points, one per block that carries layout coordinates. Empty means no bbox info.
     # In-memory only — only the per-citation SourceSpan.bbox it induces is persisted.
     bbox_map: tuple[tuple[int, tuple[float, float, float, float]], ...] = ()
+    # Optional per-page (width, height) in PDF points, indexed by 0-based page. Lets a citation
+    # carry its page's dimensions so the console can draw the box to scale (clickable-to-region).
+    page_sizes: tuple[tuple[float, float], ...] = ()
 
     @property
     def doc_id(self) -> str:
@@ -135,6 +138,12 @@ class IngestResult:
         if idx < 0:
             return None
         return self.bbox_map[idx][1]
+
+    def page_size_for(self, page_no: int) -> tuple[float, float] | None:
+        """(width, height) in PDF points for a 1-based page number (None if unknown)."""
+        if 1 <= page_no <= len(self.page_sizes):
+            return self.page_sizes[page_no - 1]
+        return None
 
     @property
     def text(self) -> str:

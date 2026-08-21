@@ -36,6 +36,7 @@ class Citation:
     hash: str
     page: int = 0
     bbox: tuple[float, float, float, float] | None = None
+    page_size: tuple[float, float] | None = None
 
     def ref(self) -> str:
         loc = f"p.{self.page} " if self.page else ""
@@ -52,6 +53,8 @@ class Citation:
             d["page"] = self.page
         if self.bbox is not None:
             d["bbox"] = list(self.bbox)
+        if self.page_size is not None:
+            d["page_size"] = list(self.page_size)
         return d
 
 

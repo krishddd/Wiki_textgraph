@@ -313,13 +313,13 @@ def _origin(tm: list[float], cm: list[float]) -> tuple[float, float]:
     return x, y
 
 
-def _extract_page(page: Any) -> tuple[str, list[_Frag]]:
-    """Extract a page's text and its positioned text fragments in one pypdf pass.
+def _extract_page(page: Any) -> tuple[str, list[_Frag], tuple[float, float]]:
+    """Extract a page's text, its positioned fragments, and its (width, height) in one pass.
 
     The ``visitor_text`` callback runs *during* ``extract_text``, so the returned text keeps
     pypdf's proven segmentation while the fragments capture each run's box (origin + rough
     advance, in PDF points). Defined at module scope (not a per-page closure) so it's fully
-    typed and never captures a loop variable.
+    typed and never captures a loop variable. The page size comes from the MediaBox.
     """
     frags: list[_Frag] = []
 
@@ -332,7 +332,8 @@ def _extract_page(page: Any) -> tuple[str, list[_Frag]]:
         frags.append((text, round(x, 2), round(y, 2), round(x + w, 2), round(y + fs, 2)))
 
     text = page.extract_text(visitor_text=visit) or ""
-    return text, frags
+    size = (round(float(page.mediabox.width), 2), round(float(page.mediabox.height), 2))
+    return text, frags, size
 
 
 @register(".pdf")
@@ -343,8 +344,9 @@ def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
         raise UnsupportedFormat("PDF ingestion requires pypdf (a core dependency)") from exc
     reader = PdfReader(_bytes_io(raw))
     pages = [_extract_page(page) for page in reader.pages]
-    page_texts = [t for t, _f in pages]
-    page_fragments = [f for _t, f in pages]
+    page_texts = [t for t, _f, _s in pages]
+    page_fragments = [f for _t, f, _s in pages]
+    page_sizes = tuple(s for _t, _f, s in pages)
 
     text, blocks, page_map = _pdf_blocks(page_texts)
     bbox_map = _build_bbox_map(blocks, page_fragments)
@@ -359,6 +361,7 @@ def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
         chunks=chunks,
         page_map=page_map,
         bbox_map=bbox_map,
+        page_sizes=page_sizes,
     )
 
 

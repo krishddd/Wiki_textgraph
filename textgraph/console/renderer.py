@@ -279,8 +279,15 @@ RENDERER_CSS = """
   #srcbody { padding:16px; overflow:auto; font:13px/1.7 ui-monospace,Menlo,monospace;
     white-space:pre-wrap; word-break:break-word; }
   #srcbody .ctx { color:var(--mut); }
+  #srcbody .srctext { display:block; }
   #srcbody mark { background:var(--acc-soft); color:var(--fg); padding:1px 2px; border-radius:3px;
     box-shadow:0 0 0 1px var(--acc) inset; }
+  /* Clickable-to-region: a to-scale page schematic with the cited box highlighted. */
+  .region { float:right; margin:0 0 10px 14px; text-align:center; font-family:sans-serif; }
+  .region svg { display:block; border:1px solid var(--line); border-radius:3px; background:var(--panel); }
+  .region svg .pg { fill:var(--card); stroke:var(--line); stroke-width:1; }
+  .region svg .hl { fill:var(--acc-soft); stroke:var(--acc); stroke-width:1.5; }
+  .region-cap { margin-top:4px; font-size:10px; color:var(--mut); }
   #srctitle .ok { color:#2bb7a3; font-size:11px; font-weight:600; }
   #srctitle .bad { color:var(--sup); font-size:11px; font-weight:600; }
   #srctitle .mut { color:var(--mut); font-weight:400; font-size:11px; }
@@ -1226,11 +1233,13 @@ function citeChips(ev){ if(!(ev&&ev.length)) return '';
   return '<div class="cites">'+ev.map(c=>{
     const label=`[${c.page?('p.'+c.page+' '):''}${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]`;
     const box = (c.bbox&&c.bbox.length===4) ? c.bbox.map(v=>Math.round(v)).join(',') : '';
-    const tip = box ? `View the cited source span (p.${c.page||'?'} @ [${box}])` : 'View the cited source span';
+    const psz = (c.page_size&&c.page_size.length===2) ? c.page_size.join(',') : '';
+    const region = box && psz;  // page + bbox + page_size => a to-scale region is drawable
+    const tip = box ? `View the cited source${region?' region':' span'} (p.${c.page||'?'} @ [${box}])` : 'View the cited source span';
     if(!live) return `<span class="cite-chip"${box?` title="p.${c.page||'?'} @ [${box}]"`:''}>${label}</span>`;
     return `<span class="cite-chip live" role="button" tabindex="0"`
       +` data-doc="${esc(c.doc_id)}" data-start="${c.start}" data-end="${c.end}"`
-      +(box?` data-bbox="${box}"`:'')
+      +(box?` data-bbox="${box}"`:'')+(c.page?` data-page="${c.page}"`:'')+(psz?` data-pagesize="${psz}"`:'')
       +` data-hash="${esc(c.hash||'')}" title="${esc(tip)}">${label}</span>`;
   }).join('')+'</div>'; }
 // Deterministic follow-up chips: each fills the Ask box and sends, so a click is a question.
@@ -1375,26 +1384,47 @@ async function saveSnapshot(){
   }catch(e){ bubble.innerHTML='<span style="color:var(--sup)">export failed: '+esc(e.message||e)+'</span>'; }
 }
 // -- Citation click-through: show the cited source span, re-verified server-side --------
+// A to-scale schematic of the cited page with the bounding box highlighted. Drawn purely
+// from the citation's own page+bbox+page_size — no fetch — so it appears even when the raw
+// bytes can't be read (e.g. a PDF, whose on-disk binary differs from the extracted text).
+function regionSvg(ds){
+  if(!ds.bbox||!ds.pagesize) return '';
+  const b=ds.bbox.split(',').map(Number), ps=ds.pagesize.split(',').map(Number);
+  if(b.length!==4||ps.length!==2) return '';
+  const x0=b[0],y0=b[1],x1=b[2],y1=b[3],pw=ps[0],ph=ps[1];
+  if(!(pw>0&&ph>0)) return '';
+  const ry=Math.max(0,ph-y1), rw=Math.max(1,x1-x0), rh=Math.max(1,y1-y0);  // flip PDF y (bottom-up)
+  const dispW=210, dispH=Math.max(40,Math.round(dispW*ph/pw));
+  return `<div class="region"><svg viewBox="0 0 ${pw} ${ph}" width="${dispW}" height="${dispH}" `
+    +`preserveAspectRatio="xMidYMid meet" role="img" aria-label="cited region on page ${ds.page||'?'}">`
+    +`<rect x="0" y="0" width="${pw}" height="${ph}" class="pg"/>`
+    +`<rect x="${x0}" y="${ry}" width="${rw}" height="${rh}" class="hl" vector-effect="non-scaling-stroke"/>`
+    +`</svg><div class="region-cap">page ${ds.page||'?'} · region to scale</div></div>`;
+}
+
 async function openSource(ds){
   const panel=document.getElementById('srcpanel'), body=document.getElementById('srcbody'),
     ttl=document.getElementById('srctitle');
   panel.classList.add('open');
-  ttl.textContent='loading source…'; body.innerHTML='<span class="mut">reading…</span>';
+  const region=regionSvg(ds);
+  ttl.textContent='loading source…';
+  body.innerHTML=region+'<div class="srctext"><span class="mut">reading…</span></div>';
+  const txt=body.querySelector('.srctext');
   let r; try{ r=await TG.source(ds.doc, ds.start, ds.end, ds.hash); }catch(e){ r=null; }
   if(!r || !r.available){
-    ttl.textContent='source unavailable';
+    ttl.innerHTML=region?`cited region <span class="mut">p.${ds.page||'?'}</span>`:'source unavailable';
     const why={'no-corpus':'this console has no source corpus (a graph.json / .duckdb snapshot)',
-      'source-changed':'the source file changed since the graph was built',
+      'source-changed':'the source file changed since the graph was built (or is a PDF cited by extracted text)',
       'not-on-disk':'the source file is no longer on disk','unknown-document':'unknown document'};
-    body.innerHTML=`<div class="mut">${esc((r&&why[r.reason])||'the cited bytes could not be read')}.`
-      +`<br>Citation: [${esc(ds.doc.slice(0,14))}…:${ds.start}-${ds.end}]</div>`;
+    if(txt) txt.innerHTML=`<div class="mut">${esc((r&&why[r.reason])||'the cited bytes could not be read')}.`
+      +`<br>Citation: [${ds.page?('p.'+ds.page+' '):''}${esc(ds.doc.slice(0,14))}…:${ds.start}-${ds.end}]</div>`;
     return;
   }
   ttl.innerHTML=`${esc(r.name)} <span class="mut">bytes ${r.start}-${r.end}</span>`
     +(r.verified===true?' <span class="ok">verified</span>':r.verified===false?' <span class="bad">hash mismatch</span>':'');
-  body.innerHTML=`<span class="ctx">${esc(r.before)}</span>`
+  if(txt){ txt.innerHTML=`<span class="ctx">${esc(r.before)}</span>`
     +`<mark>${esc(r.span)}</mark><span class="ctx">${esc(r.after)}</span>`;
-  const m=body.querySelector('mark'); if(m) m.scrollIntoView({block:'center'});
+    const m=txt.querySelector('mark'); if(m) m.scrollIntoView({block:'center'}); }
 }
 function closeSource(){ document.getElementById('srcpanel').classList.remove('open'); }
 
