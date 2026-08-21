@@ -22,6 +22,21 @@ def test_build_command_writes_artifact_dir(tmp_path: Path) -> None:
     assert (out / "graph.json").read_bytes().endswith(b"\n")
 
 
+def test_build_with_extract_schema(tmp_path: Path) -> None:
+    # --extract-schema loads an ontology and implies --llm-extract; with no LLM env configured
+    # the extract pass is skipped, so the build still succeeds (and stays deterministic).
+    import json
+
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    (corpus / "a.md").write_bytes(b"# Title\n\nThe Commission regulates the Body.\n")
+    schema = tmp_path / "ontology.json"
+    schema.write_text(json.dumps({"predicates": ["REGULATES"]}), encoding="utf-8")
+    out = tmp_path / "out"
+    assert main(["build", str(corpus), "--extract-schema", str(schema), "-o", str(out)]) == 0
+    assert (out / "graph.json").exists()
+
+
 def test_build_json_only(tmp_path: Path) -> None:
     corpus = tmp_path / "corpus"
     corpus.mkdir()

@@ -14,6 +14,7 @@ from typing import Any
 from textgraph import __version__
 from textgraph.core.canonical_json import canonical_dump_bytes
 from textgraph.core.content_address import blake3_hex
+from textgraph.core.extract_schema import ExtractionSchema
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,11 @@ class Config:
     # relations the deterministic extractors missed. Opt-in, on top of llm_enabled.
     llm_extract: bool = False
     llm_extract_max_calls: int = 40  # bound on uncached extraction calls per build (G7)
+    # Optional ontology contract for the LLM extractor: the allowed entity types / predicates /
+    # relation shapes. Constrains the prompt and validates (drops off-ontology) the output, so a
+    # schema raises precision. Pinned here so it folds into config_hash — change it and the LLM
+    # prompt cache invalidates. None = unconstrained (any predicate). See core/extract_schema.py.
+    extract_schema: ExtractionSchema | None = None
     # Co-occurrence backbone (input): when the corpus names entities but states few hard
     # relations, link entities co-mentioned in the same chunk with STRUCTURAL CO_OCCURS
     # edges, so analytics/communities/layout see a connected graph instead of a dust of

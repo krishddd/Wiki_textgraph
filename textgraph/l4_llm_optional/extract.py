@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 
 from textgraph.core.content_address import hash_text
+from textgraph.core.extract_schema import ExtractionSchema
 from textgraph.l1_structure.emit import normalize_key
 from textgraph.l4_llm_optional.cache import PromptCache
 from textgraph.l4_llm_optional.client import LLMClient, LLMError
@@ -79,6 +80,7 @@ def extract_llm_relations(
     *,
     max_calls: int = 40,
     existing_entities: dict[str, str] | None = None,
+    schema: ExtractionSchema | None = None,
 ) -> tuple[list[Node], list[Edge]]:
     """Run the LLM over ``(chunk_id, text, span)`` items; emit GENERATED nodes + edges.
 
@@ -88,8 +90,15 @@ def extract_llm_relations(
     ``existing_entities`` maps ``normalize_key(name) -> node_id`` for entities the
     deterministic pipeline already produced; a triple endpoint whose key is present reuses
     that id so LLM relations merge onto real nodes rather than spawning parallel dots.
+
+    ``schema`` (optional) pins an ontology: its ``prompt_hint()`` constrains the system prompt
+    and its ``validate()`` drops any emitted triple whose predicate is off-ontology. The hint is
+    folded into the per-chunk cache key, so changing the schema re-queries rather than reusing a
+    response produced under the old contract.
     """
     existing_by_key = existing_entities or {}
+    hint = schema.prompt_hint() if schema else ""
+    system = _SYSTEM + hint
     nodes: dict[str, Node] = {}
     edges: dict[str, Edge] = {}
     calls = 0
@@ -97,18 +106,21 @@ def extract_llm_relations(
         snippet = text.strip()
         if len(snippet) < 40:
             continue
-        key = hash_text(f"llm-extract|{client.model}|{snippet}")
+        key = hash_text(f"llm-extract|{client.model}|{hint}|{snippet}")
         cached = cache.get(key)
         if cached is None:
             if calls >= max_calls:
                 break
             calls += 1
             try:
-                cached = client.complete(_SYSTEM, snippet[:2000])
+                cached = client.complete(system, snippet[:2000])
             except LLMError:
                 continue
             cache.put(key, cached)
-        for subj, pred, obj in _parse_triples(cached):
+        triples = _parse_triples(cached)
+        if schema is not None:
+            triples = schema.validate(triples)
+        for subj, pred, obj in triples:
             sid = _resolve(subj, existing_by_key, nodes)
             oid = _resolve(obj, existing_by_key, nodes)
             if sid == oid:

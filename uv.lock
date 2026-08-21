@@ -5215,7 +5215,7 @@ wheels = [
 
 [[package]]
 name = "textgraph-kg"
-version = "5.4.0"
+version = "5.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "blake3" },
@@ -5298,6 +5298,9 @@ ocr = [
 rerank = [
     { name = "sentence-transformers" },
 ]
+schema = [
+    { name = "pydantic" },
+]
 security = [
     { name = "openfga-sdk" },
 ]
@@ -5330,6 +5333,7 @@ requires-dist = [
     { name = "pandas", marker = "extra == 'notebook'", specifier = ">=2.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.8.0" },
     { name = "pyarrow", marker = "extra == 'graph'", specifier = ">=15.0.0" },
+    { name = "pydantic", marker = "extra == 'schema'", specifier = ">=2.0.0" },
     { name = "pypdf", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0.0" },
@@ -5345,7 +5349,7 @@ requires-dist = [
     { name = "tree-sitter", marker = "extra == 'ingest'", specifier = ">=0.21.0" },
     { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
 ]
-provides-extras = ["ingest", "ie", "er", "graph", "neo4j", "mcp", "rerank", "embed", "ocr", "vision", "security", "langchain", "llamaindex", "notebook", "full", "dev"]
+provides-extras = ["ingest", "ie", "er", "graph", "neo4j", "mcp", "rerank", "embed", "ocr", "vision", "security", "langchain", "llamaindex", "notebook", "schema", "full", "dev"]
 
 [[package]]
 name = "texttable"

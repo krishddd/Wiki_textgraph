@@ -157,6 +157,7 @@ def _run_llm_extract(
         cache,
         max_calls=config.llm_extract_max_calls,
         existing_entities=existing,
+        schema=config.extract_schema,
     )
 
 

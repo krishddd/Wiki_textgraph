@@ -908,13 +908,23 @@ def _cmd_build(args: argparse.Namespace) -> int:
     from textgraph.core.config import Config
 
     cred = json.loads(Path(args.credibility).read_text("utf-8")) if args.credibility else {}
+    # An extraction schema (ontology) implies the LLM extract pass — there is nothing to
+    # constrain without it. Loaded from a JSON file; folded into config_hash.
+    schema = None
+    llm_extract = bool(args.llm_extract)
+    if getattr(args, "extract_schema", None):
+        from textgraph.l4_llm_optional.schema import load_schema
+
+        schema = load_schema(args.extract_schema)
+        llm_extract = True
     # `--llm` drives L4 community summaries; `--llm-extract` drives relation extraction.
     # They are independent — extraction reads the LLM env directly, so it doesn't need the
     # summaries switch (and enabling it would silently add summary edges to the count).
     config = Config(
         llm_enabled=bool(args.llm),
-        llm_extract=bool(args.llm_extract),
+        llm_extract=llm_extract,
         llm_extract_max_calls=int(getattr(args, "llm_extract_budget", 40)),
+        extract_schema=schema,
         co_occurrence=bool(getattr(args, "co_occurrence", False)),
         resolve_conflicts_strategy=args.resolve_conflicts or "",
         source_credibility=cred,
@@ -1114,6 +1124,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="max chunks the LLM extractor reads (default 40). Raise it for a denser, "
         "NotebookLM-style relation map on larger corpora (more LLM calls, cached).",
+    )
+    p_build.add_argument(
+        "--extract-schema",
+        dest="extract_schema",
+        metavar="PATH.json",
+        help="pin an ontology for the LLM extractor (JSON: entity_types / predicates / "
+        "relations). Constrains the prompt and drops off-ontology triples; implies "
+        "--llm-extract and folds into the config hash.",
     )
     p_build.add_argument(
         "--co-occurrence",

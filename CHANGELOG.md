@@ -6,6 +6,27 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-08-21
+
+### Added — an ontology contract for the opt-in LLM extractor (schema-guided extraction)
+- **You can now pin a schema for the LLM relation pass** so it only emits an allowed vocabulary.
+  `textgraph build … --extract-schema ontology.json` (or `Config(extract_schema=…)`) takes an
+  ontology of `entity_types` / `predicates` / typed `relations`; it **constrains the prompt**
+  (the allow-list is appended to the system message) **and validates the output** (any triple
+  whose predicate is off-ontology is dropped), so a schema raises precision instead of trusting
+  the model to obey. Passing `--extract-schema` implies `--llm-extract`
+  (`textgraph/core/extract_schema.py::ExtractionSchema`, `textgraph/l4_llm_optional/schema.py`).
+- **Pinned into `config_hash`, so it's deterministic and cache-correct.** The schema is a field on
+  `Config`, so changing it changes the build's config hash *and* the per-chunk LLM prompt-cache
+  key — a re-run re-extracts under the new contract rather than reusing a response produced under
+  the old one. A build with no schema is unchanged, and the LLM pass stays opt-in and
+  `GENERATED`-quarantined: the schema tightens that pass, it never touches the deterministic core.
+- **Two on-ramps.** Load an ontology from a small JSON file (the dependency-free default), or —
+  with the new optional `[schema]` extra — derive one from **Pydantic v2 models** via
+  `schema_from_pydantic(*models)` (each model is an entity type; a field referencing another model
+  becomes a predicate). The Pydantic path is import-guarded; without the extra it raises a clear
+  `UnsupportedFormat` pointing at the JSON path.
+
 ## [5.4.0] - 2026-08-21
 
 ### Added — clickable-to-region citation view (to-scale page schematic)
