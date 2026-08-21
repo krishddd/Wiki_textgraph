@@ -1225,10 +1225,13 @@ function citeChips(ev){ if(!(ev&&ev.length)) return '';
   const live = typeof TG!=='undefined' && typeof TG.source==='function';
   return '<div class="cites">'+ev.map(c=>{
     const label=`[${c.page?('p.'+c.page+' '):''}${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]`;
-    if(!live) return `<span class="cite-chip">${label}</span>`;
+    const box = (c.bbox&&c.bbox.length===4) ? c.bbox.map(v=>Math.round(v)).join(',') : '';
+    const tip = box ? `View the cited source span (p.${c.page||'?'} @ [${box}])` : 'View the cited source span';
+    if(!live) return `<span class="cite-chip"${box?` title="p.${c.page||'?'} @ [${box}]"`:''}>${label}</span>`;
     return `<span class="cite-chip live" role="button" tabindex="0"`
       +` data-doc="${esc(c.doc_id)}" data-start="${c.start}" data-end="${c.end}"`
-      +` data-hash="${esc(c.hash||'')}" title="View the cited source span">${label}</span>`;
+      +(box?` data-bbox="${box}"`:'')
+      +` data-hash="${esc(c.hash||'')}" title="${esc(tip)}">${label}</span>`;
   }).join('')+'</div>'; }
 // Deterministic follow-up chips: each fills the Ask box and sends, so a click is a question.
 function suggestChips(sugg){ if(!(sugg&&sugg.length)) return '';

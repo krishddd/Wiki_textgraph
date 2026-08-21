@@ -6,6 +6,26 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-08-21
+
+### Added — bounding-box provenance on PDF citations (clickable-to-region groundwork)
+- **Citations from PDFs now carry an `(x0, y0, x1, y1)` bounding box** in PDF points (page
+  coordinate space), locating the cited text on its page — the layout half of the v5.2.0 page
+  provenance. It's derived in the **default install** from pypdf's own glyph coordinates (no heavy
+  extra): the `visitor_text` callback runs *during* `extract_text`, so the proven 5.2 text and
+  segmentation are untouched and the box is layered on by a pure, deterministic aligner
+  (`_attach_bboxes`) that matches each block to its fragments by sequential text consumption
+  (`SourceSpan.bbox`, `Citation.bbox`, `IngestResult.bbox_map`/`bbox_for`,
+  `textgraph/l0_ingest/richdocs.py`).
+- **Strictly additive and deterministic (G1/G3).** The byte range is still the identity and
+  re-verification never consults the box; coordinates are rounded to 2 dp; the field is **omitted
+  from `graph.json` when absent**, so text-only corpora and every pre-5.3 graph stay byte-identical.
+  A page with no text layer (scanned) degrades to page-only provenance, never a wrong box. It
+  round-trips through `graph.json`, the DuckDB store, the incremental cache, and the MCP loader
+  (span (de)serialization centralized as `store.base.span_to_dict`/`span_from_dict`), and surfaces
+  as an edge property in the **openCypher** (`r.bbox="x0,y0,x1,y1"`) and **RDF/Turtle**
+  (`tgo:sourceBBox`) exports. The console citation chip exposes the box via a tooltip + `data-bbox`.
+
 ## [5.2.0] - 2026-08-21
 
 ### Added — page provenance on every citation (paged sources)

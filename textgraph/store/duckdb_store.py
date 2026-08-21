@@ -19,7 +19,14 @@ from pathlib import Path
 from typing import Any
 
 from textgraph.l0_ingest.base import UnsupportedFormat
-from textgraph.store.base import ConfidenceTag, Edge, GraphStore, Node, SourceSpan
+from textgraph.store.base import (
+    ConfidenceTag,
+    Edge,
+    GraphStore,
+    Node,
+    span_from_dict,
+    span_to_dict,
+)
 
 _NODES_DDL = (
     "CREATE TABLE IF NOT EXISTS nodes (node_id VARCHAR PRIMARY KEY, labels VARCHAR, props VARCHAR)"
@@ -50,16 +57,7 @@ def _node_row(n: Node) -> list[Any]:
 
 
 def _edge_row(e: Edge) -> list[Any]:
-    spans = [
-        {
-            "doc_id": s.doc_id,
-            "start": s.start,
-            "end": s.end,
-            "hash": s.hash,
-            **({"page": s.page} if s.page else {}),
-        }
-        for s in e.source_spans
-    ]
+    spans = [span_to_dict(s) for s in e.source_spans]
     return [
         e.edge_id,
         e.subject,
@@ -78,16 +76,7 @@ def _row_to_node(row: tuple[Any, ...]) -> Node:
 
 
 def _row_to_edge(row: tuple[Any, ...]) -> Edge:
-    spans = tuple(
-        SourceSpan(
-            doc_id=s["doc_id"],
-            start=s["start"],
-            end=s["end"],
-            hash=s["hash"],
-            page=int(s.get("page", 0)),
-        )
-        for s in json.loads(row[7])
-    )
+    spans = tuple(span_from_dict(s) for s in json.loads(row[7]))
     return Edge(
         edge_id=row[0],
         subject=row[1],

@@ -24,8 +24,10 @@ class Citation:
     """A re-verifiable byte-range pointer into a source document (G3).
 
     ``page`` is optional 1-based layout provenance (0 = unknown); when present it prefixes
-    the human-facing ``ref()`` as ``p.N`` and is carried in ``to_dict()``, but the byte
-    range remains the identity — page never affects re-verification.
+    the human-facing ``ref()`` as ``p.N`` and is carried in ``to_dict()``. ``bbox`` is an
+    optional ``(x0,y0,x1,y1)`` box in PDF points locating the text on its page (carried in
+    ``to_dict()`` for region highlighting). The byte range remains the identity — neither page
+    nor bbox affects re-verification.
     """
 
     doc_id: str
@@ -33,6 +35,7 @@ class Citation:
     end: int
     hash: str
     page: int = 0
+    bbox: tuple[float, float, float, float] | None = None
 
     def ref(self) -> str:
         loc = f"p.{self.page} " if self.page else ""
@@ -47,6 +50,8 @@ class Citation:
         }
         if self.page:
             d["page"] = self.page
+        if self.bbox is not None:
+            d["bbox"] = list(self.bbox)
         return d
 
 

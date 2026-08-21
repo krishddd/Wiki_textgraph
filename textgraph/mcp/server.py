@@ -31,7 +31,7 @@ def build_engine(source: str | Path) -> QueryEngine:
 
 
 def _engine_from_graph_json(path: Path) -> QueryEngine:
-    from textgraph.store.base import ConfidenceTag, Edge, Node, SourceSpan
+    from textgraph.store.base import ConfidenceTag, Edge, Node, span_from_dict
 
     doc = json.loads(path.read_text(encoding="utf-8"))
     nodes = [
@@ -51,10 +51,7 @@ def _engine_from_graph_json(path: Path) -> QueryEngine:
             tag=ConfidenceTag(e["tag"]),
             confidence=float(e["confidence"]),
             evidence_count=int(e.get("evidence_count", 0)),
-            source_spans=tuple(
-                SourceSpan(s["doc_id"], s["start"], s["end"], s["hash"], int(s.get("page", 0)))
-                for s in e.get("source_spans", [])
-            ),
+            source_spans=tuple(span_from_dict(s) for s in e.get("source_spans", [])),
             properties=e.get("properties", {}),
         )
         for i, e in enumerate(doc.get("edges", []))

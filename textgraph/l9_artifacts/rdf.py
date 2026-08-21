@@ -112,6 +112,11 @@ def build_turtle(nodes: list[Node], edges: list[Edge]) -> str:
             f"    tgo:sourceStart {_obj_literal(span.start)} ;\n"
             f"    tgo:sourceEnd {_obj_literal(span.end)} ;\n"
             + (f"    tgo:sourcePage {_obj_literal(span.page)} ;\n" if span.page else "")
+            + (
+                f"    tgo:sourceBBox {_lit(' '.join(repr(c) for c in span.bbox))} ;\n"
+                if span.bbox is not None
+                else ""
+            )
             + f"    tgo:sourceHash {_lit(span.hash)} ."
         )
     if stmt_lines:

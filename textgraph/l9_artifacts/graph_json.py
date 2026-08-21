@@ -15,7 +15,7 @@ from textgraph import __version__
 from textgraph.core.canonical_json import canonical_dump_bytes
 from textgraph.core.content_address import hash_text
 from textgraph.core.layout import IngestResult
-from textgraph.store.base import ConfidenceTag, Edge, Node, SourceSpan
+from textgraph.store.base import ConfidenceTag, Edge, Node, span_from_dict, span_to_dict
 
 SCHEMA_VERSION = "1.0"
 
@@ -34,16 +34,7 @@ def load_graph_json(path: str | Path) -> tuple[list[Node], list[Edge]]:
     ]
     edges: list[Edge] = []
     for e in doc["edges"]:
-        spans = tuple(
-            SourceSpan(
-                doc_id=s["doc_id"],
-                start=s["start"],
-                end=s["end"],
-                hash=s["hash"],
-                page=int(s.get("page", 0)),
-            )
-            for s in e.get("source_spans", [])
-        )
+        spans = tuple(span_from_dict(s) for s in e.get("source_spans", []))
         span_key = "|".join(f"{s.doc_id}|{s.start}|{s.end}" for s in spans)
         edge_id = "edge:" + hash_text(f"{e['subject']}|{e['predicate']}|{e['object']}|{span_key}")
         edges.append(
@@ -78,16 +69,7 @@ def _edge_dict(e: Edge) -> dict[str, Any]:
         "tag": str(e.tag),
         "confidence": e.confidence,
         "evidence_count": e.evidence_count,
-        "source_spans": [
-            # `page` is emitted only when known (>0), so text-only corpora and pre-page
-            # graphs stay byte-identical (G1) — the field is purely additive.
-            (
-                {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash, "page": s.page}
-                if s.page
-                else {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash}
-            )
-            for s in e.source_spans
-        ],
+        "source_spans": [span_to_dict(s) for s in e.source_spans],
         "properties": e.properties,
     }
 

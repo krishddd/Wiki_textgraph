@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from textgraph.store.base import ConfidenceTag, Edge, Node, SourceSpan
+from textgraph.store.base import ConfidenceTag, Edge, Node, span_from_dict, span_to_dict
 
 
 def node_to_dict(n: Node) -> dict[str, Any]:
@@ -36,16 +36,7 @@ def edge_to_dict(e: Edge) -> dict[str, Any]:
         "tag": str(e.tag),
         "confidence": e.confidence,
         "evidence_count": e.evidence_count,
-        "source_spans": [
-            {
-                "doc_id": s.doc_id,
-                "start": s.start,
-                "end": s.end,
-                "hash": s.hash,
-                **({"page": s.page} if s.page else {}),
-            }
-            for s in e.source_spans
-        ],
+        "source_spans": [span_to_dict(s) for s in e.source_spans],
         "properties": e.properties,
     }
 
@@ -59,16 +50,7 @@ def edge_from_dict(d: dict[str, Any]) -> Edge:
         tag=ConfidenceTag(d["tag"]),
         confidence=float(d["confidence"]),
         evidence_count=int(d["evidence_count"]),
-        source_spans=tuple(
-            SourceSpan(
-                doc_id=s["doc_id"],
-                start=s["start"],
-                end=s["end"],
-                hash=s["hash"],
-                page=int(s.get("page", 0)),
-            )
-            for s in d["source_spans"]
-        ),
+        source_spans=tuple(span_from_dict(s) for s in d["source_spans"]),
         properties=d["properties"],
     )
 

@@ -97,6 +97,8 @@ def export_cypher_bytes(nodes: list[Node], edges: list[Edge]) -> bytes:
                 sets.append(("hash", _lit(sp.hash)))
             if sp.page:
                 sets.append(("page", _lit(sp.page)))
+            if sp.bbox is not None:
+                sets.append(("bbox", _lit(",".join(repr(c) for c in sp.bbox))))
         set_clause = ", ".join(f"r.{k}={v}" for k, v in sets)
         lines.append(
             f"MATCH (a {{id:{_lit(e.subject)}}}), (b {{id:{_lit(e.object)}}}) "

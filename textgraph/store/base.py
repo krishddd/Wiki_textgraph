@@ -31,9 +31,11 @@ class SourceSpan:
     """A re-verifiable byte-range citation (G3).
 
     ``page`` is an optional 1-based page number for paged sources (PDFs); ``0`` means
-    unknown/unpaged. It is strictly additive layout provenance — the byte range is still
-    the source of truth and re-verification never consults the page — so text corpora and
-    pre-page graphs are byte-identical (the field is omitted from ``graph.json`` when 0).
+    unknown/unpaged. ``bbox`` is an optional ``(x0, y0, x1, y1)`` bounding box in PDF points
+    (page coordinate space, origin bottom-left) locating the cited text on its page. Both are
+    strictly additive layout provenance — the byte range is still the source of truth and
+    re-verification never consults them — so text corpora and pre-layout graphs stay
+    byte-identical (the fields are omitted from ``graph.json`` when absent).
     """
 
     doc_id: str
@@ -41,6 +43,31 @@ class SourceSpan:
     end: int  # raw byte offset, exclusive
     hash: str  # blake3 hex of raw[start:end]
     page: int = 0  # 1-based page for paged sources; 0 = unknown/unpaged
+    bbox: tuple[float, float, float, float] | None = None  # (x0,y0,x1,y1) in PDF points
+
+
+def span_to_dict(s: SourceSpan) -> dict[str, Any]:
+    """Serialize a SourceSpan; ``page``/``bbox`` are emitted only when known, so text-only
+    corpora and pre-layout graphs stay byte-identical (G1) — the fields are purely additive."""
+    d: dict[str, Any] = {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash}
+    if s.page:
+        d["page"] = s.page
+    if s.bbox is not None:
+        d["bbox"] = list(s.bbox)
+    return d
+
+
+def span_from_dict(s: dict[str, Any]) -> SourceSpan:
+    """Reconstruct a SourceSpan, tolerating pre-5.2 spans without page/bbox (default absent)."""
+    bbox = s.get("bbox")
+    return SourceSpan(
+        doc_id=s["doc_id"],
+        start=s["start"],
+        end=s["end"],
+        hash=s["hash"],
+        page=int(s.get("page", 0)),
+        bbox=tuple(bbox) if bbox is not None else None,
+    )
 
 
 @dataclass(frozen=True)

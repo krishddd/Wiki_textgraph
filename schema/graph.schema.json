@@ -71,7 +71,13 @@
                 "start": { "type": "integer", "minimum": 0 },
                 "end": { "type": "integer", "minimum": 0 },
                 "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-                "page": { "type": "integer", "minimum": 1 }
+                "page": { "type": "integer", "minimum": 1 },
+                "bbox": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 4,
+                  "maxItems": 4
+                }
               }
             }
           }

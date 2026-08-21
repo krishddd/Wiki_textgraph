@@ -100,6 +100,10 @@ class IngestResult:
     # page_no) boundaries. Empty means unpaged. In-memory only — never serialized into the
     # graph.json doc summary; only the per-citation SourceSpan.page it induces is persisted.
     page_map: tuple[tuple[int, int], ...] = ()
+    # Optional per-block bounding boxes: sorted (canonical_char_start, (x0,y0,x1,y1)) in PDF
+    # points, one per block that carries layout coordinates. Empty means no bbox info.
+    # In-memory only — only the per-citation SourceSpan.bbox it induces is persisted.
+    bbox_map: tuple[tuple[int, tuple[float, float, float, float]], ...] = ()
 
     @property
     def doc_id(self) -> str:
@@ -117,6 +121,20 @@ class IngestResult:
         if idx < 0:
             return self.page_map[0][1]
         return self.page_map[idx][1]
+
+    def bbox_for(self, char_offset: int) -> tuple[float, float, float, float] | None:
+        """Bounding box for the block containing a canonical-char offset (None if unknown).
+
+        Deterministic: returns the bbox of the rightmost block start at or before
+        ``char_offset`` (spans emitted downstream always begin inside a block).
+        """
+        if not self.bbox_map:
+            return None
+        starts = [start for start, _box in self.bbox_map]
+        idx = bisect_right(starts, char_offset) - 1
+        if idx < 0:
+            return None
+        return self.bbox_map[idx][1]
 
     @property
     def text(self) -> str:

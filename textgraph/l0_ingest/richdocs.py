@@ -20,6 +20,7 @@ import io
 import re
 import zipfile
 from html.parser import HTMLParser
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from textgraph.core.layout import Block, BlockKind, IngestResult, Span
@@ -240,6 +241,100 @@ def _pdf_blocks(page_texts: list[str]) -> tuple[str, list[Block], tuple[tuple[in
     return "\n\n".join(parts), blocks, tuple(page_map)
 
 
+_Frag = tuple[str, float, float, float, float]  # (text, x0, y0, x1, y1) in PDF points
+
+
+def _nonspace_len(text: str) -> int:
+    return sum(1 for ch in text if not ch.isspace())
+
+
+def _union(boxes: list[_Frag]) -> tuple[float, float, float, float]:
+    """Bounding box enclosing every fragment box (ignores the leading text field)."""
+    xs0 = [b[1] for b in boxes]
+    ys0 = [b[2] for b in boxes]
+    xs1 = [b[3] for b in boxes]
+    ys1 = [b[4] for b in boxes]
+    return (min(xs0), min(ys0), max(xs1), max(ys1))
+
+
+def _attach_bboxes(
+    block_texts: list[str], fragments: list[_Frag]
+) -> list[tuple[float, float, float, float] | None]:
+    """Align each block on a page to a bounding box by sequential fragment consumption.
+
+    Pure and deterministic (no pypdf here, so it's unit-testable): ``extract_text`` and the
+    positioned ``fragments`` both traverse the page's content stream in the same order, so we
+    walk the fragments once, handing each block enough fragments to cover its non-whitespace
+    character count and taking the union of their boxes. Blocks with no covering fragment (e.g.
+    a page with no text layer) get ``None`` — page-only provenance, never a wrong box.
+    """
+    out: list[tuple[float, float, float, float] | None] = []
+    i = 0
+    n = len(fragments)
+    for text in block_texts:
+        target = _nonspace_len(text)
+        taken: list[_Frag] = []
+        got = 0
+        while i < n and got < target:
+            frag = fragments[i]
+            taken.append(frag)
+            got += _nonspace_len(frag[0])
+            i += 1
+        out.append(_union(taken) if taken else None)
+    return out
+
+
+def _build_bbox_map(
+    blocks: list[Block], page_fragments: list[list[_Frag]]
+) -> tuple[tuple[int, tuple[float, float, float, float]], ...]:
+    """Map each block's canonical-char start to its bounding box, grouped by page.
+
+    ``page_fragments`` is indexed by 0-based page index; blocks carry their 1-based ``page``
+    prop, so a block on page P is aligned against ``page_fragments[P-1]``.
+    """
+    by_page: dict[int, list[Block]] = {}
+    for b in blocks:
+        pg = b.props.get("page", 0)
+        by_page.setdefault(pg if isinstance(pg, int) else 0, []).append(b)
+    entries: list[tuple[int, tuple[float, float, float, float]]] = []
+    for page_no, page_blocks in by_page.items():
+        frags = page_fragments[page_no - 1] if 1 <= page_no <= len(page_fragments) else []
+        boxes = _attach_bboxes([b.text for b in page_blocks], frags)
+        for block, box in zip(page_blocks, boxes, strict=True):
+            if box is not None:
+                entries.append((block.span.start, box))
+    return tuple(sorted(entries, key=lambda e: e[0]))
+
+
+def _origin(tm: list[float], cm: list[float]) -> tuple[float, float]:
+    """Device-space (x, y) origin of a text fragment: the composition ``tm ∘ cm``."""
+    x = tm[4] * cm[0] + tm[5] * cm[2] + cm[4]
+    y = tm[4] * cm[1] + tm[5] * cm[3] + cm[5]
+    return x, y
+
+
+def _extract_page(page: Any) -> tuple[str, list[_Frag]]:
+    """Extract a page's text and its positioned text fragments in one pypdf pass.
+
+    The ``visitor_text`` callback runs *during* ``extract_text``, so the returned text keeps
+    pypdf's proven segmentation while the fragments capture each run's box (origin + rough
+    advance, in PDF points). Defined at module scope (not a per-page closure) so it's fully
+    typed and never captures a loop variable.
+    """
+    frags: list[_Frag] = []
+
+    def visit(text: str, cm: list[float], tm: list[float], _fd: object, size: float) -> None:
+        if not text or not text.strip():
+            return
+        x, y = _origin(tm, cm)
+        fs = float(size or 0.0)
+        w = 0.5 * fs * len(text)  # rough horizontal advance for the box width
+        frags.append((text, round(x, 2), round(y, 2), round(x + w, 2), round(y + fs, 2)))
+
+    text = page.extract_text(visitor_text=visit) or ""
+    return text, frags
+
+
 @register(".pdf")
 def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
     try:
@@ -247,7 +342,12 @@ def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
     except ImportError as exc:  # pragma: no cover - pypdf is a core dependency
         raise UnsupportedFormat("PDF ingestion requires pypdf (a core dependency)") from exc
     reader = PdfReader(_bytes_io(raw))
-    text, blocks, page_map = _pdf_blocks([page.extract_text() or "" for page in reader.pages])
+    pages = [_extract_page(page) for page in reader.pages]
+    page_texts = [t for t, _f in pages]
+    page_fragments = [f for _t, f in pages]
+
+    text, blocks, page_map = _pdf_blocks(page_texts)
+    bbox_map = _build_bbox_map(blocks, page_fragments)
     canonical, raw_bytes = canonical_from_text(text, source_name)
     chunks = make_chunks(canonical.doc_id, text, blocks)
     return IngestResult(
@@ -258,6 +358,7 @@ def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
         blocks=blocks,
         chunks=chunks,
         page_map=page_map,
+        bbox_map=bbox_map,
     )
 
 

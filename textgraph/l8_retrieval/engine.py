@@ -66,7 +66,7 @@ _HIDDEN_NEIGHBORS = frozenset({"SUBJECT_OF", "HAS_OBJECT", "MENTIONS", "HAS_CHUN
 
 
 def _citations(edge: Edge) -> list[Citation]:
-    return [Citation(s.doc_id, s.start, s.end, s.hash, s.page) for s in edge.source_spans]
+    return [Citation(s.doc_id, s.start, s.end, s.hash, s.page, s.bbox) for s in edge.source_spans]
 
 
 def _clean_snippet(text: str, limit: int = 280) -> str:
