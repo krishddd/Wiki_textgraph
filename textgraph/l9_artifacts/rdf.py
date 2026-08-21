@@ -111,7 +111,8 @@ def build_turtle(nodes: list[Node], edges: list[Edge]) -> str:
             f"    prov:wasDerivedFrom {_lit(span.doc_id)} ;\n"
             f"    tgo:sourceStart {_obj_literal(span.start)} ;\n"
             f"    tgo:sourceEnd {_obj_literal(span.end)} ;\n"
-            f"    tgo:sourceHash {_lit(span.hash)} ."
+            + (f"    tgo:sourcePage {_obj_literal(span.page)} ;\n" if span.page else "")
+            + f"    tgo:sourceHash {_lit(span.hash)} ."
         )
     if stmt_lines:
         lines.append("")

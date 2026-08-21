@@ -21,18 +21,33 @@ def estimate_tokens(text: str) -> int:
 
 @dataclass(frozen=True)
 class Citation:
-    """A re-verifiable byte-range pointer into a source document (G3)."""
+    """A re-verifiable byte-range pointer into a source document (G3).
+
+    ``page`` is optional 1-based layout provenance (0 = unknown); when present it prefixes
+    the human-facing ``ref()`` as ``p.N`` and is carried in ``to_dict()``, but the byte
+    range remains the identity — page never affects re-verification.
+    """
 
     doc_id: str
     start: int
     end: int
     hash: str
+    page: int = 0
 
     def ref(self) -> str:
-        return f"[{self.doc_id}:{self.start}-{self.end}]"
+        loc = f"p.{self.page} " if self.page else ""
+        return f"[{loc}{self.doc_id}:{self.start}-{self.end}]"
 
     def to_dict(self) -> dict[str, Any]:
-        return {"doc_id": self.doc_id, "start": self.start, "end": self.end, "hash": self.hash}
+        d: dict[str, Any] = {
+            "doc_id": self.doc_id,
+            "start": self.start,
+            "end": self.end,
+            "hash": self.hash,
+        }
+        if self.page:
+            d["page"] = self.page
+        return d
 
 
 def budget_items(items: list[Any], texts: list[str], max_tokens: int) -> tuple[list[Any], bool]:

@@ -95,6 +95,8 @@ def export_cypher_bytes(nodes: list[Node], edges: list[Edge]) -> bytes:
             sets += [("doc", _lit(sp.doc_id)), ("start", _lit(sp.start)), ("end", _lit(sp.end))]
             if getattr(sp, "hash", None):
                 sets.append(("hash", _lit(sp.hash)))
+            if sp.page:
+                sets.append(("page", _lit(sp.page)))
         set_clause = ", ".join(f"r.{k}={v}" for k, v in sets)
         lines.append(
             f"MATCH (a {{id:{_lit(e.subject)}}}), (b {{id:{_lit(e.object)}}}) "

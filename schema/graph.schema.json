@@ -70,7 +70,8 @@
                 "doc_id": { "type": "string" },
                 "start": { "type": "integer", "minimum": 0 },
                 "end": { "type": "integer", "minimum": 0 },
-                "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "page": { "type": "integer", "minimum": 1 }
               }
             }
           }

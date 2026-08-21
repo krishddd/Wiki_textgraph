@@ -28,12 +28,19 @@ class ConfidenceTag(StrEnum):
 
 @dataclass(frozen=True)
 class SourceSpan:
-    """A re-verifiable byte-range citation (G3)."""
+    """A re-verifiable byte-range citation (G3).
+
+    ``page`` is an optional 1-based page number for paged sources (PDFs); ``0`` means
+    unknown/unpaged. It is strictly additive layout provenance — the byte range is still
+    the source of truth and re-verification never consults the page — so text corpora and
+    pre-page graphs are byte-identical (the field is omitted from ``graph.json`` when 0).
+    """
 
     doc_id: str
     start: int  # raw byte offset, inclusive
     end: int  # raw byte offset, exclusive
     hash: str  # blake3 hex of raw[start:end]
+    page: int = 0  # 1-based page for paged sources; 0 = unknown/unpaged
 
 
 @dataclass(frozen=True)

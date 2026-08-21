@@ -52,7 +52,7 @@ def _engine_from_graph_json(path: Path) -> QueryEngine:
             confidence=float(e["confidence"]),
             evidence_count=int(e.get("evidence_count", 0)),
             source_spans=tuple(
-                SourceSpan(s["doc_id"], s["start"], s["end"], s["hash"])
+                SourceSpan(s["doc_id"], s["start"], s["end"], s["hash"], int(s.get("page", 0)))
                 for s in e.get("source_spans", [])
             ),
             properties=e.get("properties", {}),

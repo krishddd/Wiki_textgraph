@@ -35,7 +35,13 @@ def load_graph_json(path: str | Path) -> tuple[list[Node], list[Edge]]:
     edges: list[Edge] = []
     for e in doc["edges"]:
         spans = tuple(
-            SourceSpan(doc_id=s["doc_id"], start=s["start"], end=s["end"], hash=s["hash"])
+            SourceSpan(
+                doc_id=s["doc_id"],
+                start=s["start"],
+                end=s["end"],
+                hash=s["hash"],
+                page=int(s.get("page", 0)),
+            )
             for s in e.get("source_spans", [])
         )
         span_key = "|".join(f"{s.doc_id}|{s.start}|{s.end}" for s in spans)
@@ -73,7 +79,13 @@ def _edge_dict(e: Edge) -> dict[str, Any]:
         "confidence": e.confidence,
         "evidence_count": e.evidence_count,
         "source_spans": [
-            {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash}
+            # `page` is emitted only when known (>0), so text-only corpora and pre-page
+            # graphs stay byte-identical (G1) — the field is purely additive.
+            (
+                {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash, "page": s.page}
+                if s.page
+                else {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash}
+            )
             for s in e.source_spans
         ],
         "properties": e.properties,

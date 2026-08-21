@@ -37,13 +37,18 @@ def normalize_key(text: str) -> str:
 
 
 def source_span(ir: IngestResult, span: Span) -> SourceSpan:
-    """Build a re-verifiable :class:`SourceSpan` from a canonical-char span."""
+    """Build a re-verifiable :class:`SourceSpan` from a canonical-char span.
+
+    Stamps the 1-based page (from the doc's page map) when the source is paged; 0 otherwise.
+    Additive only — the byte range is what re-verification checks, page is metadata.
+    """
     b0, b1 = ir.canonical.raw_span(span.start, span.end)
     return SourceSpan(
         doc_id=ir.doc_id,
         start=b0,
         end=b1,
         hash=blake3_hex(ir.raw[b0:b1]),
+        page=ir.page_for(span.start),
     )
 
 

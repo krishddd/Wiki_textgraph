@@ -856,7 +856,7 @@ function onPick(n){
   draw(); inspect(n);
 }
 
-function citeStr(cs){ return (cs||[]).map(x=>`[${x.doc_id.slice(0,18)}…:${x.start}-${x.end}]`).join(' '); }
+function citeStr(cs){ return (cs||[]).map(x=>`[${x.page?('p.'+x.page+' '):''}${x.doc_id.slice(0,18)}…:${x.start}-${x.end}]`).join(' '); }
 function win(c){ if(c.t_valid&&c.t_invalid) return `<span class="win sup">valid [${c.t_valid}, ${c.t_invalid}) · superseded</span>`;
   if(c.t_valid) return `<span class="win">valid [${c.t_valid}, now)</span>`; return ''; }
 async function inspect(n){
@@ -1224,7 +1224,7 @@ addEventListener('resize',resize);
 function citeChips(ev){ if(!(ev&&ev.length)) return '';
   const live = typeof TG!=='undefined' && typeof TG.source==='function';
   return '<div class="cites">'+ev.map(c=>{
-    const label=`[${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]`;
+    const label=`[${c.page?('p.'+c.page+' '):''}${esc(c.doc_id.slice(0,14))}…:${c.start}-${c.end}]`;
     if(!live) return `<span class="cite-chip">${label}</span>`;
     return `<span class="cite-chip live" role="button" tabindex="0"`
       +` data-doc="${esc(c.doc_id)}" data-start="${c.start}" data-end="${c.end}"`

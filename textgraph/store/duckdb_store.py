@@ -51,7 +51,14 @@ def _node_row(n: Node) -> list[Any]:
 
 def _edge_row(e: Edge) -> list[Any]:
     spans = [
-        {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash} for s in e.source_spans
+        {
+            "doc_id": s.doc_id,
+            "start": s.start,
+            "end": s.end,
+            "hash": s.hash,
+            **({"page": s.page} if s.page else {}),
+        }
+        for s in e.source_spans
     ]
     return [
         e.edge_id,
@@ -72,7 +79,13 @@ def _row_to_node(row: tuple[Any, ...]) -> Node:
 
 def _row_to_edge(row: tuple[Any, ...]) -> Edge:
     spans = tuple(
-        SourceSpan(doc_id=s["doc_id"], start=s["start"], end=s["end"], hash=s["hash"])
+        SourceSpan(
+            doc_id=s["doc_id"],
+            start=s["start"],
+            end=s["end"],
+            hash=s["hash"],
+            page=int(s.get("page", 0)),
+        )
         for s in json.loads(row[7])
     )
     return Edge(

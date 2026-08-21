@@ -8,6 +8,7 @@ via the doc's offset map, so every span here is re-verifiable (G3).
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -95,10 +96,27 @@ class IngestResult:
     blocks: list[Block]
     chunks: list[Chunk]
     lang: str = "en"
+    # Optional page provenance for paged sources (PDFs): sorted (canonical_char_start,
+    # page_no) boundaries. Empty means unpaged. In-memory only — never serialized into the
+    # graph.json doc summary; only the per-citation SourceSpan.page it induces is persisted.
+    page_map: tuple[tuple[int, int], ...] = ()
 
     @property
     def doc_id(self) -> str:
         return self.canonical.doc_id
+
+    def page_for(self, char_offset: int) -> int:
+        """1-based page for a canonical-char offset (0 if this doc carries no page map).
+
+        Deterministic: returns the page of the rightmost boundary at or before ``char_offset``.
+        """
+        if not self.page_map:
+            return 0
+        starts = [start for start, _page in self.page_map]
+        idx = bisect_right(starts, char_offset) - 1
+        if idx < 0:
+            return self.page_map[0][1]
+        return self.page_map[idx][1]
 
     @property
     def text(self) -> str:

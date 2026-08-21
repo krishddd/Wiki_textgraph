@@ -37,7 +37,13 @@ def edge_to_dict(e: Edge) -> dict[str, Any]:
         "confidence": e.confidence,
         "evidence_count": e.evidence_count,
         "source_spans": [
-            {"doc_id": s.doc_id, "start": s.start, "end": s.end, "hash": s.hash}
+            {
+                "doc_id": s.doc_id,
+                "start": s.start,
+                "end": s.end,
+                "hash": s.hash,
+                **({"page": s.page} if s.page else {}),
+            }
             for s in e.source_spans
         ],
         "properties": e.properties,
@@ -54,7 +60,13 @@ def edge_from_dict(d: dict[str, Any]) -> Edge:
         confidence=float(d["confidence"]),
         evidence_count=int(d["evidence_count"]),
         source_spans=tuple(
-            SourceSpan(doc_id=s["doc_id"], start=s["start"], end=s["end"], hash=s["hash"])
+            SourceSpan(
+                doc_id=s["doc_id"],
+                start=s["start"],
+                end=s["end"],
+                hash=s["hash"],
+                page=int(s.get("page", 0)),
+            )
             for s in d["source_spans"]
         ),
         properties=d["properties"],

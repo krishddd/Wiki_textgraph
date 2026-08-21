@@ -6,6 +6,24 @@ to Semantic Versioning.
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-08-21
+
+### Added — page provenance on every citation (paged sources)
+- **Citations from paged documents (PDFs) now carry a 1-based page number.** Ingesting a PDF
+  records where each page's text begins, so every byte-span citation it produces resolves to its
+  page and renders as **`[p.4 blake3:…:120-145]`** in the console (Ask dock + inspector chips) and
+  in the offline `graph.html`. Blank pages are skipped without renumbering the ones that follow
+  (`SourceSpan.page`, `Citation.page`, `IngestResult.page_map`/`page_for`,
+  `textgraph/l0_ingest/richdocs.py::_pdf_blocks`).
+- **Strictly additive and deterministic (G1/G3).** The byte range is still the identity and
+  re-verification never consults the page. The field is **omitted from `graph.json` when 0**, so
+  text-only corpora and every pre-5.2 graph are byte-identical — page provenance appears only where
+  a paged source actually provided it. It round-trips through `graph.json`, the DuckDB store, the
+  incremental cache, and the MCP loader, and surfaces as an edge property in the **openCypher**
+  (`r.page`) and **RDF/Turtle** (`tgo:sourcePage`) exports.
+- Groundwork for the follow-up **bbox / clickable-to-region** enrichment on the `[ingest]` Docling
+  path (planned v5.3.0): the page map is the coordinate anchor a bounding box layers onto.
+
 ## [5.1.1] - 2026-08-18
 
 ### Changed — the Ask dock answers in natural language when an LLM is available

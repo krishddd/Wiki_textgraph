@@ -211,6 +211,35 @@ def ingest_epub(raw: bytes, source_name: str) -> IngestResult:
 
 
 # --- PDF (text layer; pypdf is a core dependency) ----------------------------
+def _pdf_blocks(page_texts: list[str]) -> tuple[str, list[Block], tuple[tuple[int, int], ...]]:
+    """Assemble canonical text + span-carrying blocks + a page map from per-page text.
+
+    Pure and deterministic (no pypdf dependency here, so it's unit-testable): each page's
+    paragraphs become ``PARAGRAPH`` blocks stamped with their 1-based ``page`` prop, and the
+    page map records the canonical-char offset where each non-empty page's text begins — so a
+    citation anywhere in that page resolves to the right page number (blank pages are skipped
+    but their true page number is preserved via the map, never renumbered).
+    """
+    parts: list[str] = []
+    blocks: list[Block] = []
+    page_map: list[tuple[int, int]] = []
+    pos = 0
+    for page_no, page_text in enumerate(page_texts, start=1):
+        paras = [p.strip() for p in (page_text or "").split("\n\n") if p.strip()]
+        if not paras:
+            continue
+        page_map.append((pos, page_no))
+        for content in paras:
+            start = pos
+            end = start + len(content)
+            blocks.append(
+                Block(BlockKind.PARAGRAPH, Span(start, end), content, props={"page": page_no})
+            )
+            parts.append(content)
+            pos = end + 2  # account for the "\n\n" separator we join with
+    return "\n\n".join(parts), blocks, tuple(page_map)
+
+
 @register(".pdf")
 def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
     try:
@@ -218,13 +247,18 @@ def ingest_pdf(raw: bytes, source_name: str) -> IngestResult:
     except ImportError as exc:  # pragma: no cover - pypdf is a core dependency
         raise UnsupportedFormat("PDF ingestion requires pypdf (a core dependency)") from exc
     reader = PdfReader(_bytes_io(raw))
-    lines: list[tuple[str, int]] = []
-    for page in reader.pages:
-        for para in (page.extract_text() or "").split("\n\n"):
-            if para.strip():
-                lines.append((para, 0))
-    text, blocks = _blocks_from_lines(lines)
-    return _result_from_blocks(text, blocks, source_name, "pdf")
+    text, blocks, page_map = _pdf_blocks([page.extract_text() or "" for page in reader.pages])
+    canonical, raw_bytes = canonical_from_text(text, source_name)
+    chunks = make_chunks(canonical.doc_id, text, blocks)
+    return IngestResult(
+        canonical=canonical,
+        raw=raw_bytes,
+        source_path=source_name,
+        format="pdf",
+        blocks=blocks,
+        chunks=chunks,
+        page_map=page_map,
+    )
 
 
 def _bytes_io(raw: bytes) -> io.BytesIO:
